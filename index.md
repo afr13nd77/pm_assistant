@@ -145,6 +145,7 @@ pm_assistant/
 | **knowledge-engine** | 1.5.2 | 2026-06-11 | Enrichment, synthesis, Jira sync, meeting fetch, daily Jira key sync. Гибридная LLM-архитектура. Health false positives fix: _is_ignorable_link, jira_key exclusion (BUG-017) |
 | **idea-pipeline** | 1.1.0 | 2026-05-08 | Orchestrator: Analyst → PM → Decomposer |
 | **web-ui** | 1.15.5 | 2026-06-11 | Dual-theme SPA дашборд. Health popup light-тема: .theme-light CSS specificity, theme-aware JS colors (BUG-016) |
+| **инфраструктура** | 1.0.0 | 2026-06-11 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120) |
 
 Схема: semver `MAJOR.MINOR.PATCH`. MAJOR — ломающие изменения API/контрактов. MINOR — новый функционал. PATCH — багофиксы.
 
