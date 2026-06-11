@@ -1,14 +1,15 @@
-import logging
 import asyncio
+import logging
 import os
 import shutil
 from pathlib import Path
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
+
+from . import vault_paths
 from .claude_client import process_meeting
 from .obsidian_writer import write_meeting
-from . import vault_paths
 
 logger = logging.getLogger(__name__)
 

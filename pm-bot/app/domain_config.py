@@ -324,7 +324,7 @@ def set_domain(slug: str, entry: dict, config: dict | None = None) -> dict:
     # Full validation before saving
     full_errors = validate(config)
     if full_errors:
-        msg = f"set_domain: post-merge validation failed: " + "; ".join(full_errors)
+        msg = "set_domain: post-merge validation failed: " + "; ".join(full_errors)
         logger.warning(msg)
         raise ValueError(msg)
 

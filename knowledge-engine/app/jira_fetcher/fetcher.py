@@ -12,15 +12,22 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from .client import JiraClientError, get_issue, search
+from .. import frontmatter_utils, vault_paths
+from ..domain_manager import append_domain_log, update_domain_index
+from ..file_writer import atomic_write
+from ..notifier import send_telegram
 from . import client as jira_client
 from . import state as sync_state
-from .mapper import detect_domain, normalize_status, to_markdown, update_frontmatter, artifact_type, reverse_map, _ISSUE_TYPE_TO_ARTIFACT
-from .. import vault_paths
-from .. import frontmatter_utils
-from ..file_writer import atomic_write
-from ..domain_manager import append_domain_log, update_domain_index
-from ..notifier import send_telegram
+from .client import JiraClientError, get_issue, search
+from .mapper import (
+    _ISSUE_TYPE_TO_ARTIFACT,
+    artifact_type,
+    detect_domain,
+    normalize_status,
+    reverse_map,
+    to_markdown,
+    update_frontmatter,
+)
 
 logger = logging.getLogger(__name__)
 

@@ -3,12 +3,12 @@ import signal
 import time
 from pathlib import Path
 
-from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEventHandler
+from watchdog.observers.polling import PollingObserver
 
+from . import vault_paths
 from .enricher import enrich
 from .frontmatter_utils import read_frontmatter
-from . import vault_paths
 
 logger = logging.getLogger(__name__)
 

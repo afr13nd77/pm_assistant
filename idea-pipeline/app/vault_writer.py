@@ -4,9 +4,8 @@ from datetime import date, datetime
 from pathlib import Path
 
 import frontmatter
-from slugify import slugify
-
 from idea_pipeline import vault_paths
+from slugify import slugify
 
 try:
     from knowledge_engine.file_writer import atomic_write

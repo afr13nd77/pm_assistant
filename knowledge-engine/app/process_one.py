@@ -1,6 +1,7 @@
 """One-shot script: process a single transcript file and save to Meetings/."""
 import sys
 from pathlib import Path
+
 from knowledge_engine.claude_client import process_meeting_transcript
 
 vault = Path("/vault")

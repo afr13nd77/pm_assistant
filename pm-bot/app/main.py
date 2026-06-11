@@ -1,13 +1,14 @@
-import os
 import logging
+import os
 import threading
-from dotenv import load_dotenv
+
 import uvicorn
+from dotenv import load_dotenv
 from telegram.ext import ApplicationBuilder
 
 from .handlers import get_handlers
-from .transcript_watcher import start_watcher
 from .stt import init_model as init_stt
+from .transcript_watcher import start_watcher
 
 load_dotenv()
 logging.basicConfig(

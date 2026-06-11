@@ -21,10 +21,10 @@ import os
 import re
 import subprocess
 import threading
+import time as _time
 import urllib.parse
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
 import yaml
 from fastapi import FastAPI, HTTPException, Query
@@ -32,6 +32,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from . import domain_config
 from .vault_paths import (
     VAULT_PATH,
     all_domains,
@@ -39,15 +40,12 @@ from .vault_paths import (
     wiki_meetings,
     wiki_reports,
 )
-from . import domain_config
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # In-memory TTL cache for vault scan results
 # ---------------------------------------------------------------------------
-
-import time as _time
 
 
 class _VaultCache:
@@ -1169,8 +1167,8 @@ def capture_note(req: CaptureRequest):
     try:
         if req.type == "idea":
             from app.claude_client import process_idea
-            from app.obsidian_writer import write_idea
             from app.handlers import _fallback_idea_data
+            from app.obsidian_writer import write_idea
 
             logger.info("POST /api/v1/capture — processing idea via Claude")
             try:
@@ -1186,8 +1184,8 @@ def capture_note(req: CaptureRequest):
 
         elif req.type in ("task", "meeting"):
             from app.claude_client import process_jira_ticket
-            from app.obsidian_writer import write_jira_draft
             from app.handlers import _fallback_jira_content
+            from app.obsidian_writer import write_jira_draft
 
             logger.info("POST /api/v1/capture — processing %s via Claude", req.type)
             try:
@@ -1632,8 +1630,6 @@ def get_timeline(ticket_id: str):
     logger.info("GET /api/v1/timeline/%s — start", ticket_id)
 
     events = []
-    stage_order = {"idea": 1, "enriched": 2, "synthesis": 3, "pm": 4, "jira": 5, "release": 6}
-
     # --- Domain-based folders ---
     domain_searches = [
         ("ideas", "idea"),
@@ -2154,8 +2150,9 @@ def _read_user_prefs() -> dict:
 
 def _write_user_prefs(prefs: dict) -> None:
     import json as _json
-    from .vault_paths import user_prefs_path
+
     from .file_writer import atomic_write
+    from .vault_paths import user_prefs_path
     path = user_prefs_path()
     content = _json.dumps(prefs, indent=2, ensure_ascii=False) + "\n"
     logger.info("_write_user_prefs: writing to %s", path)
@@ -2272,8 +2269,8 @@ def regenerate_report():
     """Regenerate the weekly report."""
     logger.info("POST /api/v1/report/regenerate — start")
     try:
-        from app.reporter import generate_weekly_report
         from app.obsidian_writer import write_report
+        from app.reporter import generate_weekly_report
 
         logger.info(
             "POST /api/v1/report/regenerate — calling generate_weekly_report"

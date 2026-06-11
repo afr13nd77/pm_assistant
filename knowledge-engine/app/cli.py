@@ -1,8 +1,8 @@
 import argparse
 import json
 import logging
-import sys
 import os
+import sys
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,11 +60,11 @@ def main():
     domain_list_parser = domain_subparsers.add_parser("list", help="List all domains with artifact counts")
     domain_list_parser.add_argument("--format", choices=["json", "table"], default="json", help="Output format")
 
-    domain_seed_parser = domain_subparsers.add_parser(
+    _domain_seed_parser = domain_subparsers.add_parser(
         "seed", help="Seed domain-config.yaml from hardcoded label map and filesystem domains"
     )
 
-    domain_config_parser = domain_subparsers.add_parser(
+    _domain_config_parser = domain_subparsers.add_parser(
         "config", help="Show current domain-config.yaml contents (read-only)"
     )
 
@@ -180,8 +180,8 @@ def main():
         logger.info(f"domain subcommand: {args.domain_command}, vault: {vault_path}")
 
         if args.domain_command == "create":
-            from .domain_manager import create_domain
             from . import domain_config as _dc
+            from .domain_manager import create_domain
             try:
                 path = create_domain(args.name)
                 logger.info(f"domain create: created domain={args.name!r} at {path}")
@@ -293,7 +293,7 @@ def main():
     elif args.command == "rebuild-index":
         from . import vault_paths as _vp
         _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
-        from .domain_manager import update_domain_index, _ARTIFACT_TYPES
+        from .domain_manager import _ARTIFACT_TYPES, update_domain_index
         from .vault_paths import all_domains
 
         if args.domain:
@@ -437,8 +437,9 @@ def main():
     elif args.command == "health":
         from . import vault_paths as _vp
         _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
-        from .health_scorer import calculate_health, save_history, load_history
         from datetime import datetime, timezone
+
+        from .health_scorer import calculate_health, load_history, save_history
 
         logger.info("health: starting, vault=%s, save=%s, json=%s", vault_path, args.save, args.json_output)
 

@@ -1,19 +1,19 @@
-import os
-import logging
-from datetime import date
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, CommandHandler, MessageHandler, CallbackQueryHandler, filters
-
 import json
+import logging
+import os
 import re
 import subprocess
-
-from .claude_client import process_idea, process_jira_ticket, process_daily
-from .obsidian_writer import write_idea, write_jira_draft, write_daily
 import tempfile
+from datetime import date
 from pathlib import Path
-from .stt import transcribe
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
+
 from . import vault_paths
+from .claude_client import process_daily, process_idea, process_jira_ticket
+from .obsidian_writer import write_daily, write_idea, write_jira_draft
+from .stt import transcribe
 from .vault_paths import VAULT_PATH
 
 logger = logging.getLogger(__name__)
@@ -235,7 +235,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             jira_msg = ""
             try:
-                from knowledge_engine.jira_key_sync import sync_daily_jira_keys, patch_daily_links
+                from knowledge_engine.jira_key_sync import patch_daily_links, sync_daily_jira_keys
                 sync_result = sync_daily_jira_keys(result, str(vault_paths.VAULT_PATH))
                 jira_msg = _format_jira_sync_message(sync_result)
                 patch_daily_links(str(filepath), sync_result.get("keys_map", {}))
@@ -605,7 +605,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             jira_msg = ""
             try:
-                from knowledge_engine.jira_key_sync import sync_daily_jira_keys, patch_daily_links
+                from knowledge_engine.jira_key_sync import patch_daily_links, sync_daily_jira_keys
                 sync_result = sync_daily_jira_keys(result, str(vault_paths.VAULT_PATH))
                 jira_msg = _format_jira_sync_message(sync_result)
                 patch_daily_links(str(filepath), sync_result.get("keys_map", {}))
@@ -984,11 +984,16 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lines.append("*Домены:*")
             for d in result["domains"]:
                 parts = []
-                if d.get("ideas", 0): parts.append(f"{d['ideas']} ideas")
-                if d.get("prds", 0): parts.append(f"{d['prds']} prds")
-                if d.get("epics", 0): parts.append(f"{d['epics']} epics")
-                if d.get("tasks", 0): parts.append(f"{d['tasks']} tasks")
-                if d.get("bugs", 0): parts.append(f"{d['bugs']} bugs")
+                if d.get("ideas", 0):
+                    parts.append(f"{d['ideas']} ideas")
+                if d.get("prds", 0):
+                    parts.append(f"{d['prds']} prds")
+                if d.get("epics", 0):
+                    parts.append(f"{d['epics']} epics")
+                if d.get("tasks", 0):
+                    parts.append(f"{d['tasks']} tasks")
+                if d.get("bugs", 0):
+                    parts.append(f"{d['bugs']} bugs")
                 detail = ", ".join(parts) if parts else "пусто"
                 lines.append(f"  • *{d['name']}*: {detail}")
 

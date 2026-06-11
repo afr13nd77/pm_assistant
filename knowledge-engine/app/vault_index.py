@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from .frontmatter_utils import read_frontmatter
 from . import vault_paths
+from .frontmatter_utils import read_frontmatter
 
 logger = logging.getLogger(__name__)
 

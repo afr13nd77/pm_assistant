@@ -1,22 +1,21 @@
 import logging
 import re
-from pathlib import Path
 from datetime import date, datetime
+from pathlib import Path
 
 from .vault_paths import (
+    VAULT_PATH,
+    next_daily_filename,
+    raw_daily_logs,
     raw_ideas,
     raw_meetings,
-    raw_daily_logs,
     raw_tasks,
     templates,
-    wiki_domain_dir,
-    wiki_meetings,
     wiki_daily_logs,
-    wiki_reports,
+    wiki_domain_dir,
     wiki_log,
-    all_domains,
-    next_daily_filename,
-    VAULT_PATH,
+    wiki_meetings,
+    wiki_reports,
 )
 
 logger = logging.getLogger(__name__)
@@ -336,11 +335,11 @@ def _fill_frontmatter(template: str, idea_id: str, idea_data: dict, today: str, 
     replacements = [
         (r'^id:.*$',        f'id: "{idea_id}"'),
         (r'^domain:.*$',    f'domain: {domain}'),
-        (r'^status:.*$',    f'status: "Новая"'),
+        (r'^status:.*$',    'status: "Новая"'),
         (r'^readiness:.*$', f'readiness: {readiness_pct}%'),
         (r'^created:.*$',   f'created: "{today}"'),
         (r'^updated:.*$',   f'updated: "{today}"'),
-        (r'^source:.*$',    f'source: telegram-inbox'),
+        (r'^source:.*$',    'source: telegram-inbox'),
     ]
 
     for pattern, replacement in replacements:

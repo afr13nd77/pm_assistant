@@ -5,13 +5,13 @@ import time
 from datetime import date
 from pathlib import Path
 
-from idea_pipeline.config import PipelineConfig
-from idea_pipeline.state import PipelineStore, PipelineStage
-from idea_pipeline.claude_client import PipelineClaudeClient
+from idea_pipeline import vault_paths, vault_writer
 from idea_pipeline.agents.analyst import AnalystAgent
-from idea_pipeline.agents.pm_agent import PMAgent
 from idea_pipeline.agents.decomposer import DecomposerAgent
-from idea_pipeline import vault_writer, vault_paths
+from idea_pipeline.agents.pm_agent import PMAgent
+from idea_pipeline.claude_client import PipelineClaudeClient
+from idea_pipeline.config import PipelineConfig
+from idea_pipeline.state import PipelineStage, PipelineStore
 
 logger = logging.getLogger(__name__)
 
@@ -218,8 +218,8 @@ class PipelineOrchestrator:
     def _get_vault_context(self, idea_text: str) -> dict | None:
         """Try to get vault context using knowledge-engine modules."""
         try:
-            from knowledge_engine.vault_index import build_index
             from knowledge_engine.matcher import find_links
+            from knowledge_engine.vault_index import build_index
 
             index = build_index(str(self.vault_path))
             links = find_links(idea_text, [], index)

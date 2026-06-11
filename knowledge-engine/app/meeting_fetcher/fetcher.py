@@ -14,12 +14,12 @@ from pathlib import Path
 
 import requests
 
-from .imap_client import fetch_emails, IMAPError, EmailAttachment
-from .state import State
-from .classifier import extract_type, route_protocol, make_filename, make_daily_filename
-from ..file_writer import atomic_write
-from ..enricher import enrich
 from .. import claude_client
+from ..enricher import enrich
+from ..file_writer import atomic_write
+from .classifier import extract_type, make_daily_filename, make_filename, route_protocol
+from .imap_client import EmailAttachment, IMAPError, fetch_emails
+from .state import State
 
 logger = logging.getLogger(__name__)
 
@@ -488,7 +488,7 @@ def fetch_new_meetings(
             jira_sync_detail = {}
             if protocol_type == "daily":
                 try:
-                    from ..jira_key_sync import sync_daily_jira_keys, patch_daily_links
+                    from ..jira_key_sync import patch_daily_links, sync_daily_jira_keys
                     jira_sync_detail = sync_daily_jira_keys(
                         protocol_md, vault_path
                     )

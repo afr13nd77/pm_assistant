@@ -2,12 +2,11 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from .frontmatter_utils import read_frontmatter, update_frontmatter
+from . import claude_client, vault_paths
 from .file_writer import append_section
-from .vault_index import build_index
+from .frontmatter_utils import read_frontmatter, update_frontmatter
 from .matcher import find_links
-from . import claude_client
-from . import vault_paths
+from .vault_index import build_index
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +65,6 @@ def enrich(filepath: str, vault_path: str = "", dry_run: bool = False) -> dict:
 
     logger.info(f"Calling Claude API with {len(matched_entries)} matched entries")
     try:
-        timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         relations_section = claude_client.enrich(body, matched_entries)
     except Exception as e:
         logger.error(f"Claude API failed: {e}")

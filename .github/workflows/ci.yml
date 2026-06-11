@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dev deps
+        run: pip install -r requirements-dev.txt
+
+      - name: Ruff lint
+        run: ruff check pm-bot/app/ knowledge-engine/app/ idea-pipeline/app/ --config pyproject.toml
+
+  typecheck:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: |
+          pip install -r requirements-dev.txt
+          pip install -r knowledge-engine/requirements.txt
+          pip install -r pm-bot/requirements.txt
+          pip install -r idea-pipeline/requirements.txt
+
+      - name: Mypy — knowledge-engine
+        run: mypy knowledge-engine/app/ --config-file pyproject.toml
+
+      - name: Mypy — pm-bot
+        run: mypy pm-bot/app/ --config-file pyproject.toml
+
+      - name: Mypy — idea-pipeline
+        run: mypy idea-pipeline/app/ --config-file pyproject.toml
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: knowledge-engine
+            pythonpath: knowledge-engine
+            testdir: knowledge-engine/tests/
+          - project: pm-bot
+            pythonpath: pm-bot:knowledge-engine
+            testdir: pm-bot/tests/
+          - project: idea-pipeline
+            pythonpath: idea-pipeline:knowledge-engine
+            testdir: idea-pipeline/tests/
+    name: test (${{ matrix.project }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            ${{ matrix.project }}/requirements.txt
+            knowledge-engine/requirements.txt
+
+      - name: Install deps
+        run: |
+          pip install -r requirements-dev.txt
+          pip install -r knowledge-engine/requirements.txt
+          pip install -r ${{ matrix.project }}/requirements.txt
+
+      - name: Pytest
+        env:
+          PYTHONPATH: ${{ matrix.pythonpath }}
+        run: python -m pytest ${{ matrix.testdir }} -q --tb=short

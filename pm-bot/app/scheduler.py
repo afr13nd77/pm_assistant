@@ -1,5 +1,6 @@
 import logging
 import os
+
 from apscheduler.schedulers.background import BackgroundScheduler
 
 logger = logging.getLogger(__name__)
@@ -68,8 +69,8 @@ async def _run_weekly_report_async(bot, chat_id: int):
     """Async implementation of weekly report generation and notification."""
     logger.info("Running scheduled weekly report")
     try:
-        from .reporter import generate_weekly_report
         from .obsidian_writer import write_report
+        from .reporter import generate_weekly_report
 
         report_md = generate_weekly_report()
         logger.info("Weekly report generated, length=%d", len(report_md))

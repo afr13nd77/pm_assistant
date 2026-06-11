@@ -6,6 +6,10 @@
 pm_assistant/
 ├── .env                            # общие секреты (не коммитить)
 ├── .env.example                    # шаблон переменных
+├── .pre-commit-config.yaml         # pre-commit hook (ruff)
+├── pyproject.toml                  # ruff + mypy конфигурация
+├── requirements-dev.txt            # dev-зависимости (pytest, ruff, mypy)
+├── .github/workflows/ci.yml       # GitHub Actions CI (lint + typecheck + test)
 ├── docker-compose.yml              # оркестрация: pm-bot (shm_size 512m) + knowledge-engine + ke-cron + idea-pipeline
 ├── CHANGELOG.md                    # журнал изменений по всем компонентам (от новых к старым)
 ├── BACKLOG.md                      # бэклог: реализованные фичи (54), баги (18), идеи (27)
@@ -229,6 +233,13 @@ pm_assistant/
 | Запуск pipeline сервера | `python -m idea_pipeline serve` | idea-pipeline/ |
 | CLI запуск pipeline | `python -m idea_pipeline run --text "..."` | idea-pipeline/ |
 | CLI статус pipeline | `python -m idea_pipeline status <id>` | idea-pipeline/ |
+| Линтер | `ruff check pm-bot/app/ knowledge-engine/app/ idea-pipeline/app/` | pm_assistant/ |
+| Линтер (автофикс) | `ruff check --fix pm-bot/app/ knowledge-engine/app/ idea-pipeline/app/` | pm_assistant/ |
+| Типы (KE) | `mypy knowledge-engine/app/ --config-file pyproject.toml` | pm_assistant/ |
+| Типы (pm-bot) | `mypy pm-bot/app/ --config-file pyproject.toml` | pm_assistant/ |
+| Тесты KE | `PYTHONPATH=knowledge-engine pytest knowledge-engine/tests/` | pm_assistant/ |
+| Тесты pm-bot | `PYTHONPATH=pm-bot:knowledge-engine pytest pm-bot/tests/` | pm_assistant/ |
+| Тесты pipeline | `PYTHONPATH=idea-pipeline:knowledge-engine pytest idea-pipeline/tests/` | pm_assistant/ |
 
 ## Переменные окружения (.env на уровне pm_assistant/)
 

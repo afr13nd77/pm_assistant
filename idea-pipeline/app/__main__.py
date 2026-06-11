@@ -26,11 +26,12 @@ def cmd_run(args):
     """Run a single pipeline without the HTTP server (for debugging)."""
     import asyncio
     from pathlib import Path
-    from idea_pipeline.config import load_config
-    from idea_pipeline.claude_client import PipelineClaudeClient
-    from idea_pipeline.state import PipelineStore
-    from idea_pipeline.orchestrator import PipelineOrchestrator
+
     from idea_pipeline import vault_writer
+    from idea_pipeline.claude_client import PipelineClaudeClient
+    from idea_pipeline.config import load_config
+    from idea_pipeline.orchestrator import PipelineOrchestrator
+    from idea_pipeline.state import PipelineStore
     from slugify import slugify
 
     vault_path = Path(os.getenv("VAULT_PATH", "/vault"))
@@ -104,6 +105,7 @@ def cmd_status(args):
     """Show status of a pipeline from _state.json."""
     import json
     from pathlib import Path
+
     from idea_pipeline.state import PipelineStore
 
     vault_path = Path(os.getenv("VAULT_PATH", "/vault"))

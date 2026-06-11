@@ -1,8 +1,8 @@
 import logging
 from pathlib import Path
 
-from idea_pipeline.config import AgentConfig
 from idea_pipeline.claude_client import PipelineClaudeClient
+from idea_pipeline.config import AgentConfig
 
 logger = logging.getLogger(__name__)
 

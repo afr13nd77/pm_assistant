@@ -5,8 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from . import llm_client
-from . import vault_paths
+from . import llm_client, vault_paths
 
 logger = logging.getLogger(__name__)
 

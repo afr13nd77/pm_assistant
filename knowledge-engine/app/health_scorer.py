@@ -1,13 +1,13 @@
 import json
 import logging
 import re
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .linter import check_broken_links, check_orphan_pages, check_stale_drafts, check_unsorted_misc
+from . import vault_paths
 from .file_writer import atomic_write
 from .frontmatter_utils import read_frontmatter
-from . import vault_paths
+from .linter import check_broken_links, check_orphan_pages, check_stale_drafts, check_unsorted_misc
 
 logger = logging.getLogger(__name__)
 

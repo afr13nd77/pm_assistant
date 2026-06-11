@@ -1,6 +1,5 @@
 import logging
 import re
-from pathlib import Path
 
 from .vault_index import VaultEntry, VaultIndex
 
@@ -56,7 +55,6 @@ def extract_keywords(text: str) -> list[str]:
 
 def _get_snippet(entry: VaultEntry) -> str:
     try:
-        vault_root = Path(entry.path).parts[0]
         return f"{entry.title} ({entry.category})"
     except Exception:
         return entry.title
