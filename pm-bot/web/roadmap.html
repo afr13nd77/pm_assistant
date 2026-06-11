@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="ru" class="theme-matrix">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Board — Roadmap</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+  <script>
+  (function() {
+    try {
+      var t = localStorage.getItem('pm_theme');
+      if (t === 'light') {
+        document.documentElement.className = 'theme-light';
+        document.getElementById('theme-css').href = 'style-light.css';
+      }
+    } catch(e) {}
+  })();
+  </script>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <app-sidebar active="roadmap"></app-sidebar>
+    <main class="page-content" style="position: relative; overflow: hidden;">
+      <div class="scan-line"></div>
+      <div class="page-header">
+        <div class="text-page-title">PRODUCT_ROADMAP // Content System</div>
+        <span class="refresh-icon" :class="{ spinning: loading }" @click="loadEpics" title="Refresh">&#8635;</span>
+      </div>
+
+      <div class="metrics-grid" v-if="!loading">
+        <metric-box label="TOTAL" :value="totalCount" color="cyan"></metric-box>
+        <metric-box label="BACKLOG" :value="backlogCount" color="yellow"></metric-box>
+        <metric-box label="IN_PROGRESS" :value="inProgressCount" color="magenta"></metric-box>
+        <metric-box label="DONE" :value="doneCount" color="green"></metric-box>
+      </div>
+
+      <!-- Domain filter tabs -->
+      <div class="domain-tabs" v-if="domains.length" style="margin-top: 10px;">
+        <button class="domain-tab" :class="{ active: !activeDomain }" @click="selectDomain(null)">ALL</button>
+        <button class="domain-tab" v-for="d in domains" :key="d.name"
+          :class="{ active: activeDomain === d.name }"
+          @click="selectDomain(d.name)">
+          {{ d.name.toUpperCase() }} [{{ d.epics_count }}]
+        </button>
+      </div>
+
+      <div v-if="loading" class="loading">LOADING...</div>
+      <div v-if="error" class="empty-state">{{ error }}</div>
+
+      <div class="roadmap-grid" v-if="!loading">
+        <!-- BACKLOG column -->
+        <div>
+          <div class="section-label">BACKLOG</div>
+          <epic-card v-for="epic in visibleBacklog" :key="epic.id"
+            :id="epic.id" :title="epic.title" :priority="epic.priority"
+            :progress="epic.progress" :prd_status="epic.prd_status"
+            :tickets="epic.tickets || []"
+            @click="selectEpic(epic)"
+          ></epic-card>
+          <button v-if="backlogEpics.length > visibleBacklog.length" class="cmd-btn cmd-btn-muted" style="width:100%;margin-top:4px;" @click="showMore">SHOW MORE ({{ backlogEpics.length - visibleBacklog.length }} hidden)</button>
+          <div v-if="!backlogEpics.length" class="empty-state">No epics</div>
+        </div>
+
+        <!-- TODO column -->
+        <div>
+          <div class="section-label">TODO</div>
+          <epic-card v-for="epic in visibleTodo" :key="epic.id"
+            :id="epic.id" :title="epic.title" :priority="epic.priority"
+            :progress="epic.progress" :prd_status="epic.prd_status"
+            :tickets="epic.tickets || []"
+            @click="selectEpic(epic)"
+          ></epic-card>
+          <button v-if="todoEpics.length > visibleTodo.length" class="cmd-btn cmd-btn-muted" style="width:100%;margin-top:4px;" @click="showMore">SHOW MORE ({{ todoEpics.length - visibleTodo.length }} hidden)</button>
+          <div v-if="!todoEpics.length" class="empty-state">No epics</div>
+        </div>
+
+        <!-- IN PROGRESS column -->
+        <div>
+          <div class="section-label">IN PROGRESS</div>
+          <epic-card v-for="epic in visibleInprogress" :key="epic.id"
+            :id="epic.id" :title="epic.title" :priority="epic.priority"
+            :progress="epic.progress" :prd_status="epic.prd_status"
+            :tickets="epic.tickets || []"
+            @click="selectEpic(epic)"
+          ></epic-card>
+          <button v-if="inprogressEpics.length > visibleInprogress.length" class="cmd-btn cmd-btn-muted" style="width:100%;margin-top:4px;" @click="showMore">SHOW MORE ({{ inprogressEpics.length - visibleInprogress.length }} hidden)</button>
+          <div v-if="!inprogressEpics.length" class="empty-state">No epics</div>
+        </div>
+
+        <!-- DONE column -->
+        <div>
+          <div class="section-label">DONE</div>
+          <epic-card v-for="epic in visibleDone" :key="epic.id"
+            :id="epic.id" :title="epic.title" :priority="epic.priority"
+            :progress="epic.progress" :prd_status="epic.prd_status"
+            :tickets="epic.tickets || []"
+            @click="selectEpic(epic)"
+          ></epic-card>
+          <button v-if="doneEpics.length > visibleDone.length" class="cmd-btn cmd-btn-muted" style="width:100%;margin-top:4px;" @click="showMore">SHOW MORE ({{ doneEpics.length - visibleDone.length }} hidden)</button>
+          <div v-if="!doneEpics.length" class="empty-state">No epics</div>
+        </div>
+      </div>
+
+    </main>
+    <div class="drawer-overlay" v-if="drawerOpen" @click="closeDrawer"></div>
+    <div class="task-drawer" :class="{ open: drawerOpen }">
+      <div class="task-drawer-header">
+        <span class="task-drawer-title">
+          <span v-if="drawerMode === 'task'" class="text-muted" style="cursor:pointer;margin-right:8px;" @click="backToEpic">&larr;</span>
+          {{ drawerMode === 'epic' ? (drawerEpic ? drawerEpic.id : 'EPIC') : (drawerTask ? (drawerTask.jira_key || drawerTask.filename || 'TASK') : 'LOADING...') }}
+        </span>
+        <button class="task-drawer-close" @click="closeDrawer">[&times;]</button>
+      </div>
+
+      <div class="task-drawer-body" v-if="drawerMode === 'epic' && drawerEpic">
+        <div class="task-drawer-section">
+          <div class="task-drawer-section-title">INFO</div>
+          <div class="task-drawer-meta">
+            <span class="task-drawer-meta-label">title:</span>
+            <span class="task-drawer-meta-value">{{ drawerEpic.title || '—' }}</span>
+            <span class="task-drawer-meta-label">priority:</span>
+            <span class="task-drawer-meta-value">{{ (drawerEpic.priority || '—').toUpperCase() }}</span>
+            <span class="task-drawer-meta-label">status:</span>
+            <span class="task-drawer-meta-value">{{ (drawerEpic.status || '—').toUpperCase() }}</span>
+            <span class="task-drawer-meta-label">progress:</span>
+            <span class="task-drawer-meta-value">{{ drawerEpic.progress }}%</span>
+            <span class="task-drawer-meta-label">domain:</span>
+            <span class="task-drawer-meta-value text-cyan">{{ (drawerEpic.domain || '—').toUpperCase() }}</span>
+            <span class="task-drawer-meta-label">prd_status:</span>
+            <span class="task-drawer-meta-value" :class="drawerEpic.prd_status === 'approved' ? 'text-green' : 'text-yellow'">{{ (drawerEpic.prd_status || '—').toUpperCase() }}</span>
+            <span class="task-drawer-meta-label" v-if="drawerEpic.confluence_link">confluence:</span>
+            <span class="task-drawer-meta-value" v-if="drawerEpic.confluence_link"><a :href="drawerEpic.confluence_link" target="_blank" class="text-cyan" style="text-decoration:none;">link</a></span>
+          </div>
+        </div>
+        <div class="task-drawer-section">
+          <jira-create-section
+            :filename="drawerEpic.filename || ''"
+            :current-type="'Epic'"
+            :title="drawerEpic.title || ''"
+            :has-jira-key="!!(drawerEpic.jira_key)"
+            :jira-key="drawerEpic.jira_key || ''"
+            :jira-url="drawerEpic.jira_url || ''"
+            :is-epic="true"
+            @created="onEpicJiraCreated"
+          ></jira-create-section>
+        </div>
+        <div class="task-drawer-section">
+          <div class="task-drawer-section-title">JIRA_TICKETS [{{ (drawerEpic.tickets || []).length }}]</div>
+          <div v-for="ticket in (drawerEpic.tickets || [])" :key="ticket.id" class="detail-ticket-row" style="cursor:pointer;" @click="openTaskFromEpic(ticket.id)">
+            <span><span class="detail-ticket-id">{{ ticket.id }}</span> <span class="detail-ticket-name">{{ ticket.title }}</span></span>
+            <span :class="'tag tag-' + ticket.status">{{ ticket.status }}</span>
+          </div>
+          <div v-if="!drawerEpic.tickets || !drawerEpic.tickets.length" class="empty-state">No tickets</div>
+        </div>
+        <div class="task-drawer-section" v-if="drawerEpic.goal">
+          <div class="task-drawer-section-title">GOAL</div>
+          <div class="task-drawer-content" v-html="renderMd(drawerEpic.goal)"></div>
+        </div>
+        <div class="task-drawer-section" v-if="drawerEpic.scope">
+          <div class="task-drawer-section-title">SCOPE</div>
+          <div class="task-drawer-content" v-html="renderMd(drawerEpic.scope)"></div>
+        </div>
+        <div class="task-drawer-section" v-if="drawerEpic.acceptance_criteria">
+          <div class="task-drawer-section-title">ACCEPTANCE_CRITERIA</div>
+          <div class="task-drawer-content" v-html="renderMd(drawerEpic.acceptance_criteria)"></div>
+        </div>
+      </div>
+
+      <div class="task-drawer-body" v-if="drawerMode === 'task' && drawerTask">
+        <div class="task-drawer-section">
+          <div class="task-drawer-section-title">INFO</div>
+          <div class="task-drawer-meta">
+            <span class="task-drawer-meta-label">title:</span>
+            <span class="task-drawer-meta-value">{{ drawerTask.title || '—' }}</span>
+            <span class="task-drawer-meta-label">date:</span>
+            <span class="task-drawer-meta-value">{{ fmtDate(drawerTask.date) || '—' }}</span>
+            <span class="task-drawer-meta-label">status:</span>
+            <span class="task-drawer-meta-value"><span :class="taskStatusClass">{{ (drawerTask.status || '—').toUpperCase() }}</span></span>
+            <span class="task-drawer-meta-label" v-if="drawerTask.type">type:</span>
+            <span class="task-drawer-meta-value" v-if="drawerTask.type">{{ drawerTask.type.toUpperCase() }}</span>
+            <span class="task-drawer-meta-label" v-if="drawerTask.domain">domain:</span>
+            <span class="task-drawer-meta-value text-cyan" v-if="drawerTask.domain">{{ drawerTask.domain.toUpperCase() }}</span>
+            <span class="task-drawer-meta-label" v-if="drawerTask.priority">priority:</span>
+            <span class="task-drawer-meta-value" v-if="drawerTask.priority">{{ drawerTask.priority.toUpperCase() }}</span>
+            <span class="task-drawer-meta-label" v-if="drawerTask.story_points">story_points:</span>
+            <span class="task-drawer-meta-value" v-if="drawerTask.story_points">{{ drawerTask.story_points }}</span>
+            <span class="task-drawer-meta-label" v-if="drawerTask.jira_key">jira_key:</span>
+            <span class="task-drawer-meta-value" v-if="drawerTask.jira_key">{{ drawerTask.jira_key }}</span>
+          </div>
+        </div>
+        <div class="task-drawer-section" v-if="drawerTask.body">
+          <div class="task-drawer-section-title">BODY</div>
+          <div class="task-drawer-content" v-html="renderMd(drawerTask.body)"></div>
+        </div>
+        <div class="task-drawer-section">
+          <jira-create-section
+            :filename="drawerTask.filename || ''"
+            :current-type="drawerTask.type || 'Task'"
+            :title="drawerTask.title || ''"
+            :has-jira-key="!!(drawerTask.jira_key)"
+            :jira-key="drawerTask.jira_key || ''"
+            :jira-url="drawerTask.jira_url || ''"
+            @created="onTaskJiraCreated"
+          ></jira-create-section>
+        </div>
+      </div>
+
+      <div class="task-drawer-body" v-if="drawerMode === 'task' && !drawerTask" style="display:flex;align-items:center;justify-content:center;">
+        <div class="loading">LOADING...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="api.js"></script>
+  <script src="components.js"></script>
+  <script>
+    console.log('[roadmap] initializing roadmap page');
+
+    (function() {
+      var renderer = new marked.Renderer();
+      renderer.link = function(token) {
+        var href = token.href || '';
+        var title = token.title || '';
+        var text = token.text || '';
+        var titleAttr = title ? ' title="' + title + '"' : '';
+        return '<a href="' + href + '"' + titleAttr + ' target="_blank" rel="noopener">' + text + '</a>';
+      };
+      marked.use({ breaks: true, gfm: true, renderer: renderer });
+      console.log('[roadmap] using marked.js v' + marked.version);
+    })();
+
+    var STATUS_COLUMN_MAP = {
+      'backlog': 'backlog',
+      '': 'backlog',
+      'todo': 'todo',
+      'open': 'todo',
+      'draft': 'todo',
+      'in-progress': 'inprogress',
+      'in-review': 'inprogress',
+      'code-review': 'inprogress',
+      'in-testing': 'inprogress',
+      'deploy': 'inprogress',
+      'staging': 'inprogress',
+      'done': 'done',
+      'closed': 'done',
+      'resolved': 'done',
+      'готово': 'done',
+      'готово/closed': 'done',
+      'development': 'inprogress',
+      'ready-for-development': 'todo',
+      'в-работе.': 'inprogress',
+      'бэклог/идеи': 'backlog'
+    };
+
+    function getColumn(epic) {
+      var s = (epic.status || '').toLowerCase();
+      return STATUS_COLUMN_MAP[s] || 'backlog';
+    }
+
+    function fmtDate(d) {
+      if (!d) return '';
+      var m = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      return m ? m[3] + '.' + m[2] + '.' + m[1] : d;
+    }
+
+    var app = Vue.createApp({
+      setup: function() {
+        var epics = Vue.ref([]);
+        var loading = Vue.ref(true);
+        var error = Vue.ref(null);
+        var domains = Vue.ref([]);
+        var activeDomain = Vue.ref(null);
+        var displayLimit = Vue.ref(50);
+        var drawerOpen = Vue.ref(false);
+        var drawerMode = Vue.ref('epic');
+        var drawerEpic = Vue.ref(null);
+        var drawerTask = Vue.ref(null);
+        var refreshMode = Vue.ref('auto');
+        var refreshInterval = null;
+
+        var taskStatusClass = Vue.computed(function() {
+          if (!drawerTask.value) return 'tag tag-muted';
+          var s = (drawerTask.value.status || '').toLowerCase();
+          if (s === 'done') return 'tag tag-done';
+          if (s === 'in-progress') return 'tag tag-jira';
+          if (s === 'in-review' || s === 'in-testing' || s === 'code-review') return 'tag tag-prd';
+          if (s === 'todo') return 'tag tag-muted';
+          if (s === 'cancelled') return 'tag tag-blocked';
+          return 'tag tag-muted';
+        });
+
+        var backlogEpics = Vue.computed(function() {
+          return epics.value.filter(function(e) { return getColumn(e) === 'backlog'; });
+        });
+        var todoEpics = Vue.computed(function() {
+          return epics.value.filter(function(e) { return getColumn(e) === 'todo'; });
+        });
+        var inprogressEpics = Vue.computed(function() {
+          return epics.value.filter(function(e) { return getColumn(e) === 'inprogress'; });
+        });
+        var doneEpics = Vue.computed(function() {
+          return epics.value.filter(function(e) { return getColumn(e) === 'done'; });
+        });
+
+        var visibleBacklog = Vue.computed(function() {
+          return backlogEpics.value.slice(0, displayLimit.value);
+        });
+        var visibleTodo = Vue.computed(function() {
+          return todoEpics.value.slice(0, displayLimit.value);
+        });
+        var visibleInprogress = Vue.computed(function() {
+          return inprogressEpics.value.slice(0, displayLimit.value);
+        });
+        var visibleDone = Vue.computed(function() {
+          return doneEpics.value.slice(0, displayLimit.value);
+        });
+
+        /* Computed: metric counts */
+        var totalCount = Vue.computed(function() {
+          return epics.value.length;
+        });
+        var backlogCount = Vue.computed(function() {
+          return backlogEpics.value.length;
+        });
+        var inProgressCount = Vue.computed(function() {
+          return inprogressEpics.value.length;
+        });
+        var doneCount = Vue.computed(function() {
+          return doneEpics.value.length;
+        });
+
+        /* Methods */
+        async function loadEpics() {
+          console.log('[roadmap] loadEpics: fetching epics from API, domain=' + (activeDomain.value || 'ALL'));
+          loading.value = true;
+          error.value = null;
+          try {
+            var data = await api.epics(activeDomain.value);
+            epics.value = data;
+            console.log('[roadmap] loadEpics: loaded ' + data.length + ' epics');
+          } catch (err) {
+            console.error('[roadmap] loadEpics: error', err.message);
+            error.value = 'Failed to load epics: ' + err.message;
+          } finally {
+            loading.value = false;
+          }
+        }
+
+        async function loadDomains() {
+          console.log('[roadmap] loadDomains: fetching domains from API');
+          try {
+            var data = await api.domains();
+            domains.value = data || [];
+            console.log('[roadmap] loadDomains: loaded ' + domains.value.length + ' domains');
+          } catch (err) {
+            console.error('[roadmap] loadDomains error:', err.message);
+          }
+        }
+
+        function selectDomain(name) {
+          console.log('[roadmap] selectDomain:', name || 'ALL');
+          activeDomain.value = name;
+          loadEpics();
+        }
+
+        function showMore() {
+          displayLimit.value += 50;
+          console.log('[roadmap] showMore — new limit:', displayLimit.value);
+        }
+
+        function selectEpic(epic) {
+          console.log('[roadmap] selectEpic:', epic.id, epic.title);
+          drawerEpic.value = epic;
+          drawerTask.value = null;
+          drawerMode.value = 'epic';
+          drawerOpen.value = true;
+        }
+
+        async function openTaskFromEpic(jiraKey) {
+          console.log('[roadmap] openTaskFromEpic:', jiraKey);
+          drawerMode.value = 'task';
+          drawerTask.value = null;
+          try {
+            var data = await api.taskByKey(jiraKey);
+            drawerTask.value = data;
+            console.log('[roadmap] openTaskFromEpic: loaded task', data.title);
+          } catch (err) {
+            console.error('[roadmap] openTaskFromEpic: error', err.message);
+            drawerTask.value = { title: jiraKey, jira_key: jiraKey, status: 'unknown', body: 'Failed to load: ' + err.message };
+          }
+        }
+
+        function backToEpic() {
+          console.log('[roadmap] backToEpic');
+          drawerMode.value = 'epic';
+          drawerTask.value = null;
+        }
+
+        function renderMd(text) {
+          if (!text) return '';
+          return marked.parse(text);
+        }
+
+        function closeDrawer() {
+          console.log('[roadmap] closeDrawer');
+          drawerOpen.value = false;
+          drawerEpic.value = null;
+          drawerTask.value = null;
+          drawerMode.value = 'epic';
+        }
+
+        function onEpicJiraCreated(event) {
+          console.log('[roadmap] epic jira created:', event);
+          if (drawerEpic.value) {
+            drawerEpic.value.jira_key = event.jira_key;
+            drawerEpic.value.jira_url = event.jira_url;
+          }
+          loadEpics();
+        }
+
+        function onTaskJiraCreated(event) {
+          console.log('[roadmap] task jira created:', event);
+          if (drawerTask.value) {
+            drawerTask.value.jira_key = event.jira_key;
+            drawerTask.value.jira_url = event.jira_url;
+          }
+        }
+
+        /* Lifecycle */
+        Vue.onMounted(function() {
+          console.log('[roadmap] onMounted: starting initial load');
+          loadDomains();
+          loadEpics();
+          api.getUserPrefs().then(function(prefs) {
+            refreshMode.value = prefs.refresh_mode || 'auto';
+            console.log('[roadmap] refresh mode:', refreshMode.value);
+            if (refreshMode.value === 'auto') {
+              refreshInterval = setInterval(function() {
+                console.log('[roadmap] auto-refresh — 60s interval');
+                loadEpics();
+              }, 60000);
+            }
+          }).catch(function(err) {
+            console.error('[roadmap] getUserPrefs error, defaulting to auto:', err.message);
+            refreshInterval = setInterval(function() {
+              console.log('[roadmap] auto-refresh — 60s interval (fallback)');
+              loadEpics();
+            }, 60000);
+          });
+          document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+              if (drawerMode.value === 'task' && drawerEpic.value) {
+                backToEpic();
+              } else {
+                closeDrawer();
+              }
+            }
+          });
+        });
+
+        Vue.onUnmounted(function() {
+          if (refreshInterval) {
+            clearInterval(refreshInterval);
+            console.log('[roadmap] unmounted — cleared refresh interval');
+          }
+        });
+
+        return {
+          epics: epics,
+          loading: loading,
+          error: error,
+          refreshMode: refreshMode,
+          domains: domains,
+          activeDomain: activeDomain,
+          displayLimit: displayLimit,
+          drawerOpen: drawerOpen,
+          drawerMode: drawerMode,
+          drawerEpic: drawerEpic,
+          drawerTask: drawerTask,
+          taskStatusClass: taskStatusClass,
+          backlogEpics: backlogEpics,
+          todoEpics: todoEpics,
+          inprogressEpics: inprogressEpics,
+          doneEpics: doneEpics,
+          visibleBacklog: visibleBacklog,
+          visibleTodo: visibleTodo,
+          visibleInprogress: visibleInprogress,
+          visibleDone: visibleDone,
+          totalCount: totalCount,
+          inProgressCount: inProgressCount,
+          backlogCount: backlogCount,
+          doneCount: doneCount,
+          loadEpics: loadEpics,
+          loadDomains: loadDomains,
+          selectDomain: selectDomain,
+          showMore: showMore,
+          selectEpic: selectEpic,
+          openTaskFromEpic: openTaskFromEpic,
+          backToEpic: backToEpic,
+          closeDrawer: closeDrawer,
+          renderMd: renderMd,
+          onEpicJiraCreated: onEpicJiraCreated,
+          onTaskJiraCreated: onTaskJiraCreated,
+          fmtDate: fmtDate
+        };
+      }
+    });
+
+    registerComponents(app);
+    applyPageTheme().then(function() {
+      app.mount('#app');
+      console.log('[roadmap] app mounted');
+    });
+  </script>
+</body>
+</html>

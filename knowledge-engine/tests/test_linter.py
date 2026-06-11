@@ -1,0 +1,631 @@
+"""Tests for the linter module — vault health checks."""
+import importlib
+import os
+import time
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _setup_vault(tmp_path: Path):
+    """Reload vault_paths so VAULT_PATH points to tmp_path."""
+    with patch.dict(os.environ, {"VAULT_PATH": str(tmp_path)}):
+        from app import vault_paths
+        importlib.reload(vault_paths)
+    return tmp_path
+
+
+def _import_linter(tmp_path: Path):
+    """Set up vault and return a freshly-reloaded linter module."""
+    _setup_vault(tmp_path)
+    from app import linter
+    importlib.reload(linter)
+    return linter
+
+
+def _write_md(path: Path, content: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def _write_md_with_frontmatter(path: Path, status: str, body: str = "") -> Path:
+    content = f"---\nstatus: {status}\n---\n\n{body}"
+    return _write_md(path, content)
+
+
+def _set_mtime_days_ago(path: Path, days: int) -> None:
+    """Set the mtime of a file to `days` days in the past."""
+    past = time.time() - days * 86400
+    os.utime(str(path), (past, past))
+
+
+# ---------------------------------------------------------------------------
+# check_broken_links
+# ---------------------------------------------------------------------------
+
+class TestCheckBrokenLinks:
+    def test_broken_link_reported(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "idea-01.md"
+        _write_md(md, "# Idea\n\n[[nonexistent]]\n")
+
+        result = linter.check_broken_links(str(tmp_path))
+
+        assert len(result) == 1
+        item = result[0]
+        assert item["link"] == "nonexistent"
+        assert item["reason"] == "target not found"
+        assert item["line"] == 3
+
+    def test_valid_link_not_reported(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        existing = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "existing-file.md"
+        _write_md(existing, "# Existing")
+
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "idea-01.md"
+        _write_md(md, "# Idea\n\n[[existing-file]]\n")
+
+        result = linter.check_broken_links(str(tmp_path))
+        assert result == []
+
+    def test_valid_link_with_extension_not_reported(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        existing = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "GO-153.md"
+        _write_md(existing, "# GO-153")
+
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "idea-01.md"
+        _write_md(md, "# Idea\n\n[[GO-153.md]]\n")
+
+        result = linter.check_broken_links(str(tmp_path))
+        assert result == []
+
+    def test_pipe_syntax_target_resolved(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        existing = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "target-file.md"
+        _write_md(existing, "# Target")
+
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "idea-01.md"
+        _write_md(md, "# Idea\n\n[[display text|target-file]]\n")
+
+        result = linter.check_broken_links(str(tmp_path))
+        assert result == []
+
+    def test_pipe_syntax_broken_target_reported(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "idea-01.md"
+        _write_md(md, "# Idea\n\n[[display|missing-file]]\n")
+
+        result = linter.check_broken_links(str(tmp_path))
+        assert len(result) == 1
+        assert result[0]["link"] == "display|missing-file"
+
+    def test_multiple_broken_links_in_one_file(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "idea-01.md"
+        _write_md(md, "# Idea\n\n[[missing-a]]\n\n[[missing-b]]\n")
+
+        result = linter.check_broken_links(str(tmp_path))
+        assert len(result) == 2
+        links = {item["link"] for item in result}
+        assert links == {"missing-a", "missing-b"}
+
+    def test_no_wiki_dir_returns_empty(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        result = linter.check_broken_links(str(tmp_path))
+        assert result == []
+
+    def test_result_contains_relative_file_path(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "idea-01.md"
+        _write_md(md, "[[ghost]]\n")
+
+        result = linter.check_broken_links(str(tmp_path))
+        assert len(result) == 1
+        assert result[0]["file"] == "wiki/domains/test-domain/ideas/idea-01.md"
+        assert "\\" not in result[0]["file"]
+
+    def test_link_on_correct_line_number(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "idea-01.md"
+        _write_md(md, "line one\nline two\n[[ghost]]\n")
+
+        result = linter.check_broken_links(str(tmp_path))
+        assert result[0]["line"] == 3
+
+    def test_cross_wiki_reference_is_valid(self, tmp_path):
+        """A wikilink pointing to a file in another part of wiki/ is valid."""
+        linter = _import_linter(tmp_path)
+        meeting = tmp_path / "wiki" / "meetings" / "standup.md"
+        _write_md(meeting, "# Standup")
+
+        idea = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "idea-01.md"
+        _write_md(idea, "See [[standup]]\n")
+
+        result = linter.check_broken_links(str(tmp_path))
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# check_orphan_pages
+# ---------------------------------------------------------------------------
+
+class TestCheckOrphanPages:
+    def test_unreferenced_page_is_orphan(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        orphan = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "lonely.md"
+        _write_md(orphan, "# Lonely idea")
+
+        result = linter.check_orphan_pages(str(tmp_path))
+
+        assert len(result) == 1
+        item = result[0]
+        assert item["domain"] == "test-domain"
+        assert item["artifact_type"] == "ideas"
+        assert "lonely.md" in item["file"]
+
+    def test_referenced_page_not_orphan(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        target = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "referenced.md"
+        _write_md(target, "# Referenced")
+
+        referrer = tmp_path / "wiki" / "domains" / "test-domain" / "prds" / "prd-01.md"
+        _write_md(referrer, "See [[referenced]]\n")
+
+        result = linter.check_orphan_pages(str(tmp_path))
+        orphan_files = [item["file"] for item in result]
+        assert not any("referenced.md" in f for f in orphan_files)
+
+    def test_referenced_with_extension_not_orphan(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        target = tmp_path / "wiki" / "domains" / "test-domain" / "tasks" / "task-01.md"
+        _write_md(target, "# Task")
+
+        referrer = tmp_path / "wiki" / "domains" / "test-domain" / "prds" / "prd-01.md"
+        _write_md(referrer, "See [[task-01.md]]\n")
+
+        result = linter.check_orphan_pages(str(tmp_path))
+        orphan_files = [item["file"] for item in result]
+        assert not any("task-01.md" in f for f in orphan_files)
+
+    def test_service_files_excluded_from_orphan_check(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        for service_name in ("index.md", "log.md", "decisions.md", "glossary.md"):
+            f = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / service_name
+            _write_md(f, "# Service")
+
+        result = linter.check_orphan_pages(str(tmp_path))
+        assert result == []
+
+    def test_orphan_result_has_correct_artifact_type(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        for artifact_type in ("ideas", "prds", "bugs"):
+            f = tmp_path / "wiki" / "domains" / "test-domain" / artifact_type / "item.md"
+            _write_md(f, "# Item")
+
+        result = linter.check_orphan_pages(str(tmp_path))
+        artifact_types = {item["artifact_type"] for item in result}
+        assert artifact_types == {"ideas", "prds", "bugs"}
+
+    def test_empty_vault_returns_no_orphans(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        result = linter.check_orphan_pages(str(tmp_path))
+        assert result == []
+
+    def test_pipe_syntax_reference_counts_as_valid(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        target = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "target.md"
+        _write_md(target, "# Target")
+
+        referrer = tmp_path / "wiki" / "domains" / "test-domain" / "prds" / "prd-01.md"
+        _write_md(referrer, "See [[display|target]]\n")
+
+        result = linter.check_orphan_pages(str(tmp_path))
+        orphan_files = [item["file"] for item in result]
+        assert not any("target.md" in f for f in orphan_files)
+
+    def test_orphan_file_path_uses_forward_slashes(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        f = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "lonely.md"
+        _write_md(f, "# Lonely")
+
+        result = linter.check_orphan_pages(str(tmp_path))
+        assert len(result) == 1
+        assert "\\" not in result[0]["file"]
+
+
+# ---------------------------------------------------------------------------
+# check_stale_drafts
+# ---------------------------------------------------------------------------
+
+class TestCheckStaleDrafts:
+    def test_stale_draft_reported(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "old-idea.md"
+        _write_md_with_frontmatter(md, status="draft", body="# Old idea")
+        _set_mtime_days_ago(md, 35)
+
+        result = linter.check_stale_drafts(str(tmp_path))
+
+        assert len(result) == 1
+        item = result[0]
+        assert item["domain"] == "test-domain"
+        assert item["days_old"] >= 35
+        assert item["status"] == "draft"
+
+    def test_inbox_status_also_reported(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "inbox-idea.md"
+        _write_md_with_frontmatter(md, status="inbox", body="# Old inbox idea")
+        _set_mtime_days_ago(md, 31)
+
+        result = linter.check_stale_drafts(str(tmp_path))
+
+        assert len(result) == 1
+        assert result[0]["status"] == "inbox"
+
+    def test_recent_draft_not_reported(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "new-idea.md"
+        _write_md_with_frontmatter(md, status="draft", body="# New idea")
+        _set_mtime_days_ago(md, 5)
+
+        result = linter.check_stale_drafts(str(tmp_path))
+        assert result == []
+
+    def test_non_draft_status_not_reported(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "active.md"
+        _write_md_with_frontmatter(md, status="active", body="# Active idea")
+        _set_mtime_days_ago(md, 60)
+
+        result = linter.check_stale_drafts(str(tmp_path))
+        assert result == []
+
+    def test_exactly_30_days_old_is_stale(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "boundary.md"
+        _write_md_with_frontmatter(md, status="draft", body="# Boundary")
+        _set_mtime_days_ago(md, 30)
+
+        result = linter.check_stale_drafts(str(tmp_path))
+        assert len(result) == 1
+
+    def test_service_files_excluded_from_stale_check(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        for service_name in ("index.md", "log.md"):
+            f = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / service_name
+            _write_md_with_frontmatter(f, status="draft", body="# Service")
+            _set_mtime_days_ago(f, 60)
+
+        result = linter.check_stale_drafts(str(tmp_path))
+        assert result == []
+
+    def test_stale_draft_file_path_is_relative(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "old.md"
+        _write_md_with_frontmatter(md, status="draft")
+        _set_mtime_days_ago(md, 40)
+
+        result = linter.check_stale_drafts(str(tmp_path))
+        assert len(result) == 1
+        assert result[0]["file"] == "wiki/domains/test-domain/ideas/old.md"
+        assert "\\" not in result[0]["file"]
+
+    def test_no_ideas_dirs_returns_empty(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        result = linter.check_stale_drafts(str(tmp_path))
+        assert result == []
+
+    def test_only_ideas_dirs_are_scanned(self, tmp_path):
+        """Stale draft check only looks in ideas/, not prds/ or tasks/."""
+        linter = _import_linter(tmp_path)
+        prd = tmp_path / "wiki" / "domains" / "test-domain" / "prds" / "old-prd.md"
+        _write_md_with_frontmatter(prd, status="draft")
+        _set_mtime_days_ago(prd, 60)
+
+        result = linter.check_stale_drafts(str(tmp_path))
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# check_unsorted_misc
+# ---------------------------------------------------------------------------
+
+class TestCheckUnsortedMisc:
+    def test_old_misc_file_reported(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        misc_dir = tmp_path / "raw" / "inbound" / "misc"
+        misc_dir.mkdir(parents=True, exist_ok=True)
+        old_file = misc_dir / "old-note.txt"
+        old_file.write_text("hello", encoding="utf-8")
+        _set_mtime_days_ago(old_file, 10)
+
+        result = linter.check_unsorted_misc(str(tmp_path))
+
+        assert len(result) == 1
+        item = result[0]
+        assert item["days_old"] >= 10
+        assert "old-note.txt" in item["file"]
+
+    def test_recent_misc_file_not_reported(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        misc_dir = tmp_path / "raw" / "inbound" / "misc"
+        misc_dir.mkdir(parents=True, exist_ok=True)
+        new_file = misc_dir / "new-note.txt"
+        new_file.write_text("hello", encoding="utf-8")
+        _set_mtime_days_ago(new_file, 2)
+
+        result = linter.check_unsorted_misc(str(tmp_path))
+        assert result == []
+
+    def test_exactly_7_days_old_is_reported(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        misc_dir = tmp_path / "raw" / "inbound" / "misc"
+        misc_dir.mkdir(parents=True, exist_ok=True)
+        f = misc_dir / "boundary.txt"
+        f.write_text("data", encoding="utf-8")
+        _set_mtime_days_ago(f, 7)
+
+        result = linter.check_unsorted_misc(str(tmp_path))
+        assert len(result) == 1
+
+    def test_no_misc_dir_returns_empty(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        result = linter.check_unsorted_misc(str(tmp_path))
+        assert result == []
+
+    def test_subdirectories_not_counted(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        misc_dir = tmp_path / "raw" / "inbound" / "misc"
+        subdir = misc_dir / "subfolder"
+        subdir.mkdir(parents=True, exist_ok=True)
+        _set_mtime_days_ago(subdir, 30)
+
+        result = linter.check_unsorted_misc(str(tmp_path))
+        assert result == []
+
+    def test_misc_file_path_is_relative_with_forward_slashes(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        misc_dir = tmp_path / "raw" / "inbound" / "misc"
+        misc_dir.mkdir(parents=True, exist_ok=True)
+        f = misc_dir / "note.md"
+        f.write_text("content", encoding="utf-8")
+        _set_mtime_days_ago(f, 8)
+
+        result = linter.check_unsorted_misc(str(tmp_path))
+        assert len(result) == 1
+        assert result[0]["file"] == "raw/inbound/misc/note.md"
+        assert "\\" not in result[0]["file"]
+
+
+# ---------------------------------------------------------------------------
+# lint() integration
+# ---------------------------------------------------------------------------
+
+class TestLintIntegration:
+    def test_clean_vault_all_empty(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        result = linter.lint(str(tmp_path))
+
+        assert result["status"] == "ok"
+        assert result["broken_links"] == []
+        assert result["orphan_pages"] == []
+        assert result["stale_drafts"] == []
+        assert result["unsorted_misc"] == []
+        assert result["summary"]["total_issues"] == 0
+
+    def test_summary_counts_match_list_lengths(self, tmp_path):
+        linter = _import_linter(tmp_path)
+
+        # Create one of each issue type
+        broken_md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "broken.md"
+        _write_md(broken_md, "[[ghost-link]]\n")
+
+        stale_md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "stale.md"
+        _write_md_with_frontmatter(stale_md, status="draft")
+        _set_mtime_days_ago(stale_md, 45)
+
+        misc_dir = tmp_path / "raw" / "inbound" / "misc"
+        misc_dir.mkdir(parents=True, exist_ok=True)
+        old_misc = misc_dir / "old.txt"
+        old_misc.write_text("data", encoding="utf-8")
+        _set_mtime_days_ago(old_misc, 10)
+
+        result = linter.lint(str(tmp_path))
+
+        assert result["summary"]["broken_links_count"] == len(result["broken_links"])
+        assert result["summary"]["orphan_pages_count"] == len(result["orphan_pages"])
+        assert result["summary"]["stale_drafts_count"] == len(result["stale_drafts"])
+        assert result["summary"]["unsorted_misc_count"] == len(result["unsorted_misc"])
+        assert result["summary"]["total_issues"] == (
+            result["summary"]["broken_links_count"]
+            + result["summary"]["orphan_pages_count"]
+            + result["summary"]["stale_drafts_count"]
+            + result["summary"]["unsorted_misc_count"]
+        )
+
+    def test_result_has_all_required_keys(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        result = linter.lint(str(tmp_path))
+
+        assert "status" in result
+        assert "broken_links" in result
+        assert "orphan_pages" in result
+        assert "stale_drafts" in result
+        assert "unsorted_misc" in result
+        assert "summary" in result
+
+        summary = result["summary"]
+        assert "broken_links_count" in summary
+        assert "orphan_pages_count" in summary
+        assert "stale_drafts_count" in summary
+        assert "unsorted_misc_count" in summary
+        assert "total_issues" in summary
+
+    def test_status_is_ok(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        result = linter.lint(str(tmp_path))
+        assert result["status"] == "ok"
+
+    def test_multiple_issues_counted_correctly(self, tmp_path):
+        linter = _import_linter(tmp_path)
+
+        # Two broken links in the same file
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "multi.md"
+        _write_md(md, "[[ghost1]]\n[[ghost2]]\n")
+
+        result = linter.lint(str(tmp_path))
+        assert result["summary"]["broken_links_count"] == 2
+        assert result["summary"]["total_issues"] >= 2
+
+    def test_orphan_page_counted_in_summary(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        f = tmp_path / "wiki" / "domains" / "test-domain" / "prds" / "prd-01.md"
+        _write_md(f, "# PRD with no references")
+
+        result = linter.lint(str(tmp_path))
+        assert result["summary"]["orphan_pages_count"] == 1
+        assert result["summary"]["total_issues"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# _build_file_index
+# ---------------------------------------------------------------------------
+
+class TestBuildFileIndex:
+    def test_build_file_index_basic(self, tmp_path):
+        """Three .md files in wiki/ produce 3 entries in each index dict."""
+        linter = _import_linter(tmp_path)
+        for name in ("alpha.md", "beta.md", "gamma.md"):
+            _write_md(tmp_path / "wiki" / "docs" / name, f"# {name}")
+
+        result = linter._build_file_index(tmp_path)
+
+        assert len(result["by_name"]) == 3
+        assert len(result["by_stem"]) == 3
+        assert len(result["all_paths"]) == 3
+
+    def test_build_file_index_duplicate_names(self, tmp_path):
+        """Two files with same name in different dirs produce 2 paths under that name."""
+        linter = _import_linter(tmp_path)
+        _write_md(tmp_path / "wiki" / "ideas" / "note.md", "# Note A")
+        _write_md(tmp_path / "wiki" / "prds" / "note.md", "# Note B")
+
+        result = linter._build_file_index(tmp_path)
+
+        assert len(result["by_name"]["note.md"]) == 2
+        assert len(result["all_paths"]) == 2
+        # stem is the same, so by_stem["note"] should also have 2 paths
+        assert len(result["by_stem"]["note"]) == 2
+
+    def test_build_file_index_empty_wiki(self, tmp_path):
+        """Empty wiki/ directory produces empty index dicts."""
+        linter = _import_linter(tmp_path)
+        (tmp_path / "wiki").mkdir(parents=True, exist_ok=True)
+
+        result = linter._build_file_index(tmp_path)
+
+        assert result["by_name"] == {}
+        assert result["by_stem"] == {}
+        assert result["all_paths"] == []
+
+    def test_build_file_index_no_wiki(self, tmp_path):
+        """No wiki/ directory at all produces empty index dicts."""
+        linter = _import_linter(tmp_path)
+
+        result = linter._build_file_index(tmp_path)
+
+        assert result["by_name"] == {}
+        assert result["by_stem"] == {}
+        assert result["all_paths"] == []
+
+
+# ---------------------------------------------------------------------------
+# _resolve_wikilink
+# ---------------------------------------------------------------------------
+
+class TestResolveWikilink:
+    @pytest.fixture
+    def file_index(self):
+        """A pre-built file index for testing resolution without filesystem."""
+        return {
+            "by_name": {
+                "file.md": ["wiki/ideas/file.md"],
+                "note.md": ["wiki/ideas/note.md", "wiki/prds/note.md"],
+            },
+            "by_stem": {
+                "file": ["wiki/ideas/file.md"],
+                "note": ["wiki/ideas/note.md", "wiki/prds/note.md"],
+            },
+            "all_paths": [
+                "wiki/ideas/file.md",
+                "wiki/ideas/note.md",
+                "wiki/prds/note.md",
+            ],
+        }
+
+    def test_resolve_exact_name(self, tmp_path, file_index):
+        """Level 1: exact filename match resolves True."""
+        linter = _import_linter(tmp_path)
+        assert linter._resolve_wikilink("file.md", file_index) is True
+
+    def test_resolve_suffix_match(self, tmp_path, file_index):
+        """Level 2: path suffix match resolves True."""
+        linter = _import_linter(tmp_path)
+        assert linter._resolve_wikilink("ideas/file.md", file_index) is True
+
+    def test_resolve_stem_match(self, tmp_path, file_index):
+        """Level 3: stem match (without .md extension) resolves True."""
+        linter = _import_linter(tmp_path)
+        assert linter._resolve_wikilink("file", file_index) is True
+
+    def test_resolve_not_found(self, tmp_path, file_index):
+        """Target that does not exist at any level returns False."""
+        linter = _import_linter(tmp_path)
+        assert linter._resolve_wikilink("nonexistent.md", file_index) is False
+
+    def test_resolve_case_insensitive(self, tmp_path, file_index):
+        """Resolution is case-insensitive: FILE.MD resolves to file.md."""
+        linter = _import_linter(tmp_path)
+        assert linter._resolve_wikilink("FILE.MD", file_index) is True
+
+    def test_resolve_ambiguous_name_still_resolves(self, tmp_path, file_index):
+        """Two files with the same name still resolves True (file exists somewhere)."""
+        linter = _import_linter(tmp_path)
+        assert linter._resolve_wikilink("note.md", file_index) is True
+
+
+# ---------------------------------------------------------------------------
+# check_broken_links with resolver (integration)
+# ---------------------------------------------------------------------------
+
+class TestCheckBrokenLinksWithResolver:
+    def test_broken_link_with_stem_resolves(self, tmp_path):
+        """Wikilink [[filename]] without .md resolves when target exists."""
+        linter = _import_linter(tmp_path)
+        _write_md(
+            tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "target-doc.md",
+            "# Target document",
+        )
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "prds" / "referrer.md"
+        _write_md(md, "See [[target-doc]]\n")
+
+        result = linter.check_broken_links(str(tmp_path))
+        assert result == []
+
+    def test_broken_link_truly_broken(self, tmp_path):
+        """Wikilink [[nonexistent-file]] is reported as broken."""
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "referrer.md"
+        _write_md(md, "See [[nonexistent-file]]\n")
+
+        result = linter.check_broken_links(str(tmp_path))
+        assert len(result) == 1
+        assert result[0]["link"] == "nonexistent-file"
+        assert result[0]["reason"] == "target not found"

@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="ru" class="theme-matrix">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Board — Domains</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+  <script>
+  (function() {
+    try {
+      var t = localStorage.getItem('pm_theme');
+      if (t === 'light') {
+        document.documentElement.className = 'theme-light';
+        document.getElementById('theme-css').href = 'style-light.css';
+      }
+    } catch(e) {}
+  })();
+  </script>
+  <style>
+    .domains-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: var(--gap-md);
+      margin-top: var(--gap-lg);
+    }
+    .domain-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      padding: 16px;
+      transition: border-color 0.15s;
+    }
+    .domain-card:hover { border-color: var(--border-hover); }
+    .domain-card-name {
+      font-size: 12px;
+      color: var(--cyan);
+      letter-spacing: 0.12em;
+      margin-bottom: 4px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+    }
+    .domain-card-display-name {
+      font-size: 13px;
+      color: var(--text-primary);
+      font-weight: bold;
+      margin-bottom: 2px;
+      display: flex;
+      align-items: center;
+    }
+    .domain-card-slug {
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.1em;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .domain-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .domain-stat { text-align: center; }
+    .domain-stat-value { display: block; font-size: 16px; color: var(--text-primary); }
+    .domain-stat-label { display: block; font-size: 8px; letter-spacing: 0.1em; color: var(--text-muted); margin-top: 2px; }
+    .domain-card-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+    .domain-card-updated { font-size: 9px; color: var(--text-muted); letter-spacing: 0.08em; }
+    .domain-card-link {
+      font-size: 9px;
+      color: var(--cyan);
+      text-decoration: none;
+      letter-spacing: 0.1em;
+      transition: color 0.15s;
+    }
+    .domain-card-link:hover { color: var(--text-primary); }
+    .domain-color-dot {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 8px;
+      vertical-align: middle;
+      flex-shrink: 0;
+    }
+    .seed-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      background: rgba(255, 152, 0, 0.1);
+      border: 1px solid rgba(255, 152, 0, 0.3);
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: var(--gap-lg);
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sync-status-section {
+      margin-top: 32px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <app-sidebar active="domains"></app-sidebar>
+    <main class="page-content" style="position: relative; overflow: hidden;">
+      <div class="scan-line"></div>
+
+      <!-- Page header with title and Add Domain button -->
+      <div class="page-header">
+        <div class="text-page-title">DOMAIN_HEALTH</div>
+        <button class="btn btn-primary" @click="openAddDomain">+ Add Domain</button>
+      </div>
+
+      <!-- Loading state -->
+      <div v-if="loading" class="loading">LOADING...</div>
+
+      <!-- Error state -->
+      <div v-if="error" class="empty-state">{{ error }}</div>
+
+      <!-- Summary metrics -->
+      <div class="metrics-grid" style="grid-template-columns: repeat(3, 1fr); margin-top: 0; margin-bottom: 16px;" v-if="!loading && domains.length > 0">
+        <metric-box label="DOMAINS" :value="domains.length" color="cyan"></metric-box>
+        <metric-box label="TOTAL_ARTIFACTS" :value="totalArtifacts" color="green"></metric-box>
+        <metric-box label="LAST_ACTIVITY" :value="latestUpdate" color="amber"></metric-box>
+      </div>
+
+      <!-- Domain cards grid -->
+      <div class="domains-grid" v-if="!loading && !error">
+        <div class="domain-card" v-for="d in domains" :key="d.name">
+          <!-- Domain display name with color dot -->
+          <div class="domain-card-display-name">
+            <span class="domain-color-dot" :style="{background: d.color || '#607D8B'}"></span>
+            {{ d.display_name || d.name }}
+          </div>
+          <!-- Slug (shown only when different from display_name) -->
+          <div class="domain-card-slug" v-if="d.display_name && d.display_name !== d.name">
+            {{ d.name.toUpperCase() }}
+          </div>
+          <div class="domain-card-slug" v-else>
+            {{ d.name.toUpperCase() }}
+          </div>
+
+          <!-- Artifact counts as a mini grid -->
+          <div class="domain-stats">
+            <div class="domain-stat">
+              <span class="domain-stat-value text-cyan">{{ d.ideas_count }}</span>
+              <span class="domain-stat-label">IDEAS</span>
+            </div>
+            <div class="domain-stat">
+              <span class="domain-stat-value text-magenta">{{ d.prds_count }}</span>
+              <span class="domain-stat-label">PRDS</span>
+            </div>
+            <div class="domain-stat">
+              <span class="domain-stat-value text-amber">{{ d.epics_count }}</span>
+              <span class="domain-stat-label">EPICS</span>
+            </div>
+            <div class="domain-stat">
+              <span class="domain-stat-value text-green">{{ d.tasks_count }}</span>
+              <span class="domain-stat-label">TASKS</span>
+            </div>
+            <div class="domain-stat">
+              <span class="domain-stat-value text-purple">{{ d.bugs_count }}</span>
+              <span class="domain-stat-label">BUGS</span>
+            </div>
+            <div class="domain-stat">
+              <span class="domain-stat-value">{{ d.total_count }}</span>
+              <span class="domain-stat-label">TOTAL</span>
+            </div>
+          </div>
+
+          <!-- Footer: last updated + board link + edit button -->
+          <div class="domain-card-footer">
+            <span class="domain-card-updated">UPDATED: {{ fmtDate(d.last_updated) || '—' }}</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <button class="btn btn-sm" @click="editDomain(d)">Edit Config</button>
+              <a :href="'board.html?domain=' + d.name" class="domain-card-link">→ BOARD</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty state -->
+      <div v-if="!loading && !error && domains.length === 0" class="empty-state">No domains found</div>
+
+      <!-- Seed banner — shown when domain-config.yaml has no domains -->
+      <div v-if="showSeedBanner" class="seed-banner" style="margin-top: 10px;">
+        <span>Domain configuration not initialized.</span>
+        <button class="btn btn-sm" @click="seedConfig" :disabled="seeding">
+          {{ seeding ? 'Initializing...' : 'Initialize Config' }}
+        </button>
+      </div>
+
+      <!-- Jira Sync Status -->
+      <div class="sync-status-section" v-if="!loading && syncStatus">
+        <div class="domain-card" style="max-width: 330px;max-height: 218px;">
+          <div class="domain-card-display-name">
+		<span class="domain-color-dot" :style="{background: syncOverdue ? 'var(--magenta)' : 'var(--green)'}"></span> Jira Sync</div>
+	  <div class="domain-card-slug"></div>
+          <div class="domain-stats">
+            <div class="domain-stat">
+              <span class="domain-stat-value text-green">{{ syncStatus.tracked || 0 }}</span>
+              <span class="domain-stat-label">TRACKED</span>
+            </div>
+            <div class="domain-stat">
+              <span class="domain-stat-value text-cyan">{{ syncStatus.last_new != null ? syncStatus.last_new : '--' }}</span>
+              <span class="domain-stat-label">NEW</span>
+            </div>
+            <div class="domain-stat">
+              <span class="domain-stat-value text-amber">{{ syncStatus.last_updated != null ? syncStatus.last_updated : '--' }}</span>
+              <span class="domain-stat-label">UPDATED</span>
+            </div>
+            <div class="domain-stat">
+              <span class="domain-stat-value text-magenta">{{ syncStatus.last_closed != null ? syncStatus.last_closed : '--' }}</span>
+              <span class="domain-stat-label">CLOSED</span>
+            </div>
+            <div class="domain-stat">
+              <span class="domain-stat-value text-magenta">{{ syncStatus.last_errors != null ? syncStatus.last_errors : '--' }}</span>
+              <span class="domain-stat-label">ERRORS</span>
+            </div>
+          </div>
+          <div class="domain-card-footer">
+            <span class="domain-card-updated">Последняя синхронизация: {{ formattedSyncTime }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Domain config drawer -->
+      <domain-config-drawer
+        :open="drawerOpen"
+        :domain="drawerDomain"
+        :is-new="drawerIsNew"
+        @close="drawerOpen = false"
+        @saved="onDomainSaved">
+      </domain-config-drawer>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="api.js"></script>
+  <script src="components.js"></script>
+  <script>
+    function fmtDate(d) {
+      if (!d) return '';
+      var m = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      return m ? m[3] + '.' + m[2] + '.' + m[1] : d;
+    }
+
+    var app = Vue.createApp({
+      setup: function() {
+        var domains = Vue.ref([]);
+        var loading = Vue.ref(true);
+        var error = Vue.ref(null);
+
+        // Drawer state
+        var drawerOpen = Vue.ref(false);
+        var drawerDomain = Vue.ref(null);
+        var drawerIsNew = Vue.ref(false);
+
+        // Seed banner state
+        var showSeedBanner = Vue.ref(false);
+        var seeding = Vue.ref(false);
+
+        var syncStatus = Vue.ref(null);
+
+        var totalArtifacts = Vue.computed(function() {
+          return domains.value.reduce(function(sum, d) { return sum + d.total_count; }, 0);
+        });
+
+        var latestUpdate = Vue.computed(function() {
+          var dates = domains.value
+            .map(function(d) { return d.last_updated; })
+            .filter(function(d) { return d; })
+            .sort();
+          if (!dates.length) return '—';
+          var raw = dates[dates.length - 1];
+          try {
+            var dt = new Date(raw);
+            if (isNaN(dt.getTime())) return raw;
+            var dd = String(dt.getDate()).padStart(2, '0');
+            var mm = String(dt.getMonth() + 1).padStart(2, '0');
+            var yyyy = dt.getFullYear();
+            return dd + '.' + mm + '.' + yyyy;
+          } catch (e) {
+            return raw;
+          }
+        });
+
+        var formattedSyncTime = Vue.computed(function() {
+          if (!syncStatus.value || !syncStatus.value.last_sync) return 'Never synced';
+          try {
+            var dt = new Date(syncStatus.value.last_sync);
+            if (isNaN(dt.getTime())) return syncStatus.value.last_sync;
+            var dd = String(dt.getDate()).padStart(2, '0');
+            var mm = String(dt.getMonth() + 1).padStart(2, '0');
+            var yyyy = dt.getFullYear();
+            var hh = String(dt.getHours()).padStart(2, '0');
+            var min = String(dt.getMinutes()).padStart(2, '0');
+            return dd + '.' + mm + '.' + yyyy + ' ' + hh + ':' + min;
+          } catch (e) {
+            return syncStatus.value.last_sync;
+          }
+        });
+
+        var syncOverdue = Vue.computed(function() {
+          if (!syncStatus.value || !syncStatus.value.last_sync) return true;
+          try {
+            var dt = new Date(syncStatus.value.last_sync);
+            if (isNaN(dt.getTime())) return true;
+            return (Date.now() - dt.getTime()) > 10800000;
+          } catch (e) {
+            return true;
+          }
+        });
+
+        async function loadDomains() {
+          console.log('[domains] loadDomains — start');
+          loading.value = true;
+          error.value = null;
+          try {
+            domains.value = await apiFetch('/domains');
+            console.log('[domains] loadDomains — success, count:', domains.value.length);
+          } catch (err) {
+            console.error('[domains] loadDomains — error:', err.message);
+            error.value = 'Failed to load domains: ' + err.message;
+          } finally {
+            loading.value = false;
+          }
+        }
+
+        async function checkSeedBanner() {
+          console.log('[domains] checkSeedBanner — start');
+          try {
+            var config = await api.domainConfig();
+            showSeedBanner.value = !config.domains || Object.keys(config.domains).length === 0;
+            console.log('[domains] checkSeedBanner — showSeedBanner:', showSeedBanner.value);
+          } catch (e) {
+            console.log('[domains] checkSeedBanner — error, showing banner:', e.message);
+            showSeedBanner.value = true;
+          }
+        }
+
+        function openAddDomain() {
+          console.log('[domains] openAddDomain');
+          drawerDomain.value = null;
+          drawerIsNew.value = true;
+          drawerOpen.value = true;
+        }
+
+        function editDomain(domain) {
+          console.log('[domains] editDomain — slug:', domain.name);
+          drawerDomain.value = {
+            slug:         domain.name,
+            display_name: domain.display_name || domain.name,
+            description:  domain.description || '',
+            color:        domain.color || '#607D8B',
+            jira_labels:  domain.jira_labels || []
+          };
+          drawerIsNew.value = false;
+          drawerOpen.value = true;
+        }
+
+        async function onDomainSaved() {
+          console.log('[domains] onDomainSaved — closing drawer and reloading');
+          drawerOpen.value = false;
+          api.domains.invalidate();
+          await loadDomains();
+          await checkSeedBanner();
+        }
+
+        async function seedConfig() {
+          console.log('[domains] seedConfig — start');
+          seeding.value = true;
+          try {
+            await api.seedDomainConfig();
+            console.log('[domains] seedConfig — success');
+            showSeedBanner.value = false;
+            api.domains.invalidate();
+            await loadDomains();
+          } catch (e) {
+            console.error('[domains] seedConfig — error:', e.message);
+          } finally {
+            seeding.value = false;
+          }
+        }
+
+        async function loadSyncStatus() {
+          console.log('[domains] loadSyncStatus — start');
+          try {
+            syncStatus.value = await api.jiraSyncStatus();
+            console.log('[domains] loadSyncStatus — success, tracked:', syncStatus.value.tracked);
+          } catch (err) {
+            console.error('[domains] loadSyncStatus — error:', err.message);
+            syncStatus.value = null;
+          }
+        }
+
+        Vue.onMounted(function() {
+          console.log('[domains] mounted — loading initial data');
+          loadDomains();
+          checkSeedBanner();
+          loadSyncStatus();
+        });
+
+        return {
+          domains:       domains,
+          loading:       loading,
+          error:         error,
+          totalArtifacts: totalArtifacts,
+          latestUpdate:  latestUpdate,
+          drawerOpen:    drawerOpen,
+          drawerDomain:  drawerDomain,
+          drawerIsNew:   drawerIsNew,
+          showSeedBanner: showSeedBanner,
+          seeding:       seeding,
+          syncStatus:        syncStatus,
+          formattedSyncTime: formattedSyncTime,
+          syncOverdue:       syncOverdue,
+          openAddDomain: openAddDomain,
+          editDomain:    editDomain,
+          onDomainSaved: onDomainSaved,
+          seedConfig:    seedConfig,
+          fmtDate:       fmtDate
+        };
+      }
+    });
+
+    registerComponents(app);
+    applyPageTheme().then(function() { app.mount('#app'); });
+  </script>
+</body>
+</html>

@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="ru" class="theme-matrix">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Board — Board</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+  <script>
+  (function() {
+    try {
+      var t = localStorage.getItem('pm_theme');
+      if (t === 'light') {
+        document.documentElement.className = 'theme-light';
+        document.getElementById('theme-css').href = 'style-light.css';
+      }
+    } catch(e) {}
+  })();
+  </script>
+  <style>
+    .domain-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+    .domain-tab {
+      font-family: var(--font);
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      padding: 4px 10px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .domain-tab:hover { border-color: var(--border-hover); color: var(--text-body); }
+    .domain-tab.active { border-color: var(--cyan); color: var(--cyan); background: var(--cyan-bg); }
+  </style>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <app-sidebar active="board"></app-sidebar>
+    <main class="page-content" style="position: relative; overflow: hidden;">
+      <div class="scan-line"></div>
+      <div class="page-header">
+        <div class="text-page-title">KANBAN_BOARD</div>
+        <div class="btn-row" style="margin:0;">
+          <span class="refresh-icon" :class="{ spinning: loading }" @click="loadData" title="Refresh">&#8635;</span>
+          <cmd-button label="SYNTHESIZE_INBOX" color="cyan" :loading="synthesizing" @click="synthesize"></cmd-button>
+          <button class="cmd-btn cmd-btn-cyan" @click="drawerOpen = !drawerOpen">+ CAPTURE</button>
+        </div>
+      </div>
+
+      <!-- Status bar with metrics -->
+      <div class="metrics-grid" style="grid-template-columns: repeat(2, 1fr);">
+        <metric-box label="IDEAS" :value="ideasCount" color="cyan"></metric-box>
+        <metric-box label="JIRA_DRAFTS" :value="draftsCount" color="amber"></metric-box>
+      </div>
+
+      <!-- Domain filter tabs -->
+      <div class="domain-tabs" v-if="domains.length" style="margin-top:10px;">
+        <button class="domain-tab" :class="{ active: !activeDomain }" @click="selectDomain(null)">ALL</button>
+        <button class="domain-tab" v-for="d in domains" :key="d.name"
+          :class="{ active: activeDomain === d.name }"
+          @click="selectDomain(d.name)">
+          {{ d.name.toUpperCase() }} [{{ d.ideas_count + d.tasks_count }}]
+        </button>
+      </div>
+
+      <!-- Loading state -->
+      <div v-if="loading" class="loading">LOADING...</div>
+
+      <!-- Error state -->
+      <div v-if="error" class="empty-state">{{ error }}</div>
+
+      <!-- Three Kanban columns -->
+      <div class="kanban-grid" v-if="!loading">
+        <!-- INBOX column -->
+        <div>
+          <div class="col-header col-header-cyan">INBOX [{{ inboxItems.length }}]</div>
+          <note-card
+            v-for="item in visibleInbox"
+            :key="item.filename"
+            :type="getCardType(item)"
+            :title="item.title"
+            :tags="parseTags(item.tags)"
+            :date="item.date"
+            :status="item.status"
+            :jira-key="item.jira_key || ''"
+            @click="openDrawer(item)"
+          ></note-card>
+          <button v-if="inboxItems.length > visibleInbox.length" class="cmd-btn cmd-btn-muted" style="width:100%;margin-top:4px;" @click="showMore">SHOW MORE ({{ inboxItems.length - visibleInbox.length }} hidden)</button>
+          <div v-if="!inboxItems.length" class="empty-state">No items</div>
+        </div>
+
+        <!-- PROCESSING column -->
+        <div>
+          <div class="col-header col-header-magenta">PROCESSING [{{ processingItems.length }}]</div>
+          <note-card
+            v-for="item in visibleProcessing"
+            :key="item.filename"
+            :type="getCardType(item)"
+            :title="item.title"
+            :tags="parseTags(item.tags)"
+            :date="item.date"
+            :status="item.status"
+            :jira-key="item.jira_key || ''"
+            @click="openDrawer(item)"
+          ></note-card>
+          <button v-if="processingItems.length > visibleProcessing.length" class="cmd-btn cmd-btn-muted" style="width:100%;margin-top:4px;" @click="showMore">SHOW MORE ({{ processingItems.length - visibleProcessing.length }} hidden)</button>
+          <div v-if="!processingItems.length" class="empty-state">No items</div>
+        </div>
+
+        <!-- DONE column -->
+        <div>
+          <div class="col-header col-header-green">DONE [{{ doneItems.length }}]</div>
+          <note-card
+            v-for="item in visibleDone"
+            :key="item.filename"
+            :type="getCardType(item)"
+            :title="item.title"
+            :tags="parseTags(item.tags)"
+            :date="item.date"
+            :status="item.status"
+            :jira-key="item.jira_key || ''"
+            @click="openDrawer(item)"
+          ></note-card>
+          <button v-if="doneItems.length > visibleDone.length" class="cmd-btn cmd-btn-muted" style="width:100%;margin-top:4px;" @click="showMore">SHOW MORE ({{ doneItems.length - visibleDone.length }} hidden)</button>
+          <div v-if="!doneItems.length" class="empty-state">No items</div>
+        </div>
+      </div>
+
+    </main>
+    <div class="drawer-overlay" v-if="drawerOpen" @click="drawerOpen = false"></div>
+    <div class="capture-drawer" :class="{ open: drawerOpen }">
+      <div class="capture-panel" style="border: none;">
+        <div class="capture-header">
+          <span class="capture-header-dot"></span> CAPTURE_TERMINAL
+          <span class="text-muted" style="margin-left: auto; cursor: pointer;" @click="drawerOpen = false">[×]</span>
+        </div>
+        <div class="capture-messages" ref="messagesRef">
+          <div class="msg msg-system">SESSION_STARTED {{ new Date().toLocaleDateString() }}</div>
+          <div class="msg msg-agent">
+            <div class="msg-label">AGENT_</div>
+            Готов к захвату. Выбери тип — IDEA, TASK или MEETING — и фиксируй.
+          </div>
+          <template v-for="(msg, i) in chatMessages" :key="i">
+            <div v-if="msg.role === 'user'" class="msg msg-user">
+              <div class="msg-label">USER_ [{{ msg.type.toUpperCase() }}]</div>
+              {{ msg.text }}
+            </div>
+            <div v-if="msg.role === 'agent'" class="msg msg-agent">
+              <div class="msg-label">AGENT_</div>
+              {{ msg.text }}
+            </div>
+            <div v-if="msg.role === 'error'" class="msg msg-agent text-magenta msg-error">
+              <div class="msg-label">ERROR_</div>
+              {{ msg.text }}
+            </div>
+          </template>
+          <div v-if="capturing" class="msg msg-system text-yellow">Processing...</div>
+        </div>
+        <div class="type-selector">
+          <button class="type-btn" :class="{'active-idea': captureType === 'idea'}" @click="captureType = 'idea'">IDEA</button>
+          <button class="type-btn" :class="{'active-task': captureType === 'task'}" @click="captureType = 'task'">TASK</button>
+          <button class="type-btn" :class="{'active-meeting': captureType === 'meeting'}" @click="captureType = 'meeting'">MEETING</button>
+          <button class="type-btn" :class="{'active-task': captureType === 'jira_import'}" @click="captureType = 'jira_import'">JIRA_IMPORT</button>
+        </div>
+        <textarea
+          class="cp-textarea"
+          v-model="captureText"
+          @keydown="handleKeydown"
+          :placeholder="captureType === 'jira_import' ? '// enter Jira key, e.g. GO-153' : '// type idea or task...'"
+          :disabled="capturing"
+        ></textarea>
+        <div class="capture-input-area">
+          <div class="send-row">
+            <span class="send-hint">Ctrl+Enter to send</span>
+            <cmd-button :label="captureType === 'jira_import' ? 'IMPORT' : 'CAPTURE'" color="cyan" :loading="capturing" @click="capture"></cmd-button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="drawer-overlay" v-if="taskDrawerOpen" @click="closeDrawer"></div>
+    <task-drawer :open="taskDrawerOpen" :item="taskDrawerItem" @close="closeDrawer" @jira-created="onJiraCreated"></task-drawer>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+  (function() {
+    var renderer = new marked.Renderer();
+    renderer.link = function(token) {
+      var href = token.href || '';
+      var title = token.title || '';
+      var text = token.text || '';
+      var titleAttr = title ? ' title="' + title + '"' : '';
+      return '<a href="' + href + '"' + titleAttr + ' target="_blank" rel="noopener">' + text + '</a>';
+    };
+    marked.use({ breaks: true, gfm: true, renderer: renderer });
+    console.log('[board] using marked.js v' + marked.version);
+  })();
+  </script>
+  <script src="api.js"></script>
+  <script src="components.js"></script>
+  <script>
+    const { createApp, ref, onMounted, computed, onUnmounted } = Vue;
+
+    const app = createApp({
+      setup() {
+        // --- Reactive state ---
+        var ideas = ref([]);
+        var tasks = ref([]);
+        var domains = ref([]);
+        var activeDomain = ref(null);  // null = "ALL"
+        var loading = ref(false);
+        var error = ref(null);
+        var captureType = ref('idea');
+        var captureText = ref('');
+        var capturing = ref(false);
+        var chatMessages = ref([]);
+        var synthesizing = ref(false);
+        var drawerOpen = ref(false);
+        var taskDrawerOpen = ref(false);
+        var taskDrawerItem = ref(null);
+        var displayLimit = ref(50);
+        var refreshInterval = null;
+        var refreshMode = ref('auto');
+
+        // --- Computed properties ---
+        const inboxItems = computed(function() {
+          return ideas.value.filter(function(item) {
+            var s = (item.status || '').toLowerCase();
+            return s !== 'processed' && s !== 'done';
+          });
+        });
+
+        var DONE_STATUSES = ['done', 'processed', 'cancelled', 'moved'];
+
+        const processingItems = computed(function() {
+          return tasks.value.filter(function(item) {
+            var s = (item.status || '').toLowerCase();
+            return DONE_STATUSES.indexOf(s) === -1;
+          });
+        });
+
+        const doneItems = computed(function() {
+          var doneNotes = ideas.value.filter(function(item) {
+            var s = (item.status || '').toLowerCase();
+            return s === 'processed' || s === 'done';
+          });
+          var doneTasks = tasks.value.filter(function(item) {
+            var s = (item.status || '').toLowerCase();
+            return DONE_STATUSES.indexOf(s) !== -1;
+          });
+          return doneNotes.concat(doneTasks);
+        });
+
+        const ideasCount = computed(function() {
+          return ideas.value.length;
+        });
+
+        const meetingsCount = computed(function() {
+          return ideas.value.filter(function(item) {
+            var tags = parseTags(item.tags);
+            return tags.some(function(tag) {
+              var t = tag.toLowerCase();
+              return t === 'meeting' || t === 'meetings' || t === 'daily' || t === 'sync';
+            });
+          }).length;
+        });
+
+        const draftsCount = computed(function() {
+          return processingItems.value.length;
+        });
+
+        // P0-3: Visible slices limited by displayLimit
+        const visibleInbox = computed(function() {
+          return inboxItems.value.slice(0, displayLimit.value);
+        });
+
+        const visibleProcessing = computed(function() {
+          return processingItems.value.slice(0, displayLimit.value);
+        });
+
+        const visibleDone = computed(function() {
+          return doneItems.value.slice(0, displayLimit.value);
+        });
+
+        // --- Helper functions ---
+        function getCardType(item) {
+          // Jira task: classify by jira_key presence (K-GEN-001 §1)
+          if (item.jira_key) {
+            var t = (item.type || '').toLowerCase();
+            if (t === 'bug' || t === 'ошибка') return 'JIRA_BUG';
+            if (t === 'story' || t === 'история') return 'JIRA_STORY';
+            if (t === 'sub-task' || t === 'подзадача') return 'JIRA_SUBTASK';
+            if (t === 'epic' || t === 'эпик') return 'JIRA_EPIC';
+            return 'JIRA_TASK';
+          }
+          // Notes: check tags
+          var tags = parseTags(item.tags);
+          var tagsLower = tags.map(function(t) { return t.toLowerCase(); });
+          if (tagsLower.indexOf('idea') !== -1) return 'IDEA_CAPTURE';
+          if (tagsLower.indexOf('meeting') !== -1 || tagsLower.indexOf('daily') !== -1 || tagsLower.indexOf('sync') !== -1) return 'MEETING_SUMMARY';
+          // Internal task: show type from frontmatter (K-GEN-001 §4)
+          var it = (item.type || '').toLowerCase();
+          if (it === 'research' || it === 'design' || it === 'backend' || it === 'frontend' || it === 'testing') return it.toUpperCase();
+          return 'TASK';
+        }
+
+        function parseTags(tags) {
+          if (!tags) return [];
+          if (Array.isArray(tags)) return tags;
+          if (typeof tags === 'string') {
+            // Handle "[idea, product]" format
+            var cleaned = tags.replace(/^\[/, '').replace(/\]$/, '');
+            if (!cleaned.trim()) return [];
+            return cleaned.split(',').map(function(t) { return t.trim(); }).filter(function(t) { return t.length > 0; });
+          }
+          return [];
+        }
+
+        // --- Methods ---
+        async function loadDomains() {
+          console.log('[board] loadDomains — start');
+          try {
+            var data = await api.domains();
+            domains.value = data || [];
+            console.log('[board] loadDomains — success, domains:', domains.value.length);
+          } catch (err) {
+            console.error('[board] loadDomains error:', err.message);
+          }
+        }
+
+        async function loadData() {
+          console.log('[board] loadData — start, domain:', activeDomain.value || 'ALL');
+          loading.value = true;
+          error.value = null;
+          try {
+            var results = await Promise.all([
+              api.ideas(activeDomain.value),
+              api.tasks(activeDomain.value)
+            ]);
+            var allNotes = results[0] || [];
+            ideas.value = allNotes.filter(function(item) {
+              return !(item.filename || '').match(/^IDEA-\d/);
+            });
+            tasks.value = results[1] || [];
+            console.log('[board] loadData — success, notes:', ideas.value.length, '(filtered from', allNotes.length + '), tasks:', tasks.value.length);
+          } catch (err) {
+            console.error('[board] loadData — error:', err.message);
+            error.value = 'Failed to load data: ' + err.message;
+          } finally {
+            loading.value = false;
+          }
+        }
+
+        function selectDomain(domainName) {
+          console.log('[board] selectDomain —', domainName || 'ALL');
+          activeDomain.value = domainName;  // null for ALL
+          loadData();
+        }
+
+        async function capture() {
+          if (!captureText.value.trim()) {
+            console.log('[board] capture — empty text, skipping');
+            return;
+          }
+          console.log('[board] capture — start, type:', captureType.value, 'text length:', captureText.value.length);
+          chatMessages.value.push({ role: 'user', type: captureType.value, text: captureText.value });
+          setTimeout(function() { var el = document.querySelector('.capture-messages'); if (el) el.scrollTop = el.scrollHeight; }, 50);
+          capturing.value = true;
+          try {
+            var result;
+            if (captureType.value === 'jira_import') {
+              result = await api.jiraImport(captureText.value.trim());
+              console.log('[board] jira_import — success, key:', result.key || 'unknown');
+              captureText.value = '';
+              var importMsg = 'Imported → ' + (result.key || '?') + ' (' + (result.domain || '?') + ', ' + (result.task_status || '?') + ')';
+              if (result.title) importMsg += '\n' + result.title;
+              chatMessages.value.push({ role: 'agent', text: importMsg });
+            } else {
+              result = await api.capture(captureType.value, captureText.value);
+              console.log('[board] capture — success, filename:', result.filename || 'unknown');
+              captureText.value = '';
+              chatMessages.value.push({ role: 'agent', text: 'Captured → ' + (result.filename || 'note created') });
+            }
+            setTimeout(function() { var el = document.querySelector('.capture-messages'); if (el) el.scrollTop = el.scrollHeight; }, 50);
+            // Invalidate domain cache and reload data to show new card
+            api.domains.invalidate();
+            await loadData();
+          } catch (err) {
+            console.error('[board] capture — error:', err.message);
+            chatMessages.value.push({ role: 'error', text: err.message });
+            setTimeout(function() { var el = document.querySelector('.capture-messages'); if (el) el.scrollTop = el.scrollHeight; }, 50);
+          } finally {
+            capturing.value = false;
+          }
+        }
+
+        function showMore() {
+          displayLimit.value += 50;
+          console.log('[board] showMore — new limit:', displayLimit.value);
+        }
+
+        function handleKeydown(e) {
+          if (e.ctrlKey && e.key === 'Enter') {
+            console.log('[board] handleKeydown — Ctrl+Enter detected');
+            e.preventDefault();
+            capture();
+          }
+        }
+
+        async function synthesize() {
+          console.log('[board] synthesize — start');
+          synthesizing.value = true;
+          try {
+            await apiFetch('/synthesize', { method: 'POST' });
+            console.log('[board] synthesize — success');
+            api.domains.invalidate();
+            await loadData();
+          } catch (err) {
+            console.error('[board] synthesize — error:', err.message);
+            error.value = 'Synthesize failed: ' + err.message;
+          } finally {
+            synthesizing.value = false;
+          }
+        }
+
+        function openDrawer(item) {
+          console.log('[board] openDrawer:', item.title);
+          taskDrawerItem.value = item;
+          taskDrawerOpen.value = true;
+        }
+
+        function closeDrawer() {
+          console.log('[board] closeDrawer');
+          taskDrawerOpen.value = false;
+          taskDrawerItem.value = null;
+        }
+
+        function onJiraCreated(event) {
+          console.log('[board] jira created:', event);
+          loadData();
+        }
+
+        // --- Lifecycle ---
+        onMounted(function() {
+          console.log('[board] mounted — loading initial data');
+          // Read ?domain= from URL and auto-select
+          var urlParams = new URLSearchParams(window.location.search);
+          var domainParam = urlParams.get('domain');
+          if (domainParam) {
+            console.log('[board] auto-selecting domain from URL:', domainParam);
+            activeDomain.value = domainParam;
+          }
+          loadDomains();
+          loadData();
+          api.getUserPrefs().then(function(prefs) {
+            refreshMode.value = prefs.refresh_mode || 'auto';
+            console.log('[board] refresh mode:', refreshMode.value);
+            if (refreshMode.value === 'auto') {
+              refreshInterval = setInterval(function() {
+                console.log('[board] auto-refresh — 30s interval');
+                loadData();
+              }, 30000);
+            }
+          }).catch(function(err) {
+            console.error('[board] getUserPrefs error, defaulting to auto:', err.message);
+            refreshInterval = setInterval(function() {
+              console.log('[board] auto-refresh — 30s interval (fallback)');
+              loadData();
+            }, 30000);
+          });
+          document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+              drawerOpen.value = false;
+              taskDrawerOpen.value = false;
+              taskDrawerItem.value = null;
+            }
+          });
+        });
+
+        onUnmounted(function() {
+          if (refreshInterval) {
+            clearInterval(refreshInterval);
+            console.log('[board] unmounted — cleared refresh interval');
+          }
+        });
+
+        return {
+          // State
+          ideas,
+          tasks,
+          domains,
+          activeDomain,
+          loading,
+          error,
+          captureType,
+          captureText,
+          capturing,
+          chatMessages,
+          synthesizing,
+          drawerOpen,
+          taskDrawerOpen,
+          taskDrawerItem,
+          displayLimit,
+          refreshMode,
+          // Computed
+          inboxItems,
+          processingItems,
+          doneItems,
+          visibleInbox,
+          visibleProcessing,
+          visibleDone,
+          ideasCount,
+          meetingsCount,
+          draftsCount,
+          // Methods
+          loadData,
+          loadDomains,
+          selectDomain,
+          capture,
+          handleKeydown,
+          showMore,
+          synthesize,
+          getCardType,
+          parseTags,
+          openDrawer,
+          closeDrawer,
+          onJiraCreated
+        };
+      }
+    });
+
+    registerComponents(app);
+    applyPageTheme().then(function() {
+      app.mount('#app');
+    });
+  </script>
+</body>
+</html>

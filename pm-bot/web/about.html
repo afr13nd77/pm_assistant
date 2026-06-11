@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ru" class="theme-matrix">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Board — About</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+  <script>
+  (function() {
+    try {
+      var t = localStorage.getItem('pm_theme');
+      if (t === 'light') {
+        document.documentElement.className = 'theme-light';
+        document.getElementById('theme-css').href = 'style-light.css';
+      }
+    } catch(e) {}
+  })();
+  </script>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <app-sidebar active="about"></app-sidebar>
+    <main class="page-content" style="position: relative; overflow: hidden;">
+      <div class="scan-line"></div>
+      <div class="text-page-title">О_СЕРВИСЕ</div>
+
+      <!-- Version badges (parsed from CHANGES.md) -->
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
+        <span v-for="v in versions" :key="v.name" :class="v.cls">{{ v.name }} {{ v.ver }}</span>
+      </div>
+
+      <div v-if="loading" class="loading">LOADING...</div>
+      <div v-if="error" class="empty-state">{{ error }}</div>
+
+      <div v-if="content" class="task-drawer-content" style="background: var(--card); border: 1px solid var(--border); padding: 24px; overflow-y: auto; max-height: calc(100vh - 220px);" v-html="content"></div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="api.js"></script>
+  <script src="components.js"></script>
+  <script>
+  (function() {
+    var renderer = new marked.Renderer();
+    renderer.link = function(token) {
+      var href = token.href || '';
+      var title = token.title || '';
+      var text = token.text || '';
+      var titleAttr = title ? ' title="' + title + '"' : '';
+      return '<a href="' + href + '"' + titleAttr + ' target="_blank" rel="noopener">' + text + '</a>';
+    };
+    marked.use({ breaks: true, gfm: true, renderer: renderer });
+  })();
+
+  const { createApp, ref, onMounted } = Vue;
+
+  const app = createApp({
+    setup() {
+      var content = ref('');
+      var loading = ref(false);
+      var error = ref(null);
+      var versions = ref([]);
+
+      var TAG_MAP = {
+        'web-ui': 'tag tag-done',
+        'pm-bot': 'tag tag-jira',
+        'knowledge-engine': 'tag tag-prd',
+        'idea-pipeline': 'tag tag-muted'
+      };
+      var TAG_ORDER = ['web-ui', 'pm-bot', 'knowledge-engine', 'idea-pipeline'];
+
+      onMounted(function() {
+        console.log('[about] loading changes');
+        loading.value = true;
+        fetch('CHANGES.md')
+          .then(function(res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.text();
+          })
+          .then(function(md) {
+            // Parse latest version of each component from CHANGES.md
+            var seen = {};
+            var lines = md.split('\n');
+            var re = /^### (\S+)\s+(\S+)/;
+            for (var i = 0; i < lines.length; i++) {
+              var m = lines[i].match(re);
+              if (m && TAG_MAP[m[1]] && !seen[m[1]]) {
+                seen[m[1]] = m[2];
+              }
+            }
+            var result = [];
+            for (var j = 0; j < TAG_ORDER.length; j++) {
+              var name = TAG_ORDER[j];
+              if (seen[name]) {
+                result.push({ name: name, ver: seen[name], cls: TAG_MAP[name] });
+              }
+            }
+            versions.value = result;
+            console.log('[about] versions parsed:', JSON.stringify(result));
+
+            // Render markdown to HTML
+            var html = marked.parse(md);
+            content.value = html;
+            console.log('[about] loaded');
+          })
+          .catch(function(err) {
+            console.error('[about] error:', err.message);
+            error.value = 'Failed to load changes: ' + err.message;
+          })
+          .finally(function() {
+            loading.value = false;
+          });
+      });
+
+      return { content, loading, error, versions };
+    }
+  });
+
+  registerComponents(app);
+  applyPageTheme().then(function() {
+    app.mount('#app');
+  });
+  </script>
+</body>
+</html>

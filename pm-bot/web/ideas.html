@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="ru" class="theme-matrix">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Board — Ideas</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+  <script>
+  (function() {
+    try {
+      var t = localStorage.getItem('pm_theme');
+      if (t === 'light') {
+        document.documentElement.className = 'theme-light';
+        document.getElementById('theme-css').href = 'style-light.css';
+      }
+    } catch(e) {}
+  })();
+  </script>
+  <style>
+    .domain-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+    .domain-tab {
+      font-family: var(--font);
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      padding: 4px 10px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .domain-tab:hover { border-color: var(--border-hover); color: var(--text-body); }
+    .domain-tab.active { border-color: var(--cyan); color: var(--cyan); background: var(--cyan-bg); }
+    .col-header-amber { color: var(--amber); border-color: var(--amber); background: var(--amber-bg); }
+    .kanban-grid { grid-template-columns: repeat(4, 1fr); }
+    @media (max-width: 1200px) { .kanban-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 768px) { .kanban-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <app-sidebar active="ideas"></app-sidebar>
+    <main class="page-content" style="position: relative; overflow: hidden;">
+      <div class="scan-line"></div>
+      <div class="page-header">
+        <div class="text-page-title">IDEA_BOARD</div>
+        <div class="btn-row" style="margin:0;">
+          <span class="refresh-icon" :class="{ spinning: loading }" @click="loadData" title="Refresh">&#8635;</span>
+          <button class="cmd-btn cmd-btn-cyan" @click="captureDrawerOpen = !captureDrawerOpen">+ CAPTURE</button>
+        </div>
+      </div>
+
+      <!-- Metrics -->
+      <div class="metrics-grid" style="grid-template-columns: repeat(2, 1fr);">
+        <metric-box label="TOTAL" :value="totalCount" color="cyan"></metric-box>
+        <metric-box label="READY" :value="readyCount" color="green"></metric-box>
+      </div>
+
+      <!-- Domain filter tabs -->
+      <div class="domain-tabs" v-if="domains.length" style="margin-top:10px;">
+        <button class="domain-tab" :class="{ active: !activeDomain }" @click="selectDomain(null)">ALL</button>
+        <button class="domain-tab" v-for="d in domains" :key="d.name"
+          :class="{ active: activeDomain === d.name }"
+          @click="selectDomain(d.name)">
+          {{ d.name.toUpperCase() }} [{{ d.ideas_count }}]
+        </button>
+      </div>
+
+      <!-- Loading state -->
+      <div v-if="loading" class="loading">LOADING...</div>
+
+      <!-- Error state -->
+      <div v-if="error" class="empty-state">{{ error }}</div>
+
+      <!-- Four Kanban columns -->
+      <div class="kanban-grid" v-if="!loading">
+        <!-- НОВАЯ column -->
+        <div class="kanban-column" data-status="Новая" @dragover.prevent="onDragOver($event)" @dragleave="onDragLeave($event)" @drop="onDrop($event, 'Новая')">
+          <div class="col-header col-header-cyan">НОВАЯ [{{ newIdeas.length }}]</div>
+          <idea-card
+            v-for="item in visibleNew"
+            :key="item.filename"
+            :idea-id="resolveIdeaId(item)"
+            :title="item.title"
+            :readiness="item.readiness || 0"
+            :date="item.date"
+            :domain="item.domain"
+            :filename="item.filename"
+            :status="item.status"
+            @click="openDrawer(item)"
+            @dragstart="onDragStart($event, item)"
+            @dragend="onDragEnd($event)"
+          ></idea-card>
+          <button v-if="newIdeas.length > visibleNew.length" class="cmd-btn cmd-btn-muted" style="width:100%;margin-top:4px;" @click="showMore">SHOW MORE ({{ newIdeas.length - visibleNew.length }} hidden)</button>
+          <div v-if="!newIdeas.length" class="empty-state">No items</div>
+        </div>
+
+        <!-- ПРОВЕРКА ГИПОТЕЗЫ column -->
+        <div class="kanban-column" data-status="Проверка гипотезы" @dragover.prevent="onDragOver($event)" @dragleave="onDragLeave($event)" @drop="onDrop($event, 'Проверка гипотезы')">
+          <div class="col-header col-header-amber">ПРОВЕРКА ГИПОТЕЗЫ [{{ hypothesisIdeas.length }}]</div>
+          <idea-card
+            v-for="item in visibleHypothesis"
+            :key="item.filename"
+            :idea-id="resolveIdeaId(item)"
+            :title="item.title"
+            :readiness="item.readiness || 0"
+            :date="item.date"
+            :domain="item.domain"
+            :filename="item.filename"
+            :status="item.status"
+            @click="openDrawer(item)"
+            @dragstart="onDragStart($event, item)"
+            @dragend="onDragEnd($event)"
+          ></idea-card>
+          <button v-if="hypothesisIdeas.length > visibleHypothesis.length" class="cmd-btn cmd-btn-muted" style="width:100%;margin-top:4px;" @click="showMore">SHOW MORE ({{ hypothesisIdeas.length - visibleHypothesis.length }} hidden)</button>
+          <div v-if="!hypothesisIdeas.length" class="empty-state">No items</div>
+        </div>
+
+        <!-- ГОТОВА К ПРОИЗВОДСТВУ column -->
+        <div class="kanban-column" data-status="Готова к производству" @dragover.prevent="onDragOver($event)" @dragleave="onDragLeave($event)" @drop="onDrop($event, 'Готова к производству')">
+          <div class="col-header col-header-green">ГОТОВА К ПРОИЗВОДСТВУ [{{ readyIdeas.length }}]</div>
+          <idea-card
+            v-for="item in visibleReady"
+            :key="item.filename"
+            :idea-id="resolveIdeaId(item)"
+            :title="item.title"
+            :readiness="item.readiness || 0"
+            :date="item.date"
+            :domain="item.domain"
+            :filename="item.filename"
+            :status="item.status"
+            @click="openDrawer(item)"
+            @dragstart="onDragStart($event, item)"
+            @dragend="onDragEnd($event)"
+          ></idea-card>
+          <button v-if="readyIdeas.length > visibleReady.length" class="cmd-btn cmd-btn-muted" style="width:100%;margin-top:4px;" @click="showMore">SHOW MORE ({{ readyIdeas.length - visibleReady.length }} hidden)</button>
+          <div v-if="!readyIdeas.length" class="empty-state">No items</div>
+        </div>
+
+        <!-- ОТСЕВ column -->
+        <div class="kanban-column" data-status="Отсев" @dragover.prevent="onDragOver($event)" @dragleave="onDragLeave($event)" @drop="onDrop($event, 'Отсев')">
+          <div class="col-header col-header-magenta">ОТСЕВ [{{ rejectedIdeas.length }}]</div>
+          <idea-card
+            v-for="item in visibleRejected"
+            :key="item.filename"
+            :idea-id="resolveIdeaId(item)"
+            :title="item.title"
+            :readiness="item.readiness || 0"
+            :date="item.date"
+            :domain="item.domain"
+            :filename="item.filename"
+            :status="item.status"
+            @click="openDrawer(item)"
+            @dragstart="onDragStart($event, item)"
+            @dragend="onDragEnd($event)"
+          ></idea-card>
+          <button v-if="rejectedIdeas.length > visibleRejected.length" class="cmd-btn cmd-btn-muted" style="width:100%;margin-top:4px;" @click="showMore">SHOW MORE ({{ rejectedIdeas.length - visibleRejected.length }} hidden)</button>
+          <div v-if="!rejectedIdeas.length" class="empty-state">No items</div>
+        </div>
+      </div>
+
+      <!-- Toast notifications -->
+      <div class="toast-container">
+        <div v-for="t in toasts" :key="t.id"
+             class="toast-item"
+             :class="'toast-' + t.type">
+          {{ t.message }}
+        </div>
+      </div>
+
+      <!-- Warning Modal for R2 transitions -->
+      <div class="drawer-overlay" v-if="warningModal.show" @click="warningModal.onCancel()"></div>
+      <div class="warning-modal" v-if="warningModal.show">
+        <div class="warning-modal-header">
+          <span class="warning-modal-icon">!</span> WARNING
+        </div>
+        <div class="warning-modal-body">{{ warningModal.message }}</div>
+        <div class="warning-modal-actions">
+          <button class="cmd-btn cmd-btn-muted" @click="warningModal.onCancel()">CANCEL</button>
+          <button class="cmd-btn cmd-btn-amber" @click="warningModal.onConfirm()">CONFIRM</button>
+        </div>
+      </div>
+
+    </main>
+    <div class="drawer-overlay" v-if="captureDrawerOpen" @click="captureDrawerOpen = false"></div>
+    <div class="capture-drawer" :class="{ open: captureDrawerOpen }">
+      <div class="capture-panel" style="border: none;">
+        <div class="capture-header">
+          <span class="capture-header-dot"></span> CAPTURE_TERMINAL
+          <span class="text-muted" style="margin-left: auto; cursor: pointer;" @click="captureDrawerOpen = false">[×]</span>
+        </div>
+        <div class="capture-messages" ref="messagesRef">
+          <div class="msg msg-system">SESSION_STARTED {{ new Date().toLocaleDateString() }}</div>
+          <div class="msg msg-agent">
+            <div class="msg-label">AGENT_</div>
+            Готов к захвату. Выбери тип — IDEA, TASK или MEETING — и фиксируй.
+          </div>
+          <template v-for="(msg, i) in chatMessages" :key="i">
+            <div v-if="msg.role === 'user'" class="msg msg-user">
+              <div class="msg-label">USER_ [{{ msg.type.toUpperCase() }}]</div>
+              {{ msg.text }}
+            </div>
+            <div v-if="msg.role === 'agent'" class="msg msg-agent">
+              <div class="msg-label">AGENT_</div>
+              {{ msg.text }}
+            </div>
+            <div v-if="msg.role === 'error'" class="msg msg-agent text-magenta msg-error">
+              <div class="msg-label">ERROR_</div>
+              {{ msg.text }}
+            </div>
+          </template>
+          <div v-if="capturing" class="msg msg-system text-yellow">Processing...</div>
+        </div>
+        <div class="type-selector">
+          <button class="type-btn" :class="{'active-idea': captureType === 'idea'}" @click="captureType = 'idea'">IDEA</button>
+          <button class="type-btn" :class="{'active-task': captureType === 'task'}" @click="captureType = 'task'">TASK</button>
+          <button class="type-btn" :class="{'active-meeting': captureType === 'meeting'}" @click="captureType = 'meeting'">MEETING</button>
+          <button class="type-btn" :class="{'active-task': captureType === 'jira_import'}" @click="captureType = 'jira_import'">JIRA_IMPORT</button>
+        </div>
+        <textarea
+          class="cp-textarea"
+          v-model="captureText"
+          @keydown="handleKeydown"
+          :placeholder="captureType === 'jira_import' ? '// enter Jira key, e.g. GO-153' : '// type idea or task...'"
+          :disabled="capturing"
+        ></textarea>
+        <div class="capture-input-area">
+          <div class="send-row">
+            <span class="send-hint">Ctrl+Enter to send</span>
+            <cmd-button :label="captureType === 'jira_import' ? 'IMPORT' : 'CAPTURE'" color="cyan" :loading="capturing" @click="capture"></cmd-button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="drawer-overlay" v-if="ideaDrawerOpen" @click="closeDrawer"></div>
+    <idea-drawer :open="ideaDrawerOpen" :item="ideaDrawerItem" @close="closeDrawer"></idea-drawer>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+  (function() {
+    var renderer = new marked.Renderer();
+    renderer.link = function(token) {
+      var href = token.href || '';
+      var title = token.title || '';
+      var text = token.text || '';
+      var titleAttr = title ? ' title="' + title + '"' : '';
+      return '<a href="' + href + '"' + titleAttr + ' target="_blank" rel="noopener">' + text + '</a>';
+    };
+    marked.use({ breaks: true, gfm: true, renderer: renderer });
+    console.log('[ideas] using marked.js v' + marked.version);
+  })();
+  </script>
+  <script src="api.js"></script>
+  <script src="components.js"></script>
+  <script>
+    const { createApp, ref, onMounted, computed, onUnmounted } = Vue;
+
+    const app = createApp({
+      setup() {
+        var ideas = ref([]);
+        var domains = ref([]);
+        var activeDomain = ref(null);
+        var loading = ref(false);
+        var error = ref(null);
+        var ideaDrawerOpen = ref(false);
+        var ideaDrawerItem = ref(null);
+        var displayLimit = ref(50);
+        var refreshInterval = null;
+        var refreshMode = ref('auto');
+        var captureDrawerOpen = ref(false);
+        var captureType = ref('idea');
+        var captureText = ref('');
+        var capturing = ref(false);
+        var chatMessages = ref([]);
+
+        // Drag-and-drop state
+        var dragItem = ref(null);
+        var dragSourceStatus = ref('');
+        var toasts = ref([]);
+        var toastIdCounter = 0;
+        var warningModal = ref({ show: false, message: '', onConfirm: null, onCancel: null });
+
+        // Status-to-column mapping
+        var STATUS_COLUMNS = {
+          'новая': 'new',
+          'проверка гипотезы': 'hypothesis',
+          'готова к производству': 'ready',
+          'отсев': 'rejected'
+        };
+
+        function statusColumn(status) {
+          var s = (status || '').toLowerCase().trim();
+          return STATUS_COLUMNS[s] || 'new';
+        }
+
+        function resolveIdeaId(item) {
+          if (item.id) return item.id;
+          var m = (item.filename || '').match(/^(IDEA-\d{4})/);
+          return m ? m[1] : '';
+        }
+
+        // Computed — column filtering
+        var newIdeas = computed(function() {
+          return ideas.value.filter(function(i) { return statusColumn(i.status) === 'new'; })
+            .sort(function(a, b) { return (b.readiness || 0) - (a.readiness || 0); });
+        });
+        var hypothesisIdeas = computed(function() {
+          return ideas.value.filter(function(i) { return statusColumn(i.status) === 'hypothesis'; });
+        });
+        var readyIdeas = computed(function() {
+          return ideas.value.filter(function(i) { return statusColumn(i.status) === 'ready'; });
+        });
+        var rejectedIdeas = computed(function() {
+          return ideas.value.filter(function(i) { return statusColumn(i.status) === 'rejected'; });
+        });
+
+        var totalCount = computed(function() { return ideas.value.length; });
+        var readyCount = computed(function() {
+          return ideas.value.filter(function(i) { return i.readiness >= 80; }).length;
+        });
+
+        // Visible slices
+        var visibleNew = computed(function() { return newIdeas.value.slice(0, displayLimit.value); });
+        var visibleHypothesis = computed(function() { return hypothesisIdeas.value.slice(0, displayLimit.value); });
+        var visibleReady = computed(function() { return readyIdeas.value.slice(0, displayLimit.value); });
+        var visibleRejected = computed(function() { return rejectedIdeas.value.slice(0, displayLimit.value); });
+
+        // Methods
+        async function loadDomains() {
+          console.log('[ideas] loadDomains — start');
+          try {
+            var data = await api.domains();
+            domains.value = data || [];
+            console.log('[ideas] loadDomains — success, domains:', domains.value.length);
+          } catch (err) {
+            console.error('[ideas] loadDomains error:', err.message);
+          }
+        }
+
+        async function loadData() {
+          console.log('[ideas] loadData — start, domain:', activeDomain.value || 'ALL');
+          loading.value = true;
+          error.value = null;
+          try {
+            var data = await api.ideas(activeDomain.value);
+            ideas.value = data || [];
+            console.log('[ideas] loadData — success, ideas:', ideas.value.length);
+          } catch (err) {
+            console.error('[ideas] loadData — error:', err.message);
+            error.value = 'Failed to load data: ' + err.message;
+          } finally {
+            loading.value = false;
+          }
+        }
+
+        function selectDomain(domainName) {
+          console.log('[ideas] selectDomain —', domainName || 'ALL');
+          activeDomain.value = domainName;
+          loadData();
+        }
+
+        function openDrawer(item) {
+          console.log('[ideas] openDrawer:', item.title);
+          ideaDrawerItem.value = item;
+          ideaDrawerOpen.value = true;
+        }
+
+        function closeDrawer() {
+          console.log('[ideas] closeDrawer');
+          ideaDrawerOpen.value = false;
+          ideaDrawerItem.value = null;
+        }
+
+        function showMore() {
+          displayLimit.value += 50;
+          console.log('[ideas] showMore — new limit:', displayLimit.value);
+        }
+
+        async function capture() {
+          if (!captureText.value.trim()) {
+            console.log('[ideas] capture — empty text, skipping');
+            return;
+          }
+          console.log('[ideas] capture — start, type:', captureType.value, 'text length:', captureText.value.length);
+          chatMessages.value.push({ role: 'user', type: captureType.value, text: captureText.value });
+          setTimeout(function() { var el = document.querySelector('.capture-messages'); if (el) el.scrollTop = el.scrollHeight; }, 50);
+          capturing.value = true;
+          try {
+            var result;
+            if (captureType.value === 'jira_import') {
+              result = await api.jiraImport(captureText.value.trim());
+              console.log('[ideas] jira_import — success, key:', result.key || 'unknown');
+              captureText.value = '';
+              var importMsg = 'Imported → ' + (result.key || '?') + ' (' + (result.domain || '?') + ', ' + (result.task_status || '?') + ')';
+              if (result.title) importMsg += '\n' + result.title;
+              chatMessages.value.push({ role: 'agent', text: importMsg });
+            } else {
+              result = await api.capture(captureType.value, captureText.value);
+              console.log('[ideas] capture — success, filename:', result.filename || 'unknown');
+              captureText.value = '';
+              chatMessages.value.push({ role: 'agent', text: 'Captured → ' + (result.filename || 'note created') });
+            }
+            setTimeout(function() { var el = document.querySelector('.capture-messages'); if (el) el.scrollTop = el.scrollHeight; }, 50);
+            api.domains.invalidate();
+            await loadData();
+          } catch (err) {
+            console.error('[ideas] capture — error:', err.message);
+            chatMessages.value.push({ role: 'error', text: err.message });
+            setTimeout(function() { var el = document.querySelector('.capture-messages'); if (el) el.scrollTop = el.scrollHeight; }, 50);
+          } finally {
+            capturing.value = false;
+          }
+        }
+
+        function handleKeydown(e) {
+          if (e.ctrlKey && e.key === 'Enter') {
+            console.log('[ideas] handleKeydown — Ctrl+Enter detected');
+            e.preventDefault();
+            capture();
+          }
+        }
+
+        // --- Drag-and-drop handlers ---
+
+        function onDragStart(event, item) {
+          console.log('[ideas] dragstart:', item.filename, 'status:', item.status);
+          dragItem.value = item;
+          dragSourceStatus.value = item.status;
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', item.filename);
+          setTimeout(function() {
+            event.target.style.opacity = '0.4';
+          }, 0);
+        }
+
+        function onDragOver(event) {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+          var column = event.currentTarget;
+          if (!column.classList.contains('drag-over')) {
+            column.classList.add('drag-over');
+          }
+        }
+
+        function onDragLeave(event) {
+          var column = event.currentTarget;
+          if (!column.contains(event.relatedTarget)) {
+            column.classList.remove('drag-over');
+          }
+        }
+
+        function onDragEnd(event) {
+          event.target.style.opacity = '1';
+          var cols = document.querySelectorAll('.kanban-column');
+          for (var i = 0; i < cols.length; i++) {
+            cols[i].classList.remove('drag-over');
+          }
+        }
+
+        function onDrop(event, targetStatus) {
+          event.preventDefault();
+          console.log('[ideas] drop: target=', targetStatus);
+
+          var column = event.currentTarget;
+          column.classList.remove('drag-over');
+
+          var item = dragItem.value;
+          if (!item) {
+            console.log('[ideas] drop: no drag item, ignoring');
+            return;
+          }
+
+          var sourceStatus = dragSourceStatus.value;
+          var readiness = item.readiness || 0;
+
+          if (sourceStatus.toLowerCase().trim() === targetStatus.toLowerCase().trim()) {
+            console.log('[ideas] drop: same column, no-op');
+            dragItem.value = null;
+            return;
+          }
+
+          // R1: Block "Готова к производству" if readiness < 100
+          if (targetStatus === 'Готова к производству' && readiness < 100) {
+            console.log('[ideas] drop: BLOCKED R1 — readiness', readiness, '< 100');
+            showToast(
+              'BLOCK: Readiness ' + readiness + '% — нужно 100% для перехода в "Готова к производству". Заполни все 9 секций.',
+              'error'
+            );
+            dragItem.value = null;
+            return;
+          }
+
+          // R2: Warn "Проверка гипотезы" if readiness < 44
+          if (targetStatus === 'Проверка гипотезы' && readiness < 44) {
+            console.log('[ideas] drop: WARNING R2 — readiness', readiness, '< 44');
+            showWarningModal(
+              'Readiness ' + readiness + '% (рекомендуется >= 44%). Перевести в "Проверка гипотезы"?',
+              function onConfirm() {
+                console.log('[ideas] R2 warning confirmed');
+                executeStatusChange(item, sourceStatus, targetStatus);
+              },
+              function onCancel() {
+                console.log('[ideas] R2 warning cancelled');
+                dragItem.value = null;
+              }
+            );
+            return;
+          }
+
+          // R3 (Отсев) and R4 (Новая): always allowed
+          executeStatusChange(item, sourceStatus, targetStatus);
+        }
+
+        function executeStatusChange(item, sourceStatus, targetStatus) {
+          console.log('[ideas] executeStatusChange:', item.filename, sourceStatus, '->', targetStatus);
+
+          var oldStatus = item.status;
+          item.status = targetStatus;
+
+          api.updateIdeaStatus(item.filename, targetStatus)
+            .then(function(response) {
+              console.log('[ideas] status update success:', response);
+              item.readiness = response.readiness;
+              showToast(item.filename + ' → ' + targetStatus, 'success');
+              dragItem.value = null;
+            })
+            .catch(function(err) {
+              console.error('[ideas] status update failed:', err.message);
+              item.status = oldStatus;
+              showToast('ERROR: ' + err.message, 'error');
+              dragItem.value = null;
+            });
+        }
+
+        function showToast(message, type) {
+          var id = ++toastIdCounter;
+          console.log('[ideas] toast:', type, message);
+          toasts.value.push({ id: id, message: message, type: type });
+          setTimeout(function() {
+            toasts.value = toasts.value.filter(function(t) { return t.id !== id; });
+          }, 4000);
+        }
+
+        function showWarningModal(message, onConfirm, onCancel) {
+          warningModal.value = {
+            show: true,
+            message: message,
+            onConfirm: function() {
+              warningModal.value.show = false;
+              if (onConfirm) onConfirm();
+            },
+            onCancel: function() {
+              warningModal.value.show = false;
+              if (onCancel) onCancel();
+            }
+          };
+        }
+
+        // Lifecycle
+        onMounted(function() {
+          console.log('[ideas] mounted — loading initial data');
+          var urlParams = new URLSearchParams(window.location.search);
+          var domainParam = urlParams.get('domain');
+          if (domainParam) {
+            console.log('[ideas] auto-selecting domain from URL:', domainParam);
+            activeDomain.value = domainParam;
+          }
+          loadDomains();
+          loadData();
+          api.getUserPrefs().then(function(prefs) {
+            refreshMode.value = prefs.refresh_mode || 'auto';
+            console.log('[ideas] refresh mode:', refreshMode.value);
+            if (refreshMode.value === 'auto') {
+              refreshInterval = setInterval(function() {
+                console.log('[ideas] auto-refresh — 30s interval');
+                loadData();
+              }, 30000);
+            }
+          }).catch(function(err) {
+            console.error('[ideas] getUserPrefs error, defaulting to auto:', err.message);
+            refreshInterval = setInterval(function() {
+              console.log('[ideas] auto-refresh — 30s interval (fallback)');
+              loadData();
+            }, 30000);
+          });
+          document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+              captureDrawerOpen.value = false;
+              ideaDrawerOpen.value = false;
+              ideaDrawerItem.value = null;
+            }
+          });
+        });
+
+        onUnmounted(function() {
+          if (refreshInterval) {
+            clearInterval(refreshInterval);
+            console.log('[ideas] unmounted — cleared refresh interval');
+          }
+        });
+
+        return {
+          ideas, domains, activeDomain, loading, error,
+          ideaDrawerOpen, ideaDrawerItem, displayLimit, refreshMode,
+          captureDrawerOpen, captureType, captureText, capturing, chatMessages,
+          newIdeas, hypothesisIdeas, readyIdeas, rejectedIdeas,
+          visibleNew, visibleHypothesis, visibleReady, visibleRejected,
+          totalCount, readyCount,
+          resolveIdeaId, loadData, loadDomains, selectDomain,
+          openDrawer, closeDrawer, showMore,
+          capture, handleKeydown,
+          dragItem, dragSourceStatus, toasts, warningModal,
+          onDragStart, onDragOver, onDragLeave, onDragEnd, onDrop,
+          executeStatusChange, showToast, showWarningModal
+        };
+      }
+    });
+
+    registerComponents(app);
+    applyPageTheme().then(function() {
+      app.mount('#app');
+    });
+  </script>
+</body>
+</html>

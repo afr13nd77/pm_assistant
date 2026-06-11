@@ -1,0 +1,48 @@
+import asyncio
+import logging
+from datetime import date
+
+logger = logging.getLogger(__name__)
+
+
+async def run_daily_alert(bot, chat_id: int) -> None:
+    logger.info("daily_alert: start")
+    try:
+        today = date.today()
+        if today.weekday() >= 5:
+            logger.info("daily_alert: skipping weekend (%s)", today.strftime("%A"))
+            return
+
+        from .vault_paths import wiki_daily_logs
+
+        daily_dir = wiki_daily_logs()
+        today_str = date.today().strftime("%Y.%m.%d")
+        pattern = f"{today_str}-*-Daily-summary.md"
+        found = list(daily_dir.glob(pattern))
+
+        if found:
+            logger.info("daily_alert: daily found for %s — %s", today_str, found[0].name)
+            return
+
+        display_date = date.today().strftime("%d.%m.%Y")
+        msg = f"⚠️ Daily-протокол за {display_date} не получен"
+        logger.info("daily_alert: no daily found for %s, sending alert", today_str)
+        await bot.send_message(chat_id=chat_id, text=msg)
+        logger.info("daily_alert: alert sent to chat_id=%s", chat_id)
+    except Exception as e:
+        logger.error("daily_alert: failed: %s", e, exc_info=True)
+
+
+def run_daily_alert_sync(bot, chat_id: int) -> None:
+    logger.info("daily_alert: cron triggered")
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.ensure_future(run_daily_alert(bot, chat_id))
+        else:
+            loop.run_until_complete(run_daily_alert(bot, chat_id))
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(run_daily_alert(bot, chat_id))
+    logger.info("daily_alert: cron execution dispatched")

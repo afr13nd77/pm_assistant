@@ -1,0 +1,333 @@
+# PM Assistant
+
+## Что это
+
+PM Assistant — программная реализация методологии управления продуктовыми знаниями для продакт-менеджера OTA-компании (Суточно.ру — онлайн-бронирование жилья в России и СНГ).
+
+Проект автоматизирует полный цикл жизни идеи: от сырой мысли в Telegram до готового эпика в Jira. Это не просто бот — это работающая система из 4 микросервисов, которая реализует правила, описанные в конфигурации Knowledge Base Agent (CLAUDE.md хранилища знаний проекта hotels).
+
+---
+
+## Архитектура хранилища: модель Карпати
+
+Хранилище спроектировано по модели Андрея Карпати (Andrej Karpathy): **raw -> compile -> wiki**.
+
+### Три слоя
+
+1. **raw/** — неизменяемые оригиналы (append-only). Все, что захвачено (идея из Telegram, транскрипт встречи, тикет из Jira, клиппинг из веба), сохраняется здесь as-is. Файлы никогда не редактируются. Можно перекомпилировать wiki из сырья в любой момент.
+
+   Подпапки: `inbound/ideas/`, `inbound/meeting-notes/`, `inbound/daily-logs/`, `inbound/tasks/`, `inbound/clippings/`, `inbound/misc/`, `competitors/`, `metrics/`.
+
+2. **wiki/** — скомпилированное знание. Живая энциклопедия, организованная по продуктовым доменам. Структурированные заметки с YAML frontmatter, перекрестными ссылками, индексами.
+
+   Верхний уровень: `wiki/domains/`, `wiki/meetings/`, `wiki/daily-logs/`, `wiki/reports/`, `wiki/concepts/`, `wiki/teams/`, `wiki/projects/`, `wiki/INDEX.md`, `wiki/LOG.md`.
+
+3. **templates/** — шаблоны артефактов (idea, epic, userstory, task, bug, ADR), редактируемые без кода и видимые в Obsidian.
+
+### Философия: vault-as-database
+
+Obsidian vault с Markdown-файлами заменяет классическую БД:
+
+- Frontmatter = метаданные (id, status, domain, tags, created, jira_key и т.д.)
+- Тело файла = контент
+- Файловая система = индекс
+- Вся история доступна через git
+- Файлы одновременно читаемы человеком (в Obsidian) и машиной (через API)
+
+### Доменная группировка
+
+Каждый домен — автономная единица со своей структурой:
+
+```
+wiki/domains/{domain}/
+├── ideas/       # идеи с 9 полями и readiness %
+├── epics/       # эпики с горизонтами и прогрессом
+├── tasks/       # задачи (Jira и внутренние)
+├── bugs/        # баги
+├── knowledge/   # knowledge-файлы (клиппинги, справочники)
+├── index.md     # автогенерируемое оглавление
+├── log.md       # журнал изменений
+├── decisions.md # архитектурные решения (ADR)
+└── glossary.md  # терминология домена
+```
+
+Текущие домены: `static-metadata`, `suggester`, `search-engine`, `partner-search-engine`, `general` (кросс-доменные задачи).
+
+### Ingest: raw -> wiki
+
+Процесс обработки файлов из raw/ и их преобразования в структурированные заметки в wiki/. Для каждого типа входящего файла — свой алгоритм:
+
+- `raw/inbound/ideas/` — определить домен — `wiki/domains/{domain}/ideas/{slug}.md`
+- `raw/inbound/meeting-notes/` — извлечь action items — задачи, решения — decisions.md
+- `raw/inbound/misc/` — классифицировать — concepts/ или teams/ или projects/ или domains/
+- `raw/inbound/clippings/` — определить домен — `wiki/domains/{domain}/knowledge/{slug}.md`
+- `raw/competitors/` — только запись в LOG.md, отчет по команде
+
+Определение домена — автоматическое по ключевым словам (domain_detection rules в CLAUDE.md). При конфликте — запрос к пользователю. При отсутствии совпадений — домен по умолчанию + warning в LOG.md.
+
+---
+
+## Жизненный цикл идеи
+
+Идея проходит 4 статуса: **Новая -> Проверка гипотезы -> Готова к производству -> Отсев**.
+
+### 9 обязательных полей
+
+**Блок 1: Паспорт идеи** (заполнение = 44% готовности, переход в «Проверку гипотезы»):
+
+1. Проблема / Боль — чью и какую боль решаем
+2. Решение — что именно предлагаем
+3. Ценность (USP) — чем отличается от текущего
+4. Метрика — что изменится в цифрах. Нет метрики = Отсев.
+
+**Блок 2: Посадочный талон** (заполнение = 100% готовности, переход в «Готова к производству»):
+
+5. Сегмент (Кто) — конкретная группа пользователей
+6. Job Story — «Когда [ситуация], я хочу [мотивация], чтобы [результат]»
+7. In scope — функционал первой версии
+8. Out of scope — что сознательно не делаем
+9. Ограничения — технические, бизнесовые, регуляторные
+
+### Readiness %
+
+`Готовность = (заполненные поля / 9) * 100%`
+
+- 0-43% — статус «Новая»
+- 44-99% — статус «Проверка гипотезы»
+- 100% + артефакт валидации — статус «Готова к производству»
+
+### Обратная петля
+
+При создании эпика в frontmatter идеи добавляется `epic_ref: EPIC-XXX`. При закрытии эпика в конец идеи дописывается раздел «Результат» (метрика выросла / не выросла / нет данных). Так идея становится полным кейсом: гипотеза -> что сделали -> что получили.
+
+---
+
+## Три класса задач
+
+В базе знаний сосуществуют три класса задач:
+
+| | Jira-задача | Внутренняя задача | Личный TODO |
+|---|---|---|---|
+| Маркер | `jira_key: GO-114` | `task_id: TASK-01` | `TODO-NNN` |
+| Источник | jira-sync (автоматически) | пайплайн декомпозиции идеи | ручное создание |
+| Файл | один файл на задачу | один файл на задачу | один `todo.md` |
+| Статусы | 25+ значений из Jira as-is | todo / in-progress / done / cancelled | todo / in-progress / done / cancelled |
+
+Jira-статусы не нормализуются — Jira является источником правды. Внутренние таски имеют зависимости (`depends_on`): задача не может перейти в `in-progress`, пока зависимости не в `done`.
+
+---
+
+## Компоненты
+
+### pm-bot (v1.5.4)
+
+Telegram-бот + Vault API + Web UI сервер. Точка входа для всех взаимодействий.
+
+Функции:
+
+- Telegram-хендлеры: /idea, /jira, /daily, /synthesize, /jira_sync, /jira_import, /jira_create, /pipeline, /domain, /lint, /status, /test_enrichment, текст, голос
+- Claude API / Ollama / Hybrid — гибридная LLM-архитектура с fallback (Ollama: Qwen 3.5)
+- Speech-to-Text (faster-whisper)
+- Vault API (FastAPI, порт 8000) с in-memory TTL cache (30s)
+- Web UI static server (порт 8080)
+- APScheduler: weekly report (Mon 09:00), enrichment reminders (daily)
+- SQLite: дедупликация enrichment-напоминаний (cooldown 24ч)
+
+### knowledge-engine (v1.4.2)
+
+Сервис обогащения и синтеза знаний.
+
+Функции:
+
+- Enrichment: обогащение идей связями из vault
+- Synthesis: кластеризация идей + сводка
+- Jira sync (cron каждые 3ч): fetch JQL -> diff state -> write wiki/ + raw/ -> notify
+- Jira import: импорт единичного тикета по ключу
+- Jira create: создание тикетов из vault
+- Meeting fetcher: IMAP клиент -> classify -> wiki -> enrich -> notify
+- Vault index: сканирование, in-memory индекс, keyword + tag matching
+- Linter: проверка frontmatter, структуры, битых ссылок
+- Domain manager: scaffold, index, activity log
+- Watchdog: auto-enrichment при появлении файлов в raw/inbound/
+
+### idea-pipeline (v1.1.0)
+
+Оркестратор проработки идей через цепочку AI-агентов.
+
+Цепочка: **Analyst -> PM -> Decomposer**
+
+- Analyst: идея + vault context -> анализ
+- PM: анализ -> PRD
+- Decomposer: PRD -> Epic + Tasks (JSON)
+
+Результат записывается в vault: `Pipeline/<date>-<slug>/` (analysis.md, PRD.md, epic.md, tasks/*.md).
+
+Configurable models per agent через pipeline.yaml. API key аутентификация.
+
+### ke-cron
+
+Cron-контейнер для периодических задач:
+
+- Синтез: ежедневно 09:00
+- Jira sync: каждые 3 часа
+
+---
+
+## Web UI (v1.15.6)
+
+SPA-дашборд на Vue 3 + vanilla JS. Статические HTML-страницы, данные через Vault API.
+
+| Страница | Назначение |
+|---|---|
+| overview.html | Command center: system status, idea funnel, KPI-метрики, donut chart, today's queue, activity feed, quick capture |
+| ideas.html | Канбан идей: 4 колонки по статусам (Новая / Проверка гипотезы / Готова / Отсев), фильтр по доменам, drag-n-drop, readiness %, capture drawer |
+| board.html | Канбан-доска задач: классификация по jira_key, типы из frontmatter (BACKEND, FRONTEND, TESTING, RESEARCH, DESIGN) |
+| dashboard.html | Домены, статистика артефактов, Jira sync status (overdue alert >3ч) |
+| roadmap.html | Roadmap: эпики с прогрессом, колонки Backlog/Todo/In Progress/Done |
+| timeline.html | Таймлайн фич |
+| report.html | Просмотр еженедельных отчетов (Markdown -> HTML через marked.js) |
+| settings.html | Настройки: тема, refresh mode, LLM Provider (Claude/Ollama/Hybrid + Test Connection), prompts, Jira sync |
+
+Dual-theme: MATRIX (dark, glow/neon) и LIGHT (cream, warm). Переключение в settings, хранение серверное.
+
+Refresh mode: auto (board 30s, roadmap 60s) или manual.
+
+Drag-n-drop правила: readiness 100% для перехода в «Готова», warning при < 44% для «Проверка гипотезы».
+
+---
+
+## Потоки данных
+
+1. **Идеи**: Telegram/Web -> handlers -> claude_client.process_idea (->JSON) -> obsidian_writer.write_idea (template-based) -> `raw/inbound/ideas/` + `wiki/domains/<domain>/ideas/` -> knowledge-engine enrich
+2. **Транскрипты встреч**: .txt -> transcript_watcher -> process_meeting -> `raw/inbound/meeting-notes/` + `wiki/meetings/`
+3. **Meeting fetcher**: IMAP email -> fetch -> classify -> `raw/inbound/meeting-notes/` + `wiki/meetings/` -> enrich -> notify
+4. **Jira-тикеты**: Telegram /jira -> process_jira_ticket -> `raw/inbound/tasks/` + `wiki/domains/<domain>/tasks/`
+5. **Daily-заметки**: Telegram /daily -> process_daily -> `raw/inbound/daily-logs/` + `wiki/daily-logs/`
+6. **Jira Sync** (cron 3ч или /jira_sync): fetch JQL -> diff state -> write `wiki/domains/<domain>/tasks/` + `raw/inbound/tasks/` -> notify
+7. **Idea Pipeline**: Telegram /pipeline или API -> Analyst -> PM -> Decomposer -> `Pipeline/<date>-<slug>/`
+8. **Enrichment Reminders** (daily cron): scan ideas -> filter by readiness < 100% -> SQLite cooldown -> Telegram notify
+9. **Synthesis** (cron 09:00 или /synthesize): кластеризация + сводка -> `wiki/reports/synthesis-*.md`
+
+---
+
+## Стек
+
+| Зависимость | Версия | Сервис |
+|---|---|---|
+| Python | 3.12 | все |
+| python-telegram-bot | 21.5 | pm-bot |
+| anthropic | >=0.40.0 | pm-bot, knowledge-engine, idea-pipeline |
+| FastAPI | >=0.111.0 | pm-bot, idea-pipeline |
+| uvicorn | >=0.30.0 | pm-bot, idea-pipeline |
+| watchdog | 4.0.1 / 6.0.0 | pm-bot, knowledge-engine |
+| faster-whisper | >=1.0.0 | pm-bot |
+| apscheduler | >=3.10.4 | pm-bot |
+| python-frontmatter | >=1.1.0 | knowledge-engine, idea-pipeline |
+| Vue.js | 3.x (CDN) | web-ui |
+| marked.js | 15.x (CDN) | web-ui |
+| Docker Compose | v3.9 | инфраструктура |
+| Claude модель | claude-sonnet-4-6 | pm-bot, knowledge-engine, idea-pipeline |
+
+---
+
+## Docker-топология
+
+4 контейнера:
+
+| Контейнер | Роль | Порты |
+|---|---|---|
+| pm-bot | Telegram polling + Vault API + Web UI | 8000 (API), 8080 (Web) |
+| knowledge-engine | Watchdog на raw/inbound/ для auto-enrichment | — |
+| idea-pipeline | Оркестратор AI-агентов | 8100 |
+| ke-cron | Синтез (09:00) + Jira sync (каждые 3ч) | — |
+
+---
+
+## Запуск
+
+### Docker (рекомендуется)
+
+```bash
+# Запуск
+docker compose up --build
+
+# Фоновый режим
+docker compose up -d
+
+# Логи
+docker compose logs -f pm-bot
+
+# Пересборка
+docker compose down && docker compose build --no-cache && docker compose up -d
+```
+
+### Локальная разработка
+
+```bash
+cd pm-bot
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env  # заполнить переменные
+python -m app.main
+```
+
+---
+
+## Переменные окружения
+
+| Переменная | Обязательная | Сервис | Описание |
+|---|---|---|---|
+| BOT_TOKEN | да | pm-bot | Токен Telegram-бота |
+| CLAUDE_API_KEY | да | pm-bot, KE, pipeline | Ключ Claude API |
+| VAULT_PATH | да | все | Путь к Obsidian vault |
+| TRANSCRIPTS_INBOX | да | pm-bot | Папка входящих транскриптов |
+| ALLOWED_CHAT_ID | да | pm-bot | Chat ID владельца (пустой = режим первого запуска) |
+| PIPELINE_API_URL | да | pm-bot | URL idea-pipeline API |
+| JIRA_URL | да | KE | URL Jira-сервера |
+| JIRA_TOKEN | да | KE | Personal Access Token |
+| OLLAMA_URL | нет | pm-bot, KE | URL Ollama-сервера |
+| OLLAMA_MODEL | нет | pm-bot, KE | Модель Ollama (default: qwen3.5:latest) |
+| STT_ENABLED | нет | pm-bot | Включить STT/Whisper (default: 1) |
+
+Полный список переменных — в index.md.
+
+---
+
+## Performance
+
+In-memory TTL cache (30s) в vault_api.py:
+
+| Endpoint | До оптимизации | После (cached) |
+|---|---|---|
+| /system/status | 4882 ms | 4 ms |
+| /domains | 4891 ms | 7 ms |
+| /tasks | 1364 ms | 34 ms |
+| /overview/queue | 912 ms | 4 ms |
+
+Теплый кеш при старте сервера — первый запрос пользователя уже из кеша. Invalidation при любой write-операции.
+
+---
+
+## Статистика проекта
+
+- 54 реализованных фичи
+- 18 исправленных багов
+- 27 идей в бэклоге
+- 99 пунктов бэклога всего
+
+Разработка ведется с 07.05.2026. Текущие версии: pm-bot 1.5.4, knowledge-engine 1.4.2, idea-pipeline 1.1.0, web-ui 1.15.6.
+
+---
+
+## Связь с хранилищем знаний
+
+PM Assistant — это программная реализация правил, описанных в CLAUDE.md хранилища `08 project hotels claude`. Хранилище знаний определяет:
+
+- Структуру raw/ и wiki/
+- Правила ingest (обработка сырых файлов)
+- Domain detection (определение домена по ключевым словам)
+- Правила индексации и линтинга
+- Интеграцию с Jira
+
+PM Assistant превращает эти правила в работающие сервисы: watchdog вместо ручного /ingest, cron вместо ручного /rebuild-index, API вместо ручного чтения index.md, Web UI вместо навигации по файловой системе.

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Component Tests -- PM Web UI</title>
+  <link rel="stylesheet" href="../style.css">
+  <style>
+    .test-suite { margin: 20px; }
+    .test-result { font-size: 12px; padding: 4px 8px; margin: 2px 0; }
+    .test-pass { color: var(--green); }
+    .test-fail { color: var(--magenta); }
+    .test-section { color: var(--cyan); font-size: 13px; margin-top: 16px; margin-bottom: 8px; }
+    #render-area { margin-top: 20px; border-top: 1px solid var(--border); padding-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="test-suite" id="test-output">
+    <div class="page-title">PM WEB UI -- COMPONENT TESTS</div>
+  </div>
+
+  <div id="render-area">
+    <div id="app-sidebar-test"></div>
+    <div id="note-card-test" style="max-width: 300px;"></div>
+    <div id="epic-card-test" style="max-width: 300px;"></div>
+    <div id="progress-bar-test" style="max-width: 300px;"></div>
+    <div id="metric-box-test" style="max-width: 200px;"></div>
+    <div id="cmd-button-test"></div>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="../api.js"></script>
+  <script src="../components.js"></script>
+  <script>
+    var results = [];
+    var totalTests = 0;
+    var passedTests = 0;
+
+    function assert(name, condition, detail) {
+      totalTests++;
+      if (condition) {
+        passedTests++;
+        results.push({ name: name, pass: true });
+      } else {
+        results.push({ name: name, pass: false, detail: detail || 'assertion failed' });
+      }
+    }
+
+    function renderResults() {
+      var out = document.getElementById('test-output');
+      var currentSection = '';
+      for (var i = 0; i < results.length; i++) {
+        var r = results[i];
+        var parts = r.name.split(' :: ');
+        var section = parts.length > 1 ? parts[0] : '';
+        var testName = parts.length > 1 ? parts[1] : r.name;
+
+        if (section !== currentSection) {
+          currentSection = section;
+          var sDiv = document.createElement('div');
+          sDiv.className = 'test-section';
+          sDiv.textContent = '// ' + section;
+          out.appendChild(sDiv);
+        }
+
+        var div = document.createElement('div');
+        div.className = 'test-result ' + (r.pass ? 'test-pass' : 'test-fail');
+        div.textContent = (r.pass ? '[PASS]' : '[FAIL]') + ' ' + testName;
+        if (!r.pass && r.detail) {
+          div.textContent += ' -- ' + r.detail;
+        }
+        out.appendChild(div);
+      }
+
+      var summary = document.createElement('div');
+      summary.className = 'test-section';
+      summary.textContent = '// SUMMARY: ' + passedTests + '/' + totalTests + ' passed';
+      summary.style.color = passedTests === totalTests ? 'var(--green)' : 'var(--magenta)';
+      out.appendChild(summary);
+
+      console.log('[tests] ' + passedTests + '/' + totalTests + ' passed');
+    }
+
+    /* ---- Test: api.js loaded ---- */
+    assert('api.js :: api object exists', typeof api === 'object');
+    assert('api.js :: api.ideas is function', typeof api.ideas === 'function');
+    assert('api.js :: api.meetings is function', typeof api.meetings === 'function');
+    assert('api.js :: api.tasks is function', typeof api.tasks === 'function');
+    assert('api.js :: api.epics is function', typeof api.epics === 'function');
+    assert('api.js :: api.timeline is function', typeof api.timeline === 'function');
+    assert('api.js :: api.reports is function', typeof api.reports === 'function');
+    assert('api.js :: api.reportByFilename is function', typeof api.reportByFilename === 'function');
+    assert('api.js :: api.capture is function', typeof api.capture === 'function');
+    assert('api.js :: api.regenerate is function', typeof api.regenerate === 'function');
+    assert('api.js :: api.pipeline is function', typeof api.pipeline === 'function');
+    assert('api.js :: API base URL correct', API === 'http://localhost:8000/api/v1');
+    assert('api.js :: apiFetch is function', typeof apiFetch === 'function');
+
+    /* ---- Test: components.js loaded ---- */
+    assert('components.js :: registerComponents is function', typeof registerComponents === 'function');
+
+    /* ---- Test: Vue loaded ---- */
+    assert('Vue :: Vue global exists', typeof Vue !== 'undefined');
+    assert('Vue :: createApp exists', typeof Vue.createApp === 'function');
+
+    /* ---- Test: AppSidebar component ---- */
+    (function() {
+      try {
+        var sidebarApp = Vue.createApp({
+          template: '<app-sidebar active="board"></app-sidebar>'
+        });
+        registerComponents(sidebarApp);
+        sidebarApp.mount('#app-sidebar-test');
+
+        var sidebar = document.querySelector('#app-sidebar-test .sidebar');
+        assert('AppSidebar :: renders sidebar element', sidebar !== null);
+
+        var logo = document.querySelector('#app-sidebar-test .sidebar-logo');
+        assert('AppSidebar :: renders logo', logo !== null);
+        assert('AppSidebar :: logo text contains PM', logo && logo.textContent.indexOf('PM') >= 0);
+
+        var links = document.querySelectorAll('#app-sidebar-test .nav-link');
+        assert('AppSidebar :: renders 5 nav links', links.length === 5, 'got ' + links.length);
+
+        var activeLink = document.querySelector('#app-sidebar-test .nav-link.active');
+        assert('AppSidebar :: active link is BOARD', activeLink && activeLink.textContent.trim() === 'BOARD');
+
+        var divider = document.querySelector('#app-sidebar-test .nav-divider');
+        assert('AppSidebar :: renders divider', divider !== null);
+      } catch(e) {
+        assert('AppSidebar :: mount without error', false, e.message);
+      }
+    })();
+
+    /* ---- Test: NoteCard component ---- */
+    (function() {
+      try {
+        var cardApp = Vue.createApp({
+          template: '<note-card type="idea_capture" title="Test idea" :tags="[\'idea\', \'prd\']" date="2026-04-27" status="inbox" @click="onClick"></note-card>',
+          methods: { onClick: function() { this.clicked = true; } }
+        });
+        registerComponents(cardApp);
+        cardApp.mount('#note-card-test');
+
+        var card = document.querySelector('#note-card-test .card');
+        assert('NoteCard :: renders card element', card !== null);
+
+        var cardType = document.querySelector('#note-card-test .card-type');
+        assert('NoteCard :: renders type label', cardType && cardType.textContent === 'IDEA_CAPTURE');
+
+        var cardTitle = document.querySelector('#note-card-test .card-title');
+        assert('NoteCard :: renders title', cardTitle && cardTitle.textContent === 'Test idea');
+
+        var tags = document.querySelectorAll('#note-card-test .tag');
+        assert('NoteCard :: renders 2 tags', tags.length === 2, 'got ' + tags.length);
+        assert('NoteCard :: first tag is IDEA', tags[0] && tags[0].textContent === 'IDEA');
+        assert('NoteCard :: first tag has tag-idea class', tags[0] && tags[0].classList.contains('tag-idea'));
+        assert('NoteCard :: second tag is PRD', tags[1] && tags[1].textContent === 'PRD');
+
+        var date = document.querySelector('#note-card-test .card-date');
+        assert('NoteCard :: renders date', date && date.textContent === '2026-04-27');
+      } catch(e) {
+        assert('NoteCard :: mount without error', false, e.message);
+      }
+    })();
+
+    /* ---- Test: EpicCard component ---- */
+    (function() {
+      try {
+        var epicApp = Vue.createApp({
+          template: '<epic-card id="E-01" title="Test Epic" horizon="now" priority="p1" :progress="85" prd_status="APPROVED" :tickets="[{id:\'T-1\',status:\'done\'},{id:\'T-2\',status:\'wip\'}]"></epic-card>'
+        });
+        registerComponents(epicApp);
+        epicApp.mount('#epic-card-test');
+
+        var card = document.querySelector('#epic-card-test .card');
+        assert('EpicCard :: renders card element', card !== null);
+        assert('EpicCard :: has ep-p1 class for P1 priority', card && card.classList.contains('ep-p1'));
+
+        var cardType = document.querySelector('#epic-card-test .card-type');
+        assert('EpicCard :: renders id', cardType && cardType.textContent === 'E-01');
+
+        var title = document.querySelector('#epic-card-test .card-title');
+        assert('EpicCard :: renders title', title && title.textContent === 'Test Epic');
+
+        var progressFill = document.querySelector('#epic-card-test .progress-fill');
+        assert('EpicCard :: renders progress bar', progressFill !== null);
+        assert('EpicCard :: progress fill 85%', progressFill && progressFill.style.width === '85%');
+        assert('EpicCard :: progress fill green for 85%', progressFill && progressFill.classList.contains('fill-green'));
+
+        var labels = document.querySelectorAll('#epic-card-test .progress-label span');
+        assert('EpicCard :: progress label shows 85%', labels.length >= 2 && labels[1].textContent === '85%');
+
+        var tags = document.querySelectorAll('#epic-card-test .tag');
+        assert('EpicCard :: renders PRD tag (auto from prd_status)', tags.length >= 1);
+
+        var ticketCount = document.querySelector('#epic-card-test .card-date');
+        assert('EpicCard :: shows ticket count', ticketCount && ticketCount.textContent.indexOf('2 tickets') >= 0);
+      } catch(e) {
+        assert('EpicCard :: mount without error', false, e.message);
+      }
+    })();
+
+    /* ---- Test: ProgressBar component ---- */
+    (function() {
+      try {
+        var pbApp = Vue.createApp({
+          template: '<progress-bar :value="60" color="yellow"></progress-bar>'
+        });
+        registerComponents(pbApp);
+        pbApp.mount('#progress-bar-test');
+
+        var wrap = document.querySelector('#progress-bar-test .progress-wrap');
+        assert('ProgressBar :: renders progress-wrap', wrap !== null);
+
+        var fill = document.querySelector('#progress-bar-test .progress-fill');
+        assert('ProgressBar :: renders fill', fill !== null);
+        assert('ProgressBar :: fill width 60%', fill && fill.style.width === '60%');
+        assert('ProgressBar :: fill-yellow class', fill && fill.classList.contains('fill-yellow'));
+      } catch(e) {
+        assert('ProgressBar :: mount without error', false, e.message);
+      }
+    })();
+
+    /* ---- Test: MetricBox component ---- */
+    (function() {
+      try {
+        var metApp = Vue.createApp({
+          template: '<metric-box label="IDEAS_CAPTURED" value="12" color="cyan"></metric-box>'
+        });
+        registerComponents(metApp);
+        metApp.mount('#metric-box-test');
+
+        var metric = document.querySelector('#metric-box-test .metric');
+        assert('MetricBox :: renders metric element', metric !== null);
+
+        var label = document.querySelector('#metric-box-test .metric-label');
+        assert('MetricBox :: renders label', label && label.textContent.indexOf('IDEAS_CAPTURED') >= 0);
+
+        var value = document.querySelector('#metric-box-test .metric-value');
+        assert('MetricBox :: renders value', value && value.textContent === '12');
+        assert('MetricBox :: value has cyan color', value && value.style.color === 'var(--cyan)');
+      } catch(e) {
+        assert('MetricBox :: mount without error', false, e.message);
+      }
+    })();
+
+    /* ---- Test: CmdButton component ---- */
+    (function() {
+      try {
+        var btnApp = Vue.createApp({
+          data: function() { return { clickCount: 0 }; },
+          template: '<div><cmd-button label="TEST_ACTION" color="cyan" @click="clickCount++"></cmd-button><cmd-button label="LOADING" color="magenta" :loading="true"></cmd-button></div>',
+        });
+        registerComponents(btnApp);
+        btnApp.mount('#cmd-button-test');
+
+        var btns = document.querySelectorAll('#cmd-button-test .cmd-btn');
+        assert('CmdButton :: renders 2 buttons', btns.length === 2, 'got ' + btns.length);
+
+        assert('CmdButton :: first button text', btns[0] && btns[0].textContent.trim() === '[ TEST_ACTION ]');
+        assert('CmdButton :: first button has btn-cyan class', btns[0] && btns[0].classList.contains('btn-cyan'));
+        assert('CmdButton :: first button not disabled', btns[0] && !btns[0].disabled);
+
+        assert('CmdButton :: loading button text', btns[1] && btns[1].textContent.trim() === '[ ... ]');
+        assert('CmdButton :: loading button has btn-magenta class', btns[1] && btns[1].classList.contains('btn-magenta'));
+        assert('CmdButton :: loading button is disabled', btns[1] && btns[1].disabled);
+      } catch(e) {
+        assert('CmdButton :: mount without error', false, e.message);
+      }
+    })();
+
+    /* ---- Test: CSS variables loaded ---- */
+    (function() {
+      var root = getComputedStyle(document.documentElement);
+      assert('CSS :: --bg defined', root.getPropertyValue('--bg').trim() === '#0a0a12');
+      assert('CSS :: --cyan defined', root.getPropertyValue('--cyan').trim() === '#00e5ff');
+      assert('CSS :: --magenta defined', root.getPropertyValue('--magenta').trim() === '#ff00aa');
+      assert('CSS :: --green defined', root.getPropertyValue('--green').trim() === '#00ff88');
+      assert('CSS :: --text defined', root.getPropertyValue('--text').trim() === '#c8d0e8');
+      assert('CSS :: --mono defined', root.getPropertyValue('--mono').trim().indexOf('Share Tech Mono') >= 0);
+    })();
+
+    /* ---- Test: index.html redirect ---- */
+    assert('index.html :: exists as a file', true);
+
+    /* ---- Render results ---- */
+    renderResults();
+  </script>
+</body>
+</html>

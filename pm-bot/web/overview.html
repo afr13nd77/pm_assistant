@@ -1,0 +1,1612 @@
+<!DOCTYPE html>
+<html lang="ru" class="theme-matrix">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PM Board — Command Center</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style-matrix.css" id="theme-css">
+<script>
+(function() {
+  try {
+    var t = localStorage.getItem('pm_theme');
+    if (t === 'light') {
+      document.documentElement.className = 'theme-light';
+      document.getElementById('theme-css').href = 'style-light.css';
+    }
+  } catch(e) {}
+})();
+</script>
+<style>
+/* Overview-specific layout override */
+.page-content {
+  height: 100vh;
+  padding: 0;
+  overflow: hidden;
+}
+.cmd-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ================================================================
+   ZONE A: STATUS STRIP
+   ================================================================ */
+.cmd-status-strip {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 24px;
+  height: 48px;
+  flex-shrink: 0;
+  background: rgba(0,0,0,0.85);
+  backdrop-filter: blur(72px);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 5;
+}
+.cmd-status-strip::after {
+  content: '';
+  position: absolute;
+  bottom: -1px; left: 0; right: 0;
+  height: 1px;
+  background: rgba(52,211,153,0.50);
+  box-shadow: 0 0 25px var(--primary-glow);
+}
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot-online {
+  background: var(--green);
+  box-shadow: 0 0 15px var(--green);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+.dot-active {
+  background: var(--amber);
+  box-shadow: 0 0 15px var(--amber);
+}
+.dot-offline {
+  background: var(--red);
+  box-shadow: 0 0 10px var(--red);
+}
+.dot-muted {
+  background: var(--text-dimmed);
+  box-shadow: none;
+}
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 10px var(--green); }
+  50% { box-shadow: 0 0 30px var(--green); }
+}
+.status-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.status-value {
+  font-size: 11px;
+  color: var(--text-body);
+  letter-spacing: 0.05em;
+}
+.status-refresh-info {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-dimmed);
+  letter-spacing: 0.05em;
+}
+
+/* ================================================================
+   ZONE B: KPI ROW
+   ================================================================ */
+.cmd-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 16px 24px;
+  flex-shrink: 0;
+}
+.m-kpi {
+  background: var(--card);
+  backdrop-filter: blur(48px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  box-shadow: 0 0 35px rgba(16,185,129,0.15), inset 0 0 20px rgba(16,185,129,0.04);
+}
+.m-kpi::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  transition: all 0.3s;
+}
+.m-kpi:hover {
+  border-color: var(--border-hover);
+  box-shadow: 0 0 50px rgba(52,211,153,0.30), inset 0 0 20px rgba(52,211,153,0.08);
+}
+.m-kpi-cyan::before { background: var(--cyan); box-shadow: 0 0 15px var(--cyan), 0 0 30px rgba(34,211,238,0.40); }
+.m-kpi-amber::before { background: var(--amber); box-shadow: 0 0 15px var(--amber), 0 0 30px rgba(251,191,36,0.40); }
+.m-kpi-green::before { background: var(--green); box-shadow: 0 0 15px var(--green), 0 0 30px rgba(52,211,153,0.40); }
+.m-kpi-muted::before { background: var(--text-dimmed); }
+.m-kpi-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  padding-left: 10px;
+  margin-bottom: 8px;
+  filter: drop-shadow(0 0 6px rgba(16,185,129,0.50));
+}
+.m-kpi-label::before { content: '// '; color: var(--primary); filter: drop-shadow(0 0 6px var(--primary)); }
+.m-kpi-value {
+  font-size: 32px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  line-height: 1;
+  padding-left: 10px;
+  margin-bottom: 10px;
+}
+.m-kpi-cyan .m-kpi-value { color: #a5f3fc; filter: drop-shadow(0 0 15px rgba(34,211,238,0.80)) drop-shadow(0 0 40px rgba(34,211,238,0.35)); }
+.m-kpi-amber .m-kpi-value { color: #fde68a; filter: drop-shadow(0 0 15px rgba(251,191,36,0.80)) drop-shadow(0 0 40px rgba(251,191,36,0.35)); }
+.m-kpi-green .m-kpi-value { color: var(--em-100); filter: drop-shadow(0 0 15px rgba(52,211,153,0.80)) drop-shadow(0 0 40px rgba(52,211,153,0.35)); }
+.m-kpi-muted .m-kpi-value { color: var(--text-muted); }
+.m-kpi-bar {
+  height: 3px;
+  background: rgba(255,255,255,0.07);
+  margin: 8px 10px 0;
+  border-radius: 1px;
+}
+.m-kpi-bar-fill {
+  height: 100%;
+  border-radius: 1px;
+  transition: width 0.5s ease;
+}
+.m-kpi-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 10px;
+  margin-top: 8px;
+}
+.m-kpi-foot-lbl { font-size: 11px; color: var(--text-dimmed); }
+.m-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--radius);
+}
+.m-delta-up {
+  color: #d1fae5;
+  background: rgba(6,78,59,0.70);
+  border: 1px solid rgba(52,211,153,0.80);
+  box-shadow: 0 0 15px rgba(52,211,153,0.40), inset 0 0 8px rgba(52,211,153,0.15);
+}
+.m-delta-mid {
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+}
+.m-delta-low {
+  color: #fecaca;
+  background: rgba(127,29,29,0.70);
+  border: 1px solid rgba(239,68,68,0.80);
+  box-shadow: 0 0 15px rgba(239,68,68,0.40), inset 0 0 8px rgba(239,68,68,0.15);
+}
+
+/* ================================================================
+   ZONE C: MAIN BODY
+   ================================================================ */
+.cmd-body {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 16px;
+  padding: 0 24px 24px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.cmd-col-left,
+.cmd-col-right {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ================================================================
+   PANELS (glass)
+   ================================================================ */
+.panel {
+  background: rgba(0,0,0,0.65);
+  backdrop-filter: blur(72px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 0 50px rgba(0,0,0,0.80), 0 0 25px rgba(16,185,129,0.15);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.panel-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(16,185,129,0.55);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(0,0,0,0.85);
+  position: relative;
+  flex-shrink: 0;
+}
+.panel-header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px; left: 0; right: 0;
+  height: 1px;
+  background: rgba(52,211,153,0.50);
+  box-shadow: 0 0 25px var(--primary-glow);
+}
+.panel-header-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0.06em;
+  filter: drop-shadow(0 0 10px rgba(52,211,153,1));
+}
+.panel-body {
+  padding: 16px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+.panel-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  color: var(--red);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+/* ================================================================
+   DONUT CHART
+   ================================================================ */
+.donut-wrap {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  flex-shrink: 0;
+}
+.donut-center {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+.donut-num {
+  font-size: 28px;
+  font-weight: 500;
+  color: var(--text-primary);
+  filter: drop-shadow(0 0 15px rgba(52,211,153,0.80)) drop-shadow(0 0 40px rgba(52,211,153,0.35));
+}
+.donut-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.12em;
+}
+.donut-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.legend-name { color: var(--text-body); }
+.legend-count { color: var(--text-muted); margin-left: auto; }
+
+/* ================================================================
+   CAPTURE TERMINAL
+   ================================================================ */
+.capture-panel {
+  background: rgba(0,0,0,0.65);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(72px);
+  box-shadow: 0 0 50px rgba(0,0,0,0.80), 0 0 25px rgba(16,185,129,0.15);
+  flex: 1;
+  min-height: 0;
+}
+.capture-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  filter: drop-shadow(0 0 10px rgba(52,211,153,1));
+  background: rgba(0,0,0,0.85);
+  position: relative;
+  flex-shrink: 0;
+}
+.capture-header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px; left: 0; right: 0;
+  height: 1px;
+  background: rgba(52,211,153,0.50);
+  box-shadow: 0 0 25px var(--primary-glow);
+}
+.capture-header-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 15px var(--primary);
+  animation: blink 1.5s step-end infinite;
+  flex-shrink: 0;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.capture-messages {
+  flex: 1;
+  padding: 12px 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 80px;
+}
+.msg { font-size: 13px; line-height: 1.5; max-width: 92%; }
+.msg-system {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  width: 100%;
+  max-width: 100%;
+}
+.msg-system::before { content: '--- '; color: var(--border); }
+.msg-system::after { content: ' ---'; color: var(--border); }
+.msg-user {
+  align-self: flex-end;
+  background: rgba(16,185,129,0.12);
+  border: 1px solid rgba(16,185,129,0.50);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  color: var(--primary);
+  filter: drop-shadow(0 0 8px rgba(52,211,153,0.50));
+}
+.msg-error {
+  color: var(--red);
+  font-size: 12px;
+  text-align: center;
+  width: 100%;
+  max-width: 100%;
+}
+.capture-input-area {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+  border-top: 1px solid rgba(16,185,129,0.25);
+}
+.cp-input {
+  background: rgba(0,0,0,0.65);
+  border: 1px solid rgba(16,185,129,0.55);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 8px 12px;
+  outline: none;
+  transition: all 0.2s;
+  width: 100%;
+  backdrop-filter: blur(48px);
+}
+.cp-input:focus {
+  background: rgba(0,0,0,0.85);
+  border-color: var(--text-primary);
+  box-shadow: 0 0 30px rgba(52,211,153,0.50), inset 0 0 12px rgba(52,211,153,0.12);
+}
+.cp-input::placeholder { color: rgba(5,150,105,0.55); }
+.send-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.send-hint { font-size: 11px; color: var(--text-dimmed); }
+
+/* ================================================================
+   QUEUE
+   ================================================================ */
+.queue-item {
+  border-left: 3px solid var(--primary);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-radius: var(--radius);
+}
+.queue-item:hover { background: rgba(6,78,59,0.18); }
+.queue-item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.queue-item-title {
+  font-size: 12px;
+  color: var(--text-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.queue-item-source {
+  font-size: 11px;
+  color: var(--text-dimmed);
+  padding-left: 2px;
+}
+
+/* ================================================================
+   ACTIVITY FEED
+   ================================================================ */
+.activity-day-sep {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--text-dimmed);
+  padding: 8px 0 4px;
+  text-align: center;
+}
+.activity-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 12px;
+}
+.activity-ts {
+  color: var(--text-dimmed);
+  min-width: 40px;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.activity-text {
+  color: var(--text-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+/* ================================================================
+   TAGS
+   ================================================================ */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border: 1px solid;
+  border-radius: var(--radius);
+  line-height: 1.4;
+  font-family: var(--font);
+  flex-shrink: 0;
+}
+.tag-idea { color: var(--cyan); background: var(--cyan-bg); border-color: var(--cyan-bd); box-shadow: 0 0 12px rgba(34,211,238,0.30); }
+.tag-meeting { color: var(--magenta); background: var(--magenta-bg); border-color: var(--magenta-bd); box-shadow: 0 0 12px rgba(244,114,182,0.30); }
+.tag-jira { color: var(--amber); background: var(--amber-bg); border-color: var(--amber-bd); box-shadow: 0 0 12px rgba(251,191,36,0.30); }
+.tag-p1 { color: var(--magenta); background: var(--magenta-bg); border-color: var(--magenta-bd); box-shadow: 0 0 15px rgba(244,114,182,0.40); }
+.tag-p2 { color: var(--cyan); background: var(--cyan-bg); border-color: var(--cyan-bd); box-shadow: 0 0 15px rgba(34,211,238,0.40); }
+.tag-p3 { color: var(--text-muted); background: transparent; border-color: var(--border); }
+
+/* ================================================================
+   BUTTONS
+   ================================================================ */
+.cmd-btn {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.cmd-btn-primary {
+  color: var(--em-100);
+  border-color: var(--text-primary);
+  background: var(--em-900);
+  box-shadow: 0 0 30px rgba(52,211,153,0.60), inset 0 0 15px rgba(52,211,153,0.40);
+  filter: drop-shadow(0 0 10px rgba(52,211,153,1));
+}
+.cmd-btn-primary:hover {
+  background: var(--em-800);
+  box-shadow: 0 0 50px rgba(52,211,153,1), inset 0 0 20px rgba(52,211,153,0.70);
+  filter: drop-shadow(0 0 15px rgba(52,211,153,1));
+}
+.cmd-btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+  filter: none;
+}
+.cmd-btn-muted {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+.cmd-btn-muted:hover {
+  border-color: var(--border-hover);
+  color: var(--text-body);
+  box-shadow: 0 0 15px rgba(52,211,153,0.20);
+}
+.kbd-badge {
+  font-size: 11px;
+  color: rgba(16,185,129,0.90);
+  font-weight: 500;
+  padding: 2px 6px;
+  border: 1px solid rgba(5,150,105,0.60);
+  background: rgba(0,0,0,0.90);
+  box-shadow: 0 0 10px rgba(16,185,129,0.40);
+  border-radius: var(--radius);
+}
+
+/* ================================================================
+   BADGE
+   ================================================================ */
+.badge-count {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  background: var(--em-950);
+  border: 1px solid rgba(16,185,129,0.70);
+  color: var(--text-primary);
+  box-shadow: 0 0 12px rgba(16,185,129,0.50);
+}
+
+/* ================================================================
+   SECTION LABEL
+   ================================================================ */
+.section-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  filter: var(--ds-sm);
+}
+.section-label::before { content: '// '; color: var(--primary); }
+
+/* ================================================================
+   SKELETON LOADING
+   ================================================================ */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.35; }
+}
+.skeleton {
+  background: rgba(16,185,129,0.12);
+  border: 1px solid rgba(16,185,129,0.20);
+  border-radius: var(--radius);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+.skeleton-kpi { height: 100px; }
+.skeleton-panel { height: 200px; }
+
+/* ================================================================
+   STATUS FLASH
+   ================================================================ */
+@keyframes status-flash {
+  0% { background: rgba(52,211,153,0.30); }
+  100% { background: transparent; }
+}
+.status-flash { animation: status-flash 0.8s ease-out; }
+
+/* ================================================================
+   EMPTY / ERROR TEXT
+   ================================================================ */
+.empty-text {
+  font-size: 12px;
+  color: var(--text-dimmed);
+  text-align: center;
+  padding: 20px;
+  letter-spacing: 0.08em;
+}
+
+/* Health Score widget */
+.status-health { cursor: pointer; }
+.status-health:hover { opacity: 0.85; }
+#health-sparkline { display: inline-block; }
+
+/* Health Breakdown Panel */
+.health-breakdown-panel {
+  position: absolute;
+  top: 32px;
+  left: 0;
+  right: 0;
+  z-index: 6;
+  background: rgba(10, 14, 20, 0.95);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(0, 255, 65, 0.15);
+  padding: 12px 16px;
+  max-height: 420px;
+  overflow-y: auto;
+  animation: hbp-slide 0.2s ease-out;
+}
+@keyframes hbp-slide {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.hbp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.hbp-title {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: rgba(255,255,255,0.6);
+}
+.hbp-score {
+  font-size: 18px;
+  font-weight: bold;
+  font-family: 'JetBrains Mono', monospace;
+}
+.hbp-category {
+  display: flex;
+  align-items: center;
+  padding: 6px 0;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.hbp-category:hover { background: rgba(255,255,255,0.03); }
+.hbp-cat-icon { width: 20px; text-align: center; margin-right: 8px; font-size: 13px; }
+.hbp-cat-name { flex: 1; font-size: 12px; color: rgba(255,255,255,0.8); }
+.hbp-cat-count { font-size: 12px; font-family: 'JetBrains Mono', monospace; margin-right: 8px; }
+.hbp-cat-penalty { font-size: 11px; color: #ff6b6b; margin-right: 8px; font-family: 'JetBrains Mono', monospace; }
+.hbp-cat-arrow { font-size: 10px; color: rgba(255,255,255,0.3); transition: transform 0.15s; }
+.hbp-cat-arrow.expanded { transform: rotate(90deg); }
+.hbp-files {
+  display: none;
+  padding: 4px 0 4px 28px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.hbp-files.show { display: block; }
+.hbp-file {
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  color: rgba(255,255,255,0.5);
+  padding: 2px 0;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hbp-file:hover { color: #00ff41; }
+</style>
+</head>
+<body>
+
+<div id="app" v-cloak>
+  <app-sidebar active="overview"></app-sidebar>
+  <div class="page-content">
+    <main class="cmd-layout">
+
+      <!-- ZONE A: System Status Strip -->
+      <div class="cmd-status-strip" id="status-strip">
+        <span class="section-label">SYSTEM</span>
+        <div class="status-indicator" id="si-bot">
+          <span class="status-dot dot-muted"></span>
+          <span class="status-label">BOT</span>
+          <span class="status-value">--</span>
+        </div>
+        <div class="status-indicator" id="si-vault">
+          <span class="status-dot dot-muted"></span>
+          <span class="status-label">VAULT</span>
+          <span class="status-value">--</span>
+        </div>
+        <div class="status-indicator" id="si-jira">
+          <span class="status-dot dot-muted"></span>
+          <span class="status-label">JIRA SYNC</span>
+          <span class="status-value">--</span>
+        </div>
+        <div class="status-indicator" id="si-stt">
+          <span class="status-dot dot-muted"></span>
+          <span class="status-label">STT</span>
+          <span class="status-value">--</span>
+        </div>
+        <div class="status-indicator status-health" id="si-health" onclick="toggleHealthPanel()" title="Vault Health Score">
+          <span class="status-dot dot-muted" id="health-dot"></span>
+          <span class="status-label">HEALTH</span>
+          <span class="status-value" id="health-score">--</span>
+          <canvas id="health-sparkline" width="56" height="20" style="vertical-align:middle;margin-left:4px;"></canvas>
+        </div>
+        <span class="status-refresh-info">// AUTO 30s | <span id="last-refresh">--:--</span></span>
+      </div>
+
+      <!-- Health Breakdown Panel (BL-114) -->
+      <div class="health-breakdown-panel" id="health-panel" style="display:none;">
+        <div class="hbp-header">
+          <span class="hbp-title">HEALTH BREAKDOWN</span>
+          <span class="hbp-score" id="hbp-score">--</span>
+        </div>
+        <div class="hbp-body" id="hbp-body"></div>
+      </div>
+
+      <!-- ZONE B: KPI Row -->
+      <div class="cmd-kpi-row" id="kpi-row">
+        <div class="skeleton skeleton-kpi"></div>
+        <div class="skeleton skeleton-kpi"></div>
+        <div class="skeleton skeleton-kpi"></div>
+        <div class="skeleton skeleton-kpi"></div>
+      </div>
+
+      <!-- ZONE C: Main Body -->
+      <div class="cmd-body">
+
+        <!-- Left Column -->
+        <div class="cmd-col-left">
+          <!-- Domain Donut Chart -->
+          <div class="panel" id="domain-panel">
+            <div class="panel-header">
+              <div class="panel-header-title">
+                <span class="capture-header-dot"></span>
+                DOMAIN DISTRIBUTION
+              </div>
+            </div>
+            <div class="panel-body" id="domain-body" style="display:flex;align-items:center;gap:24px;">
+              <div class="skeleton skeleton-panel" style="width:160px;height:160px;border-radius:50%;"></div>
+            </div>
+          </div>
+
+          <!-- Capture Terminal -->
+          <div class="capture-panel">
+            <div class="capture-header">
+              <span class="capture-header-dot"></span>
+              QUICK CAPTURE
+              <span class="kbd-badge" style="margin-left:auto">N</span>
+            </div>
+            <div class="capture-messages" id="capture-log">
+              <div class="msg msg-system">session started</div>
+            </div>
+            <div class="capture-input-area">
+              <input type="text" class="cp-input" id="capture-text" placeholder="> enter idea..." autocomplete="off" />
+              <div class="send-row">
+                <span class="send-hint">Enter to send</span>
+                <button class="cmd-btn cmd-btn-primary" id="capture-btn" onclick="submitCapture()">[CAPTURE]</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column -->
+        <div class="cmd-col-right">
+          <!-- Today's Queue -->
+          <div class="panel" id="queue-panel">
+            <div class="panel-header">
+              <div class="panel-header-title">
+                <span class="capture-header-dot"></span>
+                TODAY'S QUEUE
+              </div>
+              <span class="badge-count" id="queue-count">0</span>
+            </div>
+            <div class="panel-body" id="queue-body">
+              <div class="skeleton skeleton-panel"></div>
+            </div>
+          </div>
+
+          <!-- Activity Feed -->
+          <div class="panel" id="activity-panel">
+            <div class="panel-header">
+              <div class="panel-header-title">
+                <span class="capture-header-dot"></span>
+                ACTIVITY LOG
+              </div>
+            </div>
+            <div class="panel-body" id="activity-body" style="max-height:320px;">
+              <div class="skeleton skeleton-panel"></div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /cmd-body -->
+    </main>
+  </div>
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="api.js"></script>
+<script src="components.js"></script>
+<script>
+// ================================================================
+// COMMAND CENTER — JS Logic
+// ================================================================
+
+// API base from api.js
+var API = (window.apiBase || 'http://localhost:8000') + '/api/v1';
+
+// Previous status values for flash detection
+var _prevStatus = {};
+
+// Cached ideas to avoid duplicate /ideas API calls
+var _cachedIdeas = null;
+
+// ================================================================
+// UTILITIES
+// ================================================================
+
+function animateCounter(el, target, duration) {
+  duration = duration || 600;
+  var start = 0;
+  var startTime = performance.now();
+  function update(currentTime) {
+    var elapsed = currentTime - startTime;
+    var progress = Math.min(elapsed / duration, 1);
+    var eased = 1 - Math.pow(1 - progress, 3);
+    var current = Math.round(start + (target - start) * eased);
+    el.textContent = current;
+    if (progress < 1) {
+      requestAnimationFrame(update);
+    }
+  }
+  requestAnimationFrame(update);
+}
+
+function flashElement(el) {
+  el.classList.add('status-flash');
+  setTimeout(function() { el.classList.remove('status-flash'); }, 800);
+}
+
+function relTime(isoStr) {
+  if (!isoStr) return '--';
+  var diff = (Date.now() - new Date(isoStr).getTime()) / 1000;
+  if (diff < 60) return 'только что';
+  if (diff < 3600) return Math.round(diff / 60) + ' мин назад';
+  if (diff < 86400) return Math.round(diff / 3600) + ' ч назад';
+  return Math.round(diff / 86400) + ' д назад';
+}
+
+function updateRefreshTimestamp() {
+  var now = new Date();
+  var el = document.getElementById('last-refresh');
+  if (el) el.textContent = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+}
+
+async function fetchWithTimeout(url, options, timeout) {
+  timeout = timeout || 10000;
+  var controller = new AbortController();
+  var id = setTimeout(function() { controller.abort(); }, timeout);
+  options = options || {};
+  options.signal = controller.signal;
+  try {
+    var response = await fetch(url, options);
+    clearTimeout(id);
+    return response;
+  } catch (err) {
+    clearTimeout(id);
+    throw err;
+  }
+}
+
+// ================================================================
+// FETCH: System Status (Zone A)
+// ================================================================
+
+async function fetchSystemStatus() {
+  var botEl = document.getElementById('si-bot');
+  var vaultEl = document.getElementById('si-vault');
+  var jiraEl = document.getElementById('si-jira');
+  var sttEl = document.getElementById('si-stt');
+
+  function setIndicator(el, dotClass, value) {
+    if (!el) return;
+    var dot = el.querySelector('.status-dot');
+    var val = el.querySelector('.status-value');
+    var oldClass = dot.className.replace('status-dot ', '').trim();
+    if (oldClass !== dotClass) {
+      dot.className = 'status-dot ' + dotClass;
+      flashElement(el);
+    }
+    if (val) val.textContent = value;
+  }
+
+  function timeDotClass(isoStr) {
+    if (!isoStr) return 'dot-offline';
+    var diffH = (Date.now() - new Date(isoStr).getTime()) / 3600000;
+    if (diffH < 1) return 'dot-online';
+    if (diffH < 24) return 'dot-active';
+    return 'dot-offline';
+  }
+
+  function timeValue(isoStr) {
+    if (!isoStr) return 'STALE';
+    var diffH = (Date.now() - new Date(isoStr).getTime()) / 3600000;
+    if (diffH < 1) return relTime(isoStr);
+    if (diffH < 24) return relTime(isoStr);
+    return 'STALE';
+  }
+
+  try {
+    var r = await fetchWithTimeout(API + '/system/status');
+    if (!r.ok) throw new Error('status ' + r.status);
+    var d = await r.json();
+
+    setIndicator(botEl, d.bot_online ? 'dot-online' : 'dot-offline', d.bot_online ? 'ONLINE' : 'OFFLINE');
+    setIndicator(vaultEl, timeDotClass(d.vault_last_updated), timeValue(d.vault_last_updated));
+    setIndicator(jiraEl, timeDotClass(d.jira_last_sync), timeValue(d.jira_last_sync));
+    setIndicator(sttEl, d.stt_enabled ? 'dot-online' : 'dot-muted', d.stt_enabled ? 'ON' : 'OFF');
+  } catch (e) {
+    setIndicator(botEl, 'dot-offline', 'OFFLINE');
+    setIndicator(vaultEl, 'dot-offline', 'ERR');
+    setIndicator(jiraEl, 'dot-offline', 'ERR');
+    setIndicator(sttEl, 'dot-muted', 'ERR');
+  }
+
+  updateRefreshTimestamp();
+}
+
+// ================================================================
+// FETCH: Idea Funnel (Zone B) + Domain Donut
+// ================================================================
+
+async function fetchIdeaFunnel() {
+  var kpiRow = document.getElementById('kpi-row');
+  if (!kpiRow) return;
+
+  try {
+    var r = await fetchWithTimeout(API + '/ideas');
+    if (!r.ok) throw new Error('not ok');
+    var ideas = await r.json();
+    _cachedIdeas = ideas;
+
+    var statuses = [
+      { key: 'Новая', kpi: 'm-kpi-cyan', bgClass: 'cyan', label: 'НОВАЯ', link: 'Новая' },
+      { key: 'Проверка гипотезы', kpi: 'm-kpi-amber', bgClass: 'amber', label: 'ПРОВЕРКА', link: 'Проверка гипотезы' },
+      { key: 'Готова к производству', kpi: 'm-kpi-green', bgClass: 'green', label: 'ГОТОВА', link: 'Готова к производству' },
+      { key: 'Отсев', kpi: 'm-kpi-muted', bgClass: 'muted', label: 'ОТСЕВ', link: 'Отсев' }
+    ];
+
+    var grouped = {};
+    statuses.forEach(function(s) { grouped[s.key] = []; });
+
+    ideas.forEach(function(idea) {
+      var s = idea.status;
+      if (grouped[s]) {
+        grouped[s].push(idea);
+      }
+    });
+
+    kpiRow.innerHTML = statuses.map(function(s) {
+      var group = grouped[s.key];
+      var count = group.length;
+      var avg = count > 0
+        ? Math.round(group.reduce(function(sum, i) { return sum + (i.readiness || 0); }, 0) / count)
+        : 0;
+      var pct = avg + '%';
+      var href = 'ideas.html?status=' + encodeURIComponent(s.link);
+      var deltaClass = avg >= 75 ? 'm-delta-up' : avg >= 40 ? 'm-delta-mid' : 'm-delta-low';
+      return '<div class="m-kpi ' + s.kpi + '" onclick="location.href=\'' + href + '\'">' +
+        '<div class="m-kpi-label">' + s.label + '</div>' +
+        '<div class="m-kpi-value" data-target="' + count + '">0</div>' +
+        '<div class="m-kpi-bar"><div class="m-kpi-bar-fill bg-bar-' + s.bgClass + '" style="width:' + pct + '"></div></div>' +
+        '<div class="m-kpi-foot">' +
+          '<span class="m-kpi-foot-lbl">avg readiness</span>' +
+          '<span class="m-delta ' + deltaClass + '">' + pct + '</span>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    // Animate counters
+    var valueEls = kpiRow.querySelectorAll('.m-kpi-value');
+    valueEls.forEach(function(el) {
+      var target = parseInt(el.getAttribute('data-target'), 10);
+      animateCounter(el, target, 600);
+    });
+
+    // Also render donut from same data
+    renderDonut(ideas);
+  } catch (e) {
+    kpiRow.innerHTML = statuses ? statuses.map(function(s) {
+      return '<div class="m-kpi m-kpi-muted"><div class="m-kpi-label">ERROR</div><div class="m-kpi-value">--</div></div>';
+    }).join('') : '<div class="empty-text">// ERROR</div>';
+  }
+}
+
+// ================================================================
+// RENDER: Domain Donut Chart
+// ================================================================
+
+function renderDonut(ideas) {
+  var body = document.getElementById('domain-body');
+  if (!body) return;
+
+  var RADIUS = 60;
+  var CX = 80;
+  var CY = 80;
+  var STROKE = 20;
+  var CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+
+  var COLORS = [
+    { color: '#22d3ee', glow: 'rgba(34,211,238,0.60)' },
+    { color: '#f472b6', glow: 'rgba(244,114,182,0.60)' },
+    { color: '#fbbf24', glow: 'rgba(251,191,36,0.60)' },
+    { color: '#a78bfa', glow: 'rgba(167,139,250,0.60)' },
+    { color: '#34d399', glow: 'rgba(52,211,153,0.60)' },
+    { color: '#facc15', glow: 'rgba(250,204,21,0.60)' }
+  ];
+
+  // Group by domain
+  var domainMap = {};
+  ideas.forEach(function(idea) {
+    var domain = idea.domain || 'Unknown';
+    if (!domainMap[domain]) domainMap[domain] = 0;
+    domainMap[domain]++;
+  });
+
+  var domains = Object.keys(domainMap).map(function(name) {
+    return { name: name, count: domainMap[name] };
+  });
+  domains.sort(function(a, b) { return b.count - a.count; });
+
+  var total = ideas.length;
+
+  if (total === 0) {
+    body.innerHTML = '<div class="empty-text">// NO DATA</div>';
+    return;
+  }
+
+  // Build SVG circles
+  var circles = '<circle cx="' + CX + '" cy="' + CY + '" r="' + RADIUS + '" fill="none" stroke="rgba(16,185,129,0.10)" stroke-width="' + STROKE + '" />';
+  var offset = 0;
+
+  domains.forEach(function(d, i) {
+    var fraction = d.count / total;
+    var length = fraction * CIRCUMFERENCE;
+    var dasharray = length + ' ' + (CIRCUMFERENCE - length);
+    var dashoffset = -offset;
+    var c = COLORS[i % COLORS.length];
+
+    circles += '<circle cx="' + CX + '" cy="' + CY + '" r="' + RADIUS + '" fill="none" ' +
+      'stroke="' + c.color + '" stroke-width="' + STROKE + '" ' +
+      'stroke-dasharray="' + dasharray + '" ' +
+      'stroke-dashoffset="' + dashoffset + '" ' +
+      'style="filter:drop-shadow(0 0 8px ' + c.glow + ');transition:stroke-dashoffset 0.6s ease;" />';
+
+    offset += length;
+  });
+
+  var svg = '<svg viewBox="0 0 160 160" width="160" height="160" style="transform:rotate(-90deg)">' + circles + '</svg>';
+
+  // Legend
+  var legend = domains.map(function(d, i) {
+    var c = COLORS[i % COLORS.length];
+    return '<div class="legend-item">' +
+      '<span class="legend-dot" style="background:' + c.color + ';box-shadow:0 0 10px ' + c.color + ';"></span>' +
+      '<span class="legend-name">' + d.name + '</span>' +
+      '<span class="legend-count">' + d.count + '</span>' +
+    '</div>';
+  }).join('');
+
+  body.innerHTML =
+    '<div class="donut-wrap">' +
+      svg +
+      '<div class="donut-center">' +
+        '<div class="donut-num" id="donut-total">0</div>' +
+        '<div class="donut-label">// TOTAL</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="donut-legend">' + legend + '</div>';
+
+  // Animate center number
+  var totalEl = document.getElementById('donut-total');
+  if (totalEl) animateCounter(totalEl, total, 600);
+}
+
+// ================================================================
+// FETCH: Today's Queue
+// ================================================================
+
+async function fetchQueue() {
+  var body = document.getElementById('queue-body');
+  var countEl = document.getElementById('queue-count');
+  if (!body) return;
+
+  try {
+    var r = await fetchWithTimeout(API + '/overview/queue');
+    if (!r.ok) throw new Error('not ok');
+    var items = await r.json();
+
+    if (countEl) countEl.textContent = items.length;
+
+    if (!items.length) {
+      body.innerHTML = '<div class="empty-text">// ALL CLEAR</div>';
+      return;
+    }
+
+    var priorityTags = {
+      1: 'tag-p1',
+      2: 'tag-p2',
+      3: 'tag-p3'
+    };
+
+    body.innerHTML = items.slice(0, 5).map(function(item) {
+      var tagClass = priorityTags[item.priority] || 'tag-p3';
+      var typeLabel = item.type === 'meeting' ? 'MEET' : item.type === 'task' ? 'TASK' : 'IDEA';
+      return '<div class="queue-item border-priority-p' + (item.priority || 3) + '" onclick="location.href=\'' + (item.link || '#') + '\'">' +
+        '<div class="queue-item-header">' +
+          '<span class="tag ' + tagClass + '">P' + (item.priority || 3) + '</span>' +
+          '<span class="queue-item-title">' + (item.title || '') + '</span>' +
+        '</div>' +
+        '<div class="queue-item-source">' + (item.reason || item.type || '') + '</div>' +
+      '</div>';
+    }).join('');
+  } catch (e) {
+    if (countEl) countEl.textContent = '0';
+    body.innerHTML = '<div class="panel-error"><span>// ERROR: failed to load</span><button class="cmd-btn cmd-btn-muted" onclick="fetchQueue()">[RETRY]</button></div>';
+  }
+}
+
+// ================================================================
+// FETCH: Activity Feed
+// ================================================================
+
+async function fetchActivityFeed() {
+  var body = document.getElementById('activity-body');
+  if (!body) return;
+
+  try {
+    var ideas, meetings;
+    if (_cachedIdeas) {
+      ideas = _cachedIdeas;
+      var mr = await fetchWithTimeout(API + '/meetings');
+      meetings = mr.ok ? await mr.json() : [];
+    } else {
+      var results = await Promise.all([
+        fetchWithTimeout(API + '/ideas'),
+        fetchWithTimeout(API + '/meetings')
+      ]);
+      var ir = results[0];
+      var mr = results[1];
+      ideas = ir.ok ? await ir.json() : [];
+      meetings = mr.ok ? await mr.json() : [];
+    }
+
+    var events = [];
+
+    ideas.forEach(function(i) {
+      events.push({
+        type: 'IDEA',
+        tagClass: 'tag-idea',
+        title: i.title || i.filename || '',
+        ts: i.updated || i.date || '',
+        link: 'ideas.html'
+      });
+    });
+
+    meetings.forEach(function(m) {
+      events.push({
+        type: 'MEET',
+        tagClass: 'tag-meeting',
+        title: m.title || m.filename || '',
+        ts: m.date || '',
+        link: 'board.html'
+      });
+    });
+
+    events.sort(function(a, b) { return new Date(b.ts) - new Date(a.ts); });
+    var top15 = events.slice(0, 15);
+
+    function dayLabel(isoStr) {
+      if (!isoStr) return 'РАНЕЕ';
+      var d = new Date(isoStr);
+      var today = new Date();
+      var yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      if (d.toDateString() === today.toDateString()) return 'TODAY';
+      if (d.toDateString() === yesterday.toDateString()) return 'YESTERDAY';
+      return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+
+    function fmtTime(isoStr) {
+      if (!isoStr) return '--:--';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(isoStr)) return '--:--';
+      var d = new Date(isoStr);
+      if (isNaN(d.getTime())) return '--:--';
+      return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    var html = '';
+    var lastDay = null;
+    for (var idx = 0; idx < top15.length; idx++) {
+      var ev = top15[idx];
+      var day = dayLabel(ev.ts);
+      if (day !== lastDay) {
+        html += '<div class="activity-day-sep">--- ' + day + ' ---</div>';
+        lastDay = day;
+      }
+      html += '<div class="activity-entry">' +
+        '<span class="activity-ts">' + fmtTime(ev.ts) + '</span>' +
+        '<span class="tag ' + ev.tagClass + '">' + ev.type + '</span>' +
+        '<span class="activity-text">' + ev.title + '</span>' +
+      '</div>';
+    }
+
+    if (!top15.length) html = '<div class="empty-text">// NO ACTIVITY</div>';
+    body.innerHTML = html;
+  } catch (e) {
+    body.innerHTML = '<div class="panel-error"><span>// ERROR: failed to load</span><button class="cmd-btn cmd-btn-muted" onclick="fetchActivityFeed()">[RETRY]</button></div>';
+  }
+}
+
+// ================================================================
+// SUBMIT: Capture
+// ================================================================
+
+async function submitCapture() {
+  var textEl = document.getElementById('capture-text');
+  var logEl = document.getElementById('capture-log');
+  var btn = document.getElementById('capture-btn');
+  if (!textEl || !logEl) return;
+
+  var text = textEl.value.trim();
+  if (!text) return;
+
+  // Add user message
+  var userMsg = document.createElement('div');
+  userMsg.className = 'msg msg-user';
+  userMsg.textContent = text;
+  logEl.appendChild(userMsg);
+  logEl.scrollTop = logEl.scrollHeight;
+
+  textEl.value = '';
+  if (btn) { btn.disabled = true; btn.textContent = 'SENDING...'; }
+
+  try {
+    var r = await fetchWithTimeout(API + '/capture', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'idea', text: text })
+    });
+    if (!r.ok) throw new Error('not ok');
+    var result = await r.json();
+    var id = result.filename || result.id || 'captured';
+
+    var sysMsg = document.createElement('div');
+    sysMsg.className = 'msg msg-system';
+    sysMsg.textContent = 'CAPTURED: ' + id;
+    logEl.appendChild(sysMsg);
+    logEl.scrollTop = logEl.scrollHeight;
+
+    // Refresh KPI
+    fetchIdeaFunnel();
+  } catch (e) {
+    var errMsg = document.createElement('div');
+    errMsg.className = 'msg msg-error';
+    errMsg.textContent = '// ERROR: could not save';
+    logEl.appendChild(errMsg);
+    logEl.scrollTop = logEl.scrollHeight;
+
+    // Preserve text on error
+    textEl.value = text;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '[CAPTURE]'; }
+  }
+}
+
+// ================================================================
+// FETCH ALL + TIMERS + KEYBOARD
+// ================================================================
+
+function fetchAll() {
+  fetchSystemStatus();
+  fetchIdeaFunnel();
+  fetchQueue();
+
+  var captureActive = document.activeElement && document.activeElement.id === 'capture-text';
+  if (!captureActive) fetchActivityFeed();
+
+  fetchHealthScore();
+}
+
+// Keyboard handler
+document.addEventListener('keydown', function(e) {
+  var tag = document.activeElement ? document.activeElement.tagName : '';
+  if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey && tag !== 'TEXTAREA' && tag !== 'INPUT') {
+    e.preventDefault();
+    var ct = document.getElementById('capture-text');
+    if (ct) ct.focus();
+  }
+  if (e.key === 'Enter' && !e.shiftKey && document.activeElement && document.activeElement.id === 'capture-text') {
+    e.preventDefault();
+    submitCapture();
+  }
+});
+
+// Timers
+setInterval(fetchSystemStatus, 30000);
+setInterval(function() {
+  fetchIdeaFunnel();
+  fetchQueue();
+  var captureActive = document.activeElement && document.activeElement.id === 'capture-text';
+  if (!captureActive) fetchActivityFeed();
+  fetchHealthScore();
+  updateRefreshTimestamp();
+}, 60000);
+
+// Vue mount (sidebar only)
+var vueApp = Vue.createApp({});
+registerComponents(vueApp);
+applyPageTheme().then(function() {
+  vueApp.mount('#app');
+});
+
+/* ---------- Health Score (BL-114) ---------- */
+var _healthData = null;
+
+function _healthColor(grade) {
+  var isLight = document.documentElement.classList.contains('theme-light');
+  if (grade === 'healthy') return isLight ? '#2e7d32' : '#00ff41';
+  if (grade === 'warning') return isLight ? '#f57c00' : '#ffaa00';
+  return isLight ? '#d32f2f' : '#ff4444';
+}
+
+function _sparklineColor(trendUp) {
+  var isLight = document.documentElement.classList.contains('theme-light');
+  return trendUp
+    ? (isLight ? '#2e7d32' : '#00ff41')
+    : (isLight ? '#d32f2f' : '#ff4444');
+}
+
+function fetchHealthScore() {
+  if (typeof api === 'undefined' || !api.vaultHealth) {
+    console.log('[health] api.vaultHealth not available');
+    return;
+  }
+  api.vaultHealth().then(function(data) {
+    _healthData = data;
+    console.log('[health] score=' + data.score + ' grade=' + data.grade);
+
+    // Update dot color
+    var dot = document.getElementById('health-dot');
+    if (dot) {
+      dot.className = 'status-dot';
+      if (data.grade === 'healthy') dot.classList.add('dot-online');
+      else if (data.grade === 'warning') dot.classList.add('dot-active');
+      else dot.classList.add('dot-offline');
+    }
+
+    // Update score value
+    var scoreEl = document.getElementById('health-score');
+    if (scoreEl) scoreEl.textContent = data.score;
+
+    // Update tooltip
+    var widget = document.getElementById('si-health');
+    if (widget && data.calculated_at) {
+      var calcDate = new Date(data.calculated_at);
+      var hh = String(calcDate.getHours()).padStart(2, '0');
+      var mm = String(calcDate.getMinutes()).padStart(2, '0');
+      widget.title = 'Health Score: ' + data.score + '/100 (' + data.grade.toUpperCase() + ')\nОбновлено: ' + hh + ':' + mm;
+    }
+
+    // Render sparkline
+    renderHealthSparkline(data.trend_7d || []);
+  }).catch(function(err) {
+    if (err.name !== 'AbortError') {
+      console.error('[health] fetch failed:', err.message);
+    }
+  });
+}
+
+function renderHealthSparkline(points) {
+  var canvas = document.getElementById('health-sparkline');
+  if (!canvas || !canvas.getContext) return;
+  var ctx = canvas.getContext('2d');
+  var w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  if (!points || points.length < 2) return;
+
+  var scores = points.map(function(p) { return p.score; });
+  var min = Math.min.apply(null, scores);
+  var max = Math.max.apply(null, scores);
+  var range = max - min || 1;
+
+  var padding = 2;
+  var plotW = w - padding * 2;
+  var plotH = h - padding * 2;
+
+  // Determine trend color
+  var trendUp = scores[scores.length - 1] >= scores[0];
+  var color = _sparklineColor(trendUp);
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+
+  for (var i = 0; i < scores.length; i++) {
+    var x = padding + (i / (scores.length - 1)) * plotW;
+    var y = padding + plotH - ((scores[i] - min) / range) * plotH;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Draw dots
+  ctx.fillStyle = color;
+  for (var j = 0; j < scores.length; j++) {
+    var dx = padding + (j / (scores.length - 1)) * plotW;
+    var dy = padding + plotH - ((scores[j] - min) / range) * plotH;
+    ctx.beginPath();
+    ctx.arc(dx, dy, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function toggleHealthPanel() {
+  var panel = document.getElementById('health-panel');
+  if (!panel) return;
+  if (panel.style.display === 'none' || !panel.style.display) {
+    renderHealthBreakdown();
+    panel.style.display = 'block';
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+function renderHealthBreakdown() {
+  var body = document.getElementById('hbp-body');
+  var scoreEl = document.getElementById('hbp-score');
+  if (!body || !_healthData) return;
+
+  var bd = _healthData.breakdown || {};
+  if (scoreEl) {
+    scoreEl.textContent = _healthData.score + '/100';
+    scoreEl.style.color = _healthColor(_healthData.grade);
+  }
+
+  var categories = [
+    { key: 'broken_links', icon: '🔗', name: 'Broken Links', weight: 3 },
+    { key: 'orphan_pages', icon: '📄', name: 'Orphan Pages', weight: 5 },
+    { key: 'dead_ends', icon: '🚫', name: 'Dead-ends', weight: 1 },
+    { key: 'stale_drafts', icon: '⏳', name: 'Stale Drafts (>30d)', weight: 1 },
+    { key: 'unsorted_misc', icon: '📦', name: 'Unsorted Misc (>7d)', weight: 0.5 },
+    { key: 'ingest_backlog', icon: '📥', name: 'Ingest Backlog', weight: 0.2 },
+    { key: 'description_coverage', icon: '📝', name: 'Description Coverage', weight: null }
+  ];
+
+  var html = '';
+  categories.forEach(function(cat, idx) {
+    var data = bd[cat.key];
+    if (!data) return;
+
+    var count, penaltyStr;
+    if (cat.key === 'description_coverage') {
+      count = (data.pct !== undefined ? data.pct + '%' : '—');
+      penaltyStr = data.penalty > 0 ? '-' + data.penalty : '0';
+    } else {
+      count = data.count !== undefined ? data.count : '—';
+      penaltyStr = data.penalty > 0 ? '-' + data.penalty : '0';
+    }
+
+    var items = data.items || [];
+    var hasItems = items.length > 0;
+    var arrowHtml = hasItems ? '<span class="hbp-cat-arrow" id="hbp-arrow-' + idx + '">▶</span>' : '';
+
+    html += '<div class="hbp-category" ' + (hasItems ? 'onclick="toggleHbpCategory(' + idx + ')"' : '') + '>';
+    html += '<span class="hbp-cat-icon">' + cat.icon + '</span>';
+    html += '<span class="hbp-cat-name">' + cat.name + '</span>';
+    html += '<span class="hbp-cat-count">' + count + '</span>';
+    html += '<span class="hbp-cat-penalty">' + penaltyStr + '</span>';
+    html += arrowHtml;
+    html += '</div>';
+
+    if (hasItems) {
+      html += '<div class="hbp-files" id="hbp-files-' + idx + '">';
+      items.forEach(function(item) {
+        var filePath = item.file || item.path || '';
+        var label = filePath;
+        if (item.days_old) label += ' (' + item.days_old + 'd)';
+        if (item.domain) label += ' [' + item.domain + ']';
+        if (item.line) label += ':' + item.line;
+
+        var clickTarget = getHealthFileLink(filePath, cat.key);
+        if (clickTarget) {
+          html += '<div class="hbp-file" onclick="window.location.href=\'' + clickTarget + '\'" title="' + filePath + '">' + label + '</div>';
+        } else {
+          html += '<div class="hbp-file" title="' + filePath + '">' + label + '</div>';
+        }
+      });
+      html += '</div>';
+    }
+  });
+
+  body.innerHTML = html;
+}
+
+function toggleHbpCategory(idx) {
+  var files = document.getElementById('hbp-files-' + idx);
+  var arrow = document.getElementById('hbp-arrow-' + idx);
+  if (!files) return;
+  var showing = files.classList.toggle('show');
+  if (arrow) {
+    if (showing) arrow.classList.add('expanded');
+    else arrow.classList.remove('expanded');
+  }
+}
+
+function getHealthFileLink(filePath, category) {
+  if (!filePath) return '';
+  if (filePath.indexOf('/ideas/') !== -1) return 'ideas.html';
+  if (filePath.indexOf('/tasks/') !== -1) return 'board.html';
+  if (filePath.indexOf('/epics/') !== -1) return 'roadmap.html';
+  if (filePath.indexOf('/prds/') !== -1) return 'ideas.html';
+  return '';
+}
+
+// Close health panel on outside click
+document.addEventListener('click', function(e) {
+  var panel = document.getElementById('health-panel');
+  var widget = document.getElementById('si-health');
+  if (panel && panel.style.display !== 'none') {
+    if (!panel.contains(e.target) && !widget.contains(e.target)) {
+      panel.style.display = 'none';
+    }
+  }
+});
+
+// Initial fetch
+fetchAll();
+</script>
+</body>
+</html>

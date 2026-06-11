@@ -1,0 +1,105 @@
+version: "3.9"
+
+services:
+  pm-bot:
+    build:
+      context: .
+      dockerfile: pm-bot/Dockerfile
+    pull_policy: if_not_present
+    container_name: pm-bot
+    restart: unless-stopped
+    shm_size: '512m'
+    ipc: host
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+      - "8080:8080"
+    volumes:
+      - ${VAULT_PATH}:/vault
+      - ${TRANSCRIPTS_INBOX}:/transcripts/inbox
+      - ./pm-bot/web:/web
+    command: >
+      sh -c "python -m http.server 8080 --directory /web &
+             python -m app.main"
+    environment:
+      - TZ=Europe/Moscow
+      - PYTHONUNBUFFERED=1
+      - VAULT_PATH=/vault
+      - PIPELINE_API_URL=http://idea-pipeline:8100
+      - JIRA_URL=${JIRA_URL}
+      - JIRA_TOKEN=${JIRA_TOKEN}
+      - STT_ENABLED=1
+      - CT2_FORCE_CPU_ISA=GENERIC
+    depends_on:
+      - knowledge-engine
+      - idea-pipeline
+
+  knowledge-engine:
+    build:
+      context: .
+      dockerfile: knowledge-engine/Dockerfile
+    pull_policy: if_not_present
+    container_name: knowledge-engine
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ${VAULT_PATH}:/vault
+    environment:
+      - TZ=Europe/Moscow
+      - PYTHONUNBUFFERED=1
+      - VAULT_PATH=/vault
+      - JIRA_URL=${JIRA_URL}
+      - JIRA_TOKEN=${JIRA_TOKEN}
+    command: ["python", "-m", "knowledge_engine", "watch"]
+
+  ke-cron:
+    build:
+      context: .
+      dockerfile: knowledge-engine/Dockerfile
+    pull_policy: if_not_present
+    container_name: ke-cron
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ${VAULT_PATH}:/vault
+    environment:
+      - TZ=Europe/Moscow
+      - PYTHONUNBUFFERED=1
+      - VAULT_PATH=/vault
+      - JIRA_URL=${JIRA_URL}
+      - JIRA_TOKEN=${JIRA_TOKEN}
+      - JIRA_SYNC_CRON=${JIRA_SYNC_CRON:-0 */3 * * *}
+    entrypoint: >
+      sh -c "
+        env | grep -E '^(TZ|YANDEX_|CLAUDE_|BOT_|ALLOWED_|VAULT_|JIRA_|PYTHONUNBUFFERED)' >> /etc/environment &&
+        echo '0 9 * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine synthesize --notify >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-synth &&
+        echo '15 * * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine fetch-meetings --notify >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-fetch &&
+        echo \"$JIRA_SYNC_CRON\"' root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine jira-sync --notify >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-jira &&
+        echo '0 4 * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine health --save >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-health &&
+        chmod 0644 /etc/cron.d/ke-synth /etc/cron.d/ke-fetch /etc/cron.d/ke-jira /etc/cron.d/ke-health &&
+        touch /var/log/ke-cron.log &&
+        cron && tail -f /var/log/ke-cron.log
+      "
+
+  idea-pipeline:
+    build:
+      context: .
+      dockerfile: idea-pipeline/Dockerfile
+    pull_policy: if_not_present
+    container_name: idea-pipeline
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ${VAULT_PATH}:/vault
+    ports:
+      - "8100:8100"
+    environment:
+      - TZ=Europe/Moscow
+      - PYTHONUNBUFFERED=1
+      - VAULT_PATH=/vault
+      - PIPELINE_HOST=0.0.0.0
+      - PIPELINE_PORT=8100

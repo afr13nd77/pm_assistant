@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  pm-bot:
+    build: .
+    container_name: pm-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+      - "8080:8080"
+    volumes:
+      # Монтируем Obsidian vault — измени путь на свой
+      - ${VAULT_PATH}:/vault
+      # Папка для входящих транскриптов Яндекс Телемост
+      - ${TRANSCRIPTS_INBOX}:/transcripts/inbox
+      - ./web:/web
+    command: >
+      sh -c "python -m http.server 8080 --directory /web &
+             python -m app.main"
+    environment:
+      - PYTHONUNBUFFERED=1

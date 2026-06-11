@@ -1,0 +1,33 @@
+# Environment & secrets
+.env
+
+# Documentation (internal specs, not for public repo)
+docs/
+
+# IDE
+.idea/
+
+# Claude Code
+.claude/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+*.egg-info/
+
+# Testing
+.pytest_cache/
+test-results/
+
+# Jobs logs
+jobs/*/logs/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.stackdump

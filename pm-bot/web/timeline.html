@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ru" class="theme-matrix">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Board — Timeline</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+  <script>
+  (function() {
+    try {
+      var t = localStorage.getItem('pm_theme');
+      if (t === 'light') {
+        document.documentElement.className = 'theme-light';
+        document.getElementById('theme-css').href = 'style-light.css';
+      }
+    } catch(e) {}
+  })();
+  </script>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <app-sidebar active="timeline"></app-sidebar>
+    <main class="page-content" style="position: relative; overflow: hidden;">
+      <div class="scan-line"></div>
+      <div class="text-page-title">FEATURE_TIME_MACHINE</div>
+
+      <!-- Search input -->
+      <div class="search-row">
+        <input class="cp-input" v-model="ticketId" placeholder="// enter ticket ID (e.g. CONT-412)" @keydown.enter="loadTimeline">
+        <cmd-button label="SEARCH" color="cyan" :loading="loading" @click="loadTimeline"></cmd-button>
+      </div>
+
+      <div v-if="loading" class="loading">SEARCHING VAULT...</div>
+      <div v-if="error" class="empty-state">{{ error }}</div>
+
+      <div v-if="!loading && events.length === 0 && searched" class="empty-state">
+        No events found for {{ searchedId }}
+      </div>
+
+      <!-- Timeline -->
+      <div class="timeline-wrap" v-if="events.length > 0">
+        <div v-for="(event, idx) in events" :key="idx"
+             class="t-event">
+          <div class="t-dot-wrap">
+            <div class="t-dot" :class="dotClass(event.stage)"></div>
+            <div class="t-connector"></div>
+          </div>
+          <div class="t-body" @click="openEvent(event)">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span class="card-stage" :class="stageClass(event.stage)">{{ event.stage.toUpperCase() }}</span>
+              <span class="text-meta">{{ fmtDate(event.date) }}</span>
+            </div>
+            <div class="text-card-title" style="margin-top: 4px;">{{ event.title }}</div>
+            <div class="t-detail">{{ event.detail }}</div>
+            <div class="text-micro" style="margin-top: 4px; font-style: italic;">{{ event.source_file }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Metrics -->
+      <div class="metrics-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border);" v-if="Object.keys(metrics).length > 0">
+        <metric-box v-if="metrics.days_to_ship != null" label="DAYS_TO_SHIP" :value="metrics.days_to_ship" color="cyan"></metric-box>
+        <metric-box v-if="metrics.idea_to_prd_days != null" label="IDEA_TO_PRD" :value="metrics.idea_to_prd_days + 'd'" color="yellow"></metric-box>
+      </div>
+    </main>
+
+    <div class="drawer-overlay" v-if="drawerOpen" @click="closeDrawer"></div>
+    <div class="task-drawer" :class="{ open: drawerOpen }">
+      <div class="task-drawer-header">
+        <span class="task-drawer-title">{{ drawerTask ? (drawerTask.jira_key || drawerTask.title || 'TASK') : 'LOADING...' }}</span>
+        <button class="task-drawer-close" @click="closeDrawer">[&times;]</button>
+      </div>
+      <div class="task-drawer-body" v-if="drawerTask">
+        <div class="task-drawer-section">
+          <div class="task-drawer-section-title">INFO</div>
+          <div class="task-drawer-meta">
+            <span class="task-drawer-meta-label">title:</span>
+            <span class="task-drawer-meta-value">{{ drawerTask.title || '—' }}</span>
+            <span class="task-drawer-meta-label">date:</span>
+            <span class="task-drawer-meta-value">{{ fmtDate(drawerTask.date) || '—' }}</span>
+            <span class="task-drawer-meta-label">status:</span>
+            <span class="task-drawer-meta-value"><span :class="taskStatusClass">{{ (drawerTask.status || '—').toUpperCase() }}</span></span>
+            <span class="task-drawer-meta-label" v-if="drawerTask.type">type:</span>
+            <span class="task-drawer-meta-value" v-if="drawerTask.type">{{ drawerTask.type.toUpperCase() }}</span>
+            <span class="task-drawer-meta-label" v-if="drawerTask.domain">domain:</span>
+            <span class="task-drawer-meta-value text-cyan" v-if="drawerTask.domain">{{ drawerTask.domain.toUpperCase() }}</span>
+            <span class="task-drawer-meta-label" v-if="drawerTask.priority">priority:</span>
+            <span class="task-drawer-meta-value" v-if="drawerTask.priority">{{ drawerTask.priority.toUpperCase() }}</span>
+            <span class="task-drawer-meta-label" v-if="drawerTask.story_points">story_points:</span>
+            <span class="task-drawer-meta-value" v-if="drawerTask.story_points">{{ drawerTask.story_points }}</span>
+            <span class="task-drawer-meta-label" v-if="drawerTask.jira_key">jira_key:</span>
+            <span class="task-drawer-meta-value" v-if="drawerTask.jira_key">{{ drawerTask.jira_key }}</span>
+            <span class="task-drawer-meta-label">source:</span>
+            <span class="task-drawer-meta-value">{{ drawerSource }}</span>
+          </div>
+        </div>
+        <div class="task-drawer-section" v-if="drawerTask.body">
+          <div class="task-drawer-section-title">BODY</div>
+          <div class="task-drawer-content" v-html="renderMd(drawerTask.body)"></div>
+        </div>
+      </div>
+      <div class="task-drawer-body" v-if="!drawerTask" style="display:flex;align-items:center;justify-content:center;">
+        <div class="loading">LOADING...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="api.js"></script>
+  <script src="components.js"></script>
+  <script>
+  (function() {
+    var renderer = new marked.Renderer();
+    renderer.link = function(token) {
+      var href = token.href || '';
+      var title = token.title || '';
+      var text = token.text || '';
+      var titleAttr = title ? ' title="' + title + '"' : '';
+      return '<a href="' + href + '"' + titleAttr + ' target="_blank" rel="noopener">' + text + '</a>';
+    };
+    marked.use({ breaks: true, gfm: true, renderer: renderer });
+    console.log('[timeline] using marked.js v' + marked.version);
+  })();
+
+  const { createApp, ref, computed, onMounted } = Vue;
+
+  const app = createApp({
+    setup() {
+      const ticketId = ref('');
+      const events = ref([]);
+      const metrics = ref({});
+      const loading = ref(false);
+      const error = ref(null);
+      const searched = ref(false);
+      const searchedId = ref('');
+
+      const drawerOpen = ref(false);
+      const drawerTask = ref(null);
+      const drawerSource = ref('');
+
+      const taskStatusClass = computed(function() {
+        if (!drawerTask.value) return 'tag tag-muted';
+        var s = (drawerTask.value.status || '').toLowerCase();
+        if (s === 'done') return 'tag tag-done';
+        if (s === 'in-progress') return 'tag tag-jira';
+        if (s === 'in-review' || s === 'in-testing' || s === 'code-review') return 'tag tag-prd';
+        if (s === 'todo') return 'tag tag-muted';
+        if (s === 'cancelled') return 'tag tag-blocked';
+        return 'tag tag-muted';
+      });
+
+      function fmtDate(d) {
+        if (!d) return '';
+        var m = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return m ? m[3] + '.' + m[2] + '.' + m[1] : d;
+      }
+
+      function dotClass(stage) {
+        var map = { enriched: 'enrich', synthesis: 'synth', pm: 'prd', report: 'dev' };
+        return 'dot-' + (map[stage] || stage);
+      }
+
+      function stageClass(stage) {
+        var map = { enriched: 'synthesis', pm: 'prd', report: 'meeting' };
+        return 'card-stage-' + (map[stage] || stage);
+      }
+
+      async function loadTimeline() {
+        if (!ticketId.value.trim()) return;
+        console.log('[timeline] searching for', ticketId.value);
+        loading.value = true;
+        error.value = null;
+        searched.value = true;
+        searchedId.value = ticketId.value;
+        try {
+          const data = await api.timeline(ticketId.value.trim());
+          events.value = data.events || [];
+          metrics.value = data.metrics || {};
+          console.log('[timeline] found', events.value.length, 'events');
+        } catch (e) {
+          console.error('[timeline] error', e);
+          error.value = 'Failed to load timeline: ' + e.message;
+          events.value = [];
+          metrics.value = {};
+        } finally {
+          loading.value = false;
+        }
+      }
+
+      function openEvent(event) {
+        console.log('[timeline] opening event detail:', event.title);
+        drawerSource.value = event.source_file || '';
+        drawerTask.value = null;
+        drawerOpen.value = true;
+
+        // Try to extract jira_key from source_file filename (e.g. "wiki/domains/foo/tasks/CONT-412.md")
+        var jiraKey = '';
+        if (event.source_file) {
+          var parts = event.source_file.split('/');
+          var filename = parts[parts.length - 1] || '';
+          jiraKey = filename.replace(/\.md$/, '');
+        }
+
+        // If it looks like a Jira key (PROJ-123 pattern), load full task details
+        if (jiraKey && /^[A-Z]+-\d+/.test(jiraKey)) {
+          console.log('[timeline] loading task by key:', jiraKey);
+          api.taskByKey(jiraKey).then(function(data) {
+            drawerTask.value = data;
+            console.log('[timeline] task loaded:', data.title);
+          }).catch(function(err) {
+            console.error('[timeline] failed to load task:', err.message);
+            drawerTask.value = {
+              title: event.title,
+              date: event.date,
+              status: event.stage,
+              body: event.body || event.detail,
+              jira_key: jiraKey
+            };
+          });
+        } else {
+          // Not a jira task — show event data directly
+          console.log('[timeline] no jira key, showing event data');
+          drawerTask.value = {
+            title: event.title,
+            date: event.date,
+            status: event.stage,
+            body: event.body || event.detail
+          };
+        }
+      }
+
+      function renderMd(text) {
+        if (!text) return '';
+        return marked.parse(text);
+      }
+
+      function closeDrawer() {
+        console.log('[timeline] closing drawer');
+        drawerOpen.value = false;
+        drawerTask.value = null;
+        drawerSource.value = '';
+      }
+
+      onMounted(function() {
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape') closeDrawer();
+        });
+      });
+
+      return { ticketId, events, metrics, loading, error, searched, searchedId, drawerOpen, drawerTask, drawerSource, taskStatusClass, fmtDate, loadTimeline, openEvent, closeDrawer, dotClass, stageClass, renderMd };
+    }
+  });
+
+  registerComponents(app);
+  applyPageTheme().then(function() {
+    app.mount('#app');
+  });
+  </script>
+</body>
+</html>

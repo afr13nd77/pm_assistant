@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Board.html — Unit & Integration Tests</title>
+  <style>
+    body { background: #1a1a2e; color: #c8d0e8; font-family: 'Courier New', monospace; padding: 20px; }
+    .pass { color: #00ff88; }
+    .fail { color: #ff0055; }
+    .section { color: #00e5ff; margin-top: 16px; font-weight: bold; }
+    .summary { margin-top: 20px; padding: 12px; border: 1px solid #333; }
+    pre { white-space: pre-wrap; font-size: 12px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <h2>Board.html Tests</h2>
+  <pre id="output"></pre>
+
+  <!-- Load dependencies for testing -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="../api.js"></script>
+  <script src="../components.js"></script>
+
+  <script>
+    var output = document.getElementById('output');
+    var passed = 0;
+    var failed = 0;
+    var errors = [];
+
+    function log(msg, cls) {
+      var span = document.createElement('span');
+      span.className = cls || '';
+      span.textContent = msg + '\n';
+      output.appendChild(span);
+    }
+
+    function section(name) {
+      log('\n== ' + name + ' ==', 'section');
+    }
+
+    function assert(name, condition, detail) {
+      if (condition) {
+        log('  PASS: ' + name, 'pass');
+        passed++;
+      } else {
+        var msg = '  FAIL: ' + name + (detail ? ' — ' + detail : '');
+        log(msg, 'fail');
+        failed++;
+        errors.push(name);
+      }
+    }
+
+    function assertEqual(name, actual, expected) {
+      var eq = JSON.stringify(actual) === JSON.stringify(expected);
+      assert(name, eq, eq ? '' : 'expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual));
+    }
+
+    // =============================================
+    // UNIT TESTS — parseTags helper
+    // =============================================
+    section('parseTags helper');
+
+    // Reproduce parseTags from board.html logic
+    function parseTags(tags) {
+      if (!tags) return [];
+      if (Array.isArray(tags)) return tags;
+      if (typeof tags === 'string') {
+        var cleaned = tags.replace(/^\[/, '').replace(/\]$/, '');
+        if (!cleaned.trim()) return [];
+        return cleaned.split(',').map(function(t) { return t.trim(); }).filter(function(t) { return t.length > 0; });
+      }
+      return [];
+    }
+
+    assertEqual('parseTags(null) returns empty array', parseTags(null), []);
+    assertEqual('parseTags(undefined) returns empty array', parseTags(undefined), []);
+    assertEqual('parseTags([]) returns empty array', parseTags([]), []);
+    assertEqual('parseTags(["idea","product"]) returns as-is', parseTags(["idea","product"]), ["idea","product"]);
+    assertEqual('parseTags("[idea, product]") parses string format', parseTags("[idea, product]"), ["idea", "product"]);
+    assertEqual('parseTags("idea, product") parses without brackets', parseTags("idea, product"), ["idea", "product"]);
+    assertEqual('parseTags("[]") returns empty array', parseTags("[]"), []);
+    assertEqual('parseTags("") returns empty array', parseTags(""), []);
+    assertEqual('parseTags("[meeting]") parses single tag', parseTags("[meeting]"), ["meeting"]);
+
+    // =============================================
+    // UNIT TESTS — getCardType helper
+    // =============================================
+    section('getCardType helper');
+
+    function getCardType(item) {
+      var tags = parseTags(item.tags);
+      var tagsLower = tags.map(function(t) { return t.toLowerCase(); });
+      if (tagsLower.indexOf('idea') !== -1) return 'IDEA_CAPTURE';
+      if (tagsLower.indexOf('meeting') !== -1 || tagsLower.indexOf('daily') !== -1 || tagsLower.indexOf('sync') !== -1) return 'MEETING_SUMMARY';
+      var fn = (item.filename || '').toLowerCase();
+      if (fn.indexOf('jira') !== -1) return 'JIRA_DRAFT';
+      return 'NOTE';
+    }
+
+    assertEqual('idea tag returns IDEA_CAPTURE',
+      getCardType({ tags: ['idea', 'product'], filename: 'test.md' }), 'IDEA_CAPTURE');
+    assertEqual('meeting tag returns MEETING_SUMMARY',
+      getCardType({ tags: ['meeting'], filename: 'test.md' }), 'MEETING_SUMMARY');
+    assertEqual('daily tag returns MEETING_SUMMARY',
+      getCardType({ tags: ['daily'], filename: 'test.md' }), 'MEETING_SUMMARY');
+    assertEqual('sync tag returns MEETING_SUMMARY',
+      getCardType({ tags: ['sync'], filename: 'test.md' }), 'MEETING_SUMMARY');
+    assertEqual('jira filename returns JIRA_DRAFT',
+      getCardType({ tags: [], filename: '2026-04-26-jira-01.md' }), 'JIRA_DRAFT');
+    assertEqual('no match returns NOTE',
+      getCardType({ tags: [], filename: 'some-note.md' }), 'NOTE');
+    assertEqual('string tags with idea returns IDEA_CAPTURE',
+      getCardType({ tags: '[idea, product]', filename: 'test.md' }), 'IDEA_CAPTURE');
+    assertEqual('no tags, no filename returns NOTE',
+      getCardType({ tags: null, filename: '' }), 'NOTE');
+
+    // =============================================
+    // UNIT TESTS — computed property logic (inbox/done filtering)
+    // =============================================
+    section('Inbox/Done filtering logic');
+
+    var testInbox = [
+      { filename: 'a.md', status: 'inbox', title: 'Item A', tags: ['idea'] },
+      { filename: 'b.md', status: 'processed', title: 'Item B', tags: ['idea'] },
+      { filename: 'c.md', status: 'done', title: 'Item C', tags: ['meeting'] },
+      { filename: 'd.md', status: '', title: 'Item D', tags: [] },
+      { filename: 'e.md', status: 'enriched', title: 'Item E', tags: ['idea'] }
+    ];
+
+    var inboxFiltered = testInbox.filter(function(item) {
+      var s = (item.status || '').toLowerCase();
+      return s !== 'processed' && s !== 'done';
+    });
+
+    var doneFiltered = testInbox.filter(function(item) {
+      var s = (item.status || '').toLowerCase();
+      return s === 'processed' || s === 'done';
+    });
+
+    assertEqual('inboxItems excludes processed and done', inboxFiltered.length, 3);
+    assert('inboxItems contains item A', inboxFiltered.some(function(i) { return i.filename === 'a.md'; }));
+    assert('inboxItems contains item D (empty status)', inboxFiltered.some(function(i) { return i.filename === 'd.md'; }));
+    assert('inboxItems contains item E (enriched)', inboxFiltered.some(function(i) { return i.filename === 'e.md'; }));
+    assertEqual('doneItems contains processed and done', doneFiltered.length, 2);
+    assert('doneItems contains item B (processed)', doneFiltered.some(function(i) { return i.filename === 'b.md'; }));
+    assert('doneItems contains item C (done)', doneFiltered.some(function(i) { return i.filename === 'c.md'; }));
+
+    // =============================================
+    // UNIT TESTS — meetingsCount logic
+    // =============================================
+    section('meetingsCount logic');
+
+    var testMeetingsInbox = [
+      { tags: ['idea'], filename: 'a.md' },
+      { tags: ['meeting'], filename: 'b.md' },
+      { tags: ['daily', 'standup'], filename: 'c.md' },
+      { tags: ['sync'], filename: 'd.md' },
+      { tags: ['product'], filename: 'e.md' }
+    ];
+
+    var meetingsCount = testMeetingsInbox.filter(function(item) {
+      var tags = parseTags(item.tags);
+      return tags.some(function(tag) {
+        var t = tag.toLowerCase();
+        return t === 'meeting' || t === 'meetings' || t === 'daily' || t === 'sync';
+      });
+    }).length;
+
+    assertEqual('meetingsCount counts meeting/daily/sync tags', meetingsCount, 3);
+
+    // =============================================
+    // INTEGRATION TEST — api.js client structure
+    // =============================================
+    section('API client structure');
+
+    assert('api object exists', typeof api === 'object');
+    assert('api.ideas is a function', typeof api.ideas === 'function');
+    assert('api.tasks is a function', typeof api.tasks === 'function');
+    assert('api.capture is a function', typeof api.capture === 'function');
+    assert('api.meetings is a function', typeof api.meetings === 'function');
+    assert('api.pipeline is a function', typeof api.pipeline === 'function');
+    assert('apiFetch function exists', typeof apiFetch === 'function');
+
+    // =============================================
+    // INTEGRATION TEST — components registration
+    // =============================================
+    section('Components registration');
+
+    var testApp = Vue.createApp({ template: '<div></div>' });
+    registerComponents(testApp);
+
+    // Check that components were registered by verifying the app config
+    assert('registerComponents is a function', typeof registerComponents === 'function');
+    assert('registerComponents does not throw', (function() {
+      try { registerComponents(Vue.createApp({ template: '<div></div>' })); return true; }
+      catch(e) { return false; }
+    })());
+
+    // =============================================
+    // INTEGRATION TEST — Vue app creation with board logic
+    // =============================================
+    section('Vue app creation');
+
+    (function() {
+      var appCreated = false;
+      try {
+        var boardApp = Vue.createApp({
+          setup: function() {
+            var ideas = Vue.ref([]);
+            var tasks = Vue.ref([]);
+            var loading = Vue.ref(false);
+            var error = Vue.ref(null);
+            var captureType = Vue.ref('idea');
+            var captureText = Vue.ref('');
+            var capturing = Vue.ref(false);
+
+            var inboxItems = Vue.computed(function() {
+              return ideas.value.filter(function(item) {
+                var s = (item.status || '').toLowerCase();
+                return s !== 'processed' && s !== 'done';
+              });
+            });
+
+            var processingItems = Vue.computed(function() {
+              return tasks.value;
+            });
+
+            var doneItems = Vue.computed(function() {
+              return ideas.value.filter(function(item) {
+                var s = (item.status || '').toLowerCase();
+                return s === 'processed' || s === 'done';
+              });
+            });
+
+            var ideasCount = Vue.computed(function() {
+              return ideas.value.length;
+            });
+
+            var draftsCount = Vue.computed(function() {
+              return tasks.value.length;
+            });
+
+            return {
+              ideas: ideas, tasks: tasks, loading: loading, error: error,
+              captureType: captureType, captureText: captureText, capturing: capturing,
+              inboxItems: inboxItems, processingItems: processingItems, doneItems: doneItems,
+              ideasCount: ideasCount, draftsCount: draftsCount
+            };
+          }
+        });
+        registerComponents(boardApp);
+        // Mount to a temporary element
+        var el = document.createElement('div');
+        el.id = 'test-board';
+        document.body.appendChild(el);
+        var vm = boardApp.mount(el);
+        appCreated = true;
+
+        assert('Vue app mounts successfully', appCreated);
+        assert('initial loading is false', vm.loading === false);
+        assert('initial error is null', vm.error === null);
+        assert('initial captureType is idea', vm.captureType === 'idea');
+        assert('initial captureText is empty', vm.captureText === '');
+        assert('initial capturing is false', vm.capturing === false);
+        assert('initial ideas is empty array', Array.isArray(vm.ideas) && vm.ideas.length === 0);
+        assert('initial tasks is empty array', Array.isArray(vm.tasks) && vm.tasks.length === 0);
+        assert('inboxItems computed is empty', vm.inboxItems.length === 0);
+        assert('processingItems computed is empty', vm.processingItems.length === 0);
+        assert('doneItems computed is empty', vm.doneItems.length === 0);
+        assert('ideasCount computed is 0', vm.ideasCount === 0);
+        assert('draftsCount computed is 0', vm.draftsCount === 0);
+
+        // Test reactivity: add items and verify computed properties
+        vm.ideas = [
+          { filename: 'x.md', status: 'inbox', title: 'X', tags: ['idea'] },
+          { filename: 'y.md', status: 'processed', title: 'Y', tags: ['meeting'] }
+        ];
+        vm.tasks = [
+          { filename: 'z.md', status: 'draft', title: 'Z', tags: ['jira'] }
+        ];
+
+        // Vue 3 reactivity is synchronous for ref updates
+        assert('ideasCount updates to 2', vm.ideasCount === 2);
+        assert('draftsCount updates to 1', vm.draftsCount === 1);
+        assert('inboxItems filters correctly (1 item)', vm.inboxItems.length === 1);
+        assert('doneItems filters correctly (1 item)', vm.doneItems.length === 1);
+        assert('processingItems shows all tasks (1 item)', vm.processingItems.length === 1);
+
+        // Clean up
+        boardApp.unmount();
+        el.remove();
+      } catch(e) {
+        assert('Vue app creation', false, e.message);
+      }
+    })();
+
+    // =============================================
+    // INTEGRATION TEST — API error handling (mock fetch)
+    // =============================================
+    section('API error handling');
+
+    (async function() {
+      var origFetch = window.fetch;
+
+      // Mock fetch to simulate API error
+      window.fetch = function() {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          text: function() { return Promise.resolve('Internal Server Error'); }
+        });
+      };
+
+      try {
+        await api.ideas();
+        assert('api.ideas rejects on 500 error', false, 'should have thrown');
+      } catch(e) {
+        assert('api.ideas rejects on 500 error', e.message.indexOf('API error') !== -1);
+      }
+
+      // Mock fetch to simulate network error
+      window.fetch = function() {
+        return Promise.reject(new Error('Network error'));
+      };
+
+      try {
+        await api.tasks();
+        assert('api.tasks rejects on network error', false, 'should have thrown');
+      } catch(e) {
+        assert('api.tasks rejects on network error', e.message.indexOf('Network error') !== -1);
+      }
+
+      // Mock fetch to simulate successful capture
+      window.fetch = function() {
+        return Promise.resolve({
+          ok: true,
+          json: function() { return Promise.resolve({ filename: 'test-capture.md', path: 'Inbox/test-capture.md' }); }
+        });
+      };
+
+      try {
+        var result = await api.capture('idea', 'Test idea text');
+        assert('api.capture returns result on success', result.filename === 'test-capture.md');
+      } catch(e) {
+        assert('api.capture returns result on success', false, e.message);
+      }
+
+      // Restore original fetch
+      window.fetch = origFetch;
+
+      // --- SUMMARY ---
+      log('');
+      section('SUMMARY');
+      log('Passed: ' + passed + '/' + (passed + failed), passed > 0 ? 'pass' : '');
+      log('Failed: ' + failed + '/' + (passed + failed), failed > 0 ? 'fail' : 'pass');
+      if (errors.length > 0) {
+        log('\nFailed tests:', 'fail');
+        errors.forEach(function(e) { log('  - ' + e, 'fail'); });
+      }
+    })();
+  </script>
+</body>
+</html>

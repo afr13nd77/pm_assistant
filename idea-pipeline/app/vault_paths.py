@@ -1,0 +1,127 @@
+"""Centralized vault path logic for the pm_assistant project.
+
+All functions return pathlib.Path objects. Directory-returning functions
+ensure the directory exists (mkdir parents=True, exist_ok=True).
+
+VAULT_PATH is read from the environment variable VAULT_PATH, defaulting
+to /vault if not set.
+"""
+
+import logging
+import os
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+VAULT_PATH = Path(os.getenv("VAULT_PATH", "/vault"))
+
+_VALID_ARTIFACT_TYPES = frozenset({
+    "ideas", "prds", "epics", "userstories", "tasks", "bugs",
+})
+
+
+def _ensure_dir(p: Path) -> Path:
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def vault_root() -> Path:
+    return _ensure_dir(VAULT_PATH)
+
+
+def raw_ideas() -> Path:
+    return _ensure_dir(VAULT_PATH / "raw" / "inbound" / "ideas")
+
+
+def raw_meetings() -> Path:
+    return _ensure_dir(VAULT_PATH / "raw" / "inbound" / "meeting-notes")
+
+
+def raw_daily_logs() -> Path:
+    return _ensure_dir(VAULT_PATH / "raw" / "inbound" / "daily-logs")
+
+
+def raw_tasks() -> Path:
+    return _ensure_dir(VAULT_PATH / "raw" / "inbound" / "tasks")
+
+
+def raw_clippings() -> Path:
+    return _ensure_dir(VAULT_PATH / "raw" / "inbound" / "clippings")
+
+
+def raw_misc() -> Path:
+    return _ensure_dir(VAULT_PATH / "raw" / "inbound" / "misc")
+
+
+def raw_competitors() -> Path:
+    return _ensure_dir(VAULT_PATH / "raw" / "competitors")
+
+
+def raw_metrics() -> Path:
+    return _ensure_dir(VAULT_PATH / "raw" / "metrics")
+
+
+def wiki_domain_dir(domain: str, artifact_type: str) -> Path:
+    if artifact_type not in _VALID_ARTIFACT_TYPES:
+        raise ValueError(
+            f"Invalid artifact_type '{artifact_type}'. "
+            f"Must be one of: {', '.join(sorted(_VALID_ARTIFACT_TYPES))}"
+        )
+    return _ensure_dir(VAULT_PATH / "wiki" / "domains" / domain / artifact_type)
+
+
+def wiki_meetings() -> Path:
+    return _ensure_dir(VAULT_PATH / "wiki" / "meetings")
+
+
+def wiki_daily_logs() -> Path:
+    return _ensure_dir(VAULT_PATH / "wiki" / "daily-logs")
+
+
+def wiki_reports() -> Path:
+    return _ensure_dir(VAULT_PATH / "wiki" / "reports")
+
+
+def wiki_index() -> Path:
+    return VAULT_PATH / "wiki" / "INDEX.md"
+
+
+def wiki_log() -> Path:
+    return VAULT_PATH / "wiki" / "LOG.md"
+
+
+def wiki_service_index() -> Path:
+    return _ensure_dir(VAULT_PATH / "wiki" / "_index")
+
+
+def templates() -> Path:
+    return _ensure_dir(VAULT_PATH / "templates")
+
+
+def all_domains() -> list[str]:
+    domains_dir = VAULT_PATH / "wiki" / "domains"
+    if not domains_dir.exists():
+        return []
+    return sorted(
+        entry.name
+        for entry in domains_dir.iterdir()
+        if entry.is_dir()
+    )
+
+
+def ensure_structure() -> None:
+    logger.info("ensure_structure: creating raw/ subdirectories under %s", VAULT_PATH)
+    raw_dirs = [
+        raw_ideas,
+        raw_meetings,
+        raw_daily_logs,
+        raw_tasks,
+        raw_clippings,
+        raw_misc,
+        raw_competitors,
+        raw_metrics,
+    ]
+    for fn in raw_dirs:
+        path = fn()
+        logger.info("ensure_structure: ensured %s", path)
+    logger.info("ensure_structure: done — all raw/ subdirectories exist")

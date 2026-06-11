@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="ru" class="theme-matrix">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Board -- Settings</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+  <script>
+  (function() {
+    try {
+      var t = localStorage.getItem('pm_theme');
+      if (t === 'light') {
+        document.documentElement.className = 'theme-light';
+        document.getElementById('theme-css').href = 'style-light.css';
+      }
+    } catch(e) {}
+  })();
+  </script>
+  <style>
+    .settings-section { margin-bottom: 32px; }
+    .settings-section-title { font-size: 11px; letter-spacing: 0.15em; color: var(--cyan); margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    .field-group { margin-bottom: 16px; }
+    .field-label { font-size: 9px; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 4px; }
+    .field-input {
+      width: 100%; max-width: 400px; background: var(--bg); border: 1px solid var(--border);
+      color: var(--text-body); font-family: var(--font); font-size: 11px; padding: 6px 8px; outline: none;
+    }
+    .field-input:focus { border-color: var(--cyan); }
+    .field-select {
+      background: var(--bg); border: 1px solid var(--border); color: var(--text-body);
+      font-family: var(--font); font-size: 11px; padding: 6px 8px; outline: none;
+    }
+    .field-textarea {
+      width: 100%; min-height: 200px; background: var(--bg); border: 1px solid var(--border);
+      color: var(--text-body); font-family: var(--font); font-size: 10px; padding: 8px;
+      resize: vertical; outline: none; line-height: 1.5;
+    }
+    .field-textarea:focus { border-color: var(--cyan); }
+    .field-note { font-size: 9px; color: var(--text-muted); margin-top: 4px; font-style: italic; }
+    .save-bar { display: flex; gap: 8px; align-items: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .save-status { font-size: 10px; }
+    .toggle-row {
+      display: flex;
+      gap: 0;
+      margin-top: 4px;
+    }
+    .toggle-btn {
+      font-family: var(--font);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      padding: 5px 16px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .toggle-btn:first-child {
+      border-right: none;
+    }
+    .toggle-btn:hover {
+      border-color: var(--border-hover);
+      color: var(--text-body);
+    }
+    .toggle-btn.active {
+      border-color: var(--cyan);
+      color: var(--cyan);
+      background: var(--cyan-bg);
+    }
+    .toggle-btn-triple:first-child { border-right: none; }
+    .toggle-btn-triple:nth-child(2) { border-right: none; }
+    .ollama-fields { margin-top: 12px; }
+    .ollama-fields .field-group { margin-bottom: 10px; }
+    .ollama-test-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+    .ollama-status { font-size: 10px; letter-spacing: 0.05em; }
+    .ollama-status.ok { color: #4caf50; }
+    .ollama-status.err { color: #f44336; }
+    .llm-info-panel {
+      margin-top: 12px;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      font-size: 10px;
+      line-height: 1.7;
+      color: var(--text-muted);
+      opacity: 0.75;
+    }
+    .llm-info-panel strong { color: var(--text-body); font-weight: 500; }
+  </style>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <app-sidebar active="settings"></app-sidebar>
+    <main class="page-content" style="position: relative; overflow: hidden;">
+      <div class="scan-line"></div>
+      <div class="text-page-title">SETTINGS</div>
+
+      <div v-if="loading" class="loading">LOADING...</div>
+      <div v-if="error" class="empty-state">{{ error }}</div>
+
+      <template v-if="!loading">
+        <!-- Refresh section -->
+        <div class="settings-section">
+          <div class="settings-section-title">// REFRESH</div>
+          <div class="field-group">
+            <div class="field-label">DATA_REFRESH_MODE</div>
+            <div class="toggle-row">
+              <button class="toggle-btn" :class="{ active: refreshMode === 'auto' }"
+                      @click="setRefreshMode('auto')">AUTO</button>
+              <button class="toggle-btn" :class="{ active: refreshMode === 'manual' }"
+                      @click="setRefreshMode('manual')">MANUAL</button>
+            </div>
+            <div class="field-note">AUTO: board updates every 30s, roadmap every 60s. MANUAL: refresh only on click.</div>
+          </div>
+        </div>
+
+        <!-- Theme section -->
+        <div class="settings-section">
+          <div class="settings-section-title">// THEME</div>
+          <div class="field-group">
+            <div class="field-label">UI_THEME</div>
+            <div class="toggle-row">
+              <button class="toggle-btn" :class="{ active: currentTheme === 'matrix' }"
+                      @click="setTheme('matrix')">MATRIX</button>
+              <button class="toggle-btn" :class="{ active: currentTheme === 'light' }"
+                      @click="setTheme('light')">LIGHT</button>
+            </div>
+            <div class="field-note">MATRIX: dark cyberpunk with neon glow. LIGHT: warm cream with minimal shadows.</div>
+          </div>
+        </div>
+
+        <!-- LLM Provider section -->
+        <div class="settings-section">
+          <div class="settings-section-title">// LLM PROVIDER</div>
+          <div class="field-group">
+            <div class="field-label">LLM_PROVIDER</div>
+            <div class="toggle-row">
+              <button class="toggle-btn toggle-btn-triple" :class="{ active: llmProvider === 'claude' }"
+                      @click="setLlmProvider('claude')">CLAUDE API</button>
+              <button class="toggle-btn toggle-btn-triple" :class="{ active: llmProvider === 'ollama' }"
+                      @click="setLlmProvider('ollama')">OLLAMA</button>
+              <button class="toggle-btn toggle-btn-triple" :class="{ active: llmProvider === 'hybrid' }"
+                      @click="setLlmProvider('hybrid')">HYBRID</button>
+            </div>
+          </div>
+          <div v-if="llmProvider !== 'claude'" class="ollama-fields">
+            <div class="field-group">
+              <div class="field-label">OLLAMA_URL</div>
+              <input class="field-input" v-model="ollamaUrl"
+                     placeholder="http://192.168.0.21:11434"
+                     @change="saveOllamaSettings">
+            </div>
+            <div class="field-group">
+              <div class="field-label">OLLAMA_MODEL</div>
+              <input class="field-input" v-model="ollamaModel"
+                     placeholder="qwen3.5:latest" style="width: 250px;"
+                     @change="saveOllamaSettings">
+            </div>
+            <div class="ollama-test-row">
+              <button class="cmd-btn cmd-btn-cyan" :disabled="ollamaTesting"
+                      @click="testOllamaConnection()">
+                {{ ollamaTesting ? '...' : 'TEST CONNECTION' }}
+              </button>
+              <span v-if="ollamaStatus && ollamaStatus.status === 'ok'" class="ollama-status ok">
+                Connected &mdash; Ollama v{{ ollamaStatus.ollama_version }} &mdash; {{ ollamaStatus.models.join(', ') }}
+              </span>
+              <span v-if="ollamaStatus && ollamaStatus.status === 'error'" class="ollama-status err">
+                Connection failed &mdash; {{ ollamaStatus.detail }}
+              </span>
+            </div>
+          </div>
+          <div v-if="llmProvider === 'hybrid'" class="llm-info-panel">
+            <strong>Ollama:</strong> daily, idea, jira, meeting<br>
+            <strong>Claude API:</strong> enrich, synthesize, report, pipeline
+          </div>
+        </div>
+
+        <!-- Vault section -->
+        <div class="settings-section">
+          <div class="settings-section-title">// VAULT</div>
+          <div class="field-group">
+            <div class="field-label">VAULT_PATH</div>
+            <input class="field-input" v-model="settings.vault_path" disabled>
+            <div class="field-note">Requires container restart to change</div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">TRANSCRIPTS_PATH</div>
+            <input class="field-input" v-model="settings.transcripts_path" disabled>
+            <div class="field-note">Requires container restart to change</div>
+          </div>
+        </div>
+
+        <!-- Jira sync section -->
+        <div class="settings-section">
+          <div class="settings-section-title">// JIRA_SYNC</div>
+          <div class="field-group">
+            <div class="field-label">LAST_SYNC</div>
+            <div style="font-size: 12px; color: var(--text-body); margin-bottom: 8px;">
+              {{ lastSyncTime || 'Never synced' }}
+            </div>
+          </div>
+          <div class="field-group" style="display: flex; align-items: center; gap: 12px;">
+            <cmd-button label="SYNC NOW" color="cyan" :loading="syncing"
+                        @click="triggerSync"></cmd-button>
+            <span v-if="syncResult" class="save-status"
+                  :class="syncOk ? 'text-green' : 'text-magenta'">
+              {{ syncResult }}
+            </span>
+          </div>
+          <div class="field-group" style="margin-top: 12px;">
+            <div class="field-label">TELEGRAM_NOTIFICATIONS</div>
+            <div class="toggle-row">
+              <button class="toggle-btn" :class="{ active: jiraSyncNotify }"
+                      @click="setJiraSyncNotify(true)">ON</button>
+              <button class="toggle-btn" :class="{ active: !jiraSyncNotify }"
+                      @click="setJiraSyncNotify(false)">OFF</button>
+            </div>
+            <div class="field-note">ON: send Telegram summary after every Jira sync. OFF: sync runs silently, results in logs only.</div>
+          </div>
+        </div>
+
+        <!-- Report section -->
+        <div class="settings-section">
+          <div class="settings-section-title">// REPORT</div>
+          <div class="field-group">
+            <div class="field-label">REPORT_TIME</div>
+            <input class="field-input" v-model="settings.report_time" style="width: 120px;">
+          </div>
+          <div class="field-group">
+            <div class="field-label">REPORT_DAY</div>
+            <select class="field-select" v-model="settings.report_day">
+              <option value="mon">Monday</option>
+              <option value="tue">Tuesday</option>
+              <option value="wed">Wednesday</option>
+              <option value="thu">Thursday</option>
+              <option value="fri">Friday</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Roadmap labels -->
+        <div class="settings-section">
+          <div class="settings-section-title">// ROADMAP LABELS</div>
+          <div style="display: flex; gap: 16px;">
+            <div class="field-group">
+              <div class="field-label">NOW</div>
+              <input class="field-input" v-model="settings.roadmap_now_label" style="width: 150px;">
+            </div>
+            <div class="field-group">
+              <div class="field-label">NEXT</div>
+              <input class="field-input" v-model="settings.roadmap_next_label" style="width: 150px;">
+            </div>
+            <div class="field-group">
+              <div class="field-label">LATER</div>
+              <input class="field-input" v-model="settings.roadmap_later_label" style="width: 150px;">
+            </div>
+          </div>
+        </div>
+
+        <!-- Prompts section -->
+        <div class="settings-section">
+          <div class="settings-section-title">// PROMPTS</div>
+          <div v-for="(content, name) in settings.prompts" :key="name" class="field-group">
+            <div class="field-label">{{ name.toUpperCase() }}.TXT</div>
+            <textarea class="field-textarea" v-model="settings.prompts[name]"></textarea>
+          </div>
+        </div>
+
+        <!-- Save bar -->
+        <div class="save-bar">
+          <cmd-button label="SAVE" color="cyan" :loading="saving" @click="saveSettings"></cmd-button>
+          <span v-if="saveStatus" class="save-status" :class="saveOk ? 'text-green' : 'text-magenta'">{{ saveStatus }}</span>
+        </div>
+      </template>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="api.js"></script>
+  <script src="components.js"></script>
+  <script>
+  console.log('[settings] initializing settings page');
+
+  var { createApp, ref, reactive, onMounted } = Vue;
+
+  var app = createApp({
+    setup: function() {
+      var settings = reactive({
+        vault_path: '',
+        transcripts_path: '',
+        report_time: '09:00',
+        report_day: 'mon',
+        roadmap_now_label: '',
+        roadmap_next_label: '',
+        roadmap_later_label: '',
+        prompts: {},
+      });
+      var loading = ref(true);
+      var error = ref(null);
+      var saving = ref(false);
+      var saveStatus = ref('');
+      var saveOk = ref(false);
+      var refreshMode = ref('auto');
+      var refreshSaving = ref(false);
+      var currentTheme = ref('matrix');
+      var syncing = ref(false);
+      var lastSyncTime = ref(null);
+      var syncResult = ref('');
+      var syncOk = ref(false);
+      var llmProvider = ref('claude');
+      var ollamaUrl = ref('');
+      var ollamaModel = ref('qwen3.5:latest');
+      var ollamaStatus = ref(null);
+      var ollamaTesting = ref(false);
+      var llmSaving = ref(false);
+      var jiraSyncNotify = ref(true);
+
+      function buildPrefsPayload() {
+        return {
+          refresh_mode: refreshMode.value,
+          theme: currentTheme.value,
+          llm_provider: llmProvider.value,
+          ollama_url: ollamaUrl.value,
+          ollama_model: ollamaModel.value,
+          jira_sync_notify: jiraSyncNotify.value
+        };
+      }
+
+      function loadSettings() {
+        console.log('[settings] loading');
+        loading.value = true;
+        error.value = null;
+        apiFetch('/settings').then(function(data) {
+          Object.assign(settings, data);
+          console.log('[settings] loaded, prompts:', Object.keys(settings.prompts));
+          loading.value = false;
+        }).catch(function(e) {
+          console.error('[settings] load error', e);
+          error.value = 'Failed to load settings: ' + e.message;
+          loading.value = false;
+        });
+      }
+
+      function saveSettings() {
+        console.log('[settings] saving');
+        saving.value = true;
+        saveStatus.value = '';
+        apiFetch('/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(settings),
+        }).then(function(res) {
+          saveOk.value = true;
+          saveStatus.value = 'SAVED (' + res.saved_prompts + ' prompts)';
+          console.log('[settings] saved', res);
+          setTimeout(function() { saveStatus.value = ''; }, 3000);
+          saving.value = false;
+        }).catch(function(e) {
+          console.error('[settings] save error', e);
+          saveOk.value = false;
+          saveStatus.value = 'ERROR: ' + e.message;
+          saving.value = false;
+        });
+      }
+
+      function setRefreshMode(mode) {
+        console.log('[settings] setRefreshMode:', mode);
+        refreshSaving.value = true;
+        refreshMode.value = mode;
+        api.saveUserPrefs(buildPrefsPayload()).then(function(res) {
+          console.log('[settings] refresh mode saved:', res.refresh_mode);
+          refreshSaving.value = false;
+        }).catch(function(err) {
+          console.error('[settings] saveUserPrefs error:', err.message);
+          refreshSaving.value = false;
+        });
+      }
+
+      function setTheme(theme) {
+        console.log('[settings] setTheme:', theme);
+        currentTheme.value = theme;
+        applyPageTheme(theme);
+        api.saveUserPrefs(buildPrefsPayload()).then(function(res) {
+          console.log('[settings] theme saved:', res.theme);
+        }).catch(function(err) {
+          console.error('[settings] saveUserPrefs (theme) error:', err.message);
+        });
+        try {
+          localStorage.setItem('pm_theme', theme);
+        } catch (e) { /* ignore */ }
+      }
+
+      function loadSyncStatus() {
+        console.log('[settings] loading sync status');
+        api.jiraSyncStatus().then(function(data) {
+          if (data.last_sync) {
+            try {
+              var dt = new Date(data.last_sync);
+              var dd = String(dt.getDate()).padStart(2, '0');
+              var mm = String(dt.getMonth() + 1).padStart(2, '0');
+              var yyyy = dt.getFullYear();
+              var hh = String(dt.getHours()).padStart(2, '0');
+              var min = String(dt.getMinutes()).padStart(2, '0');
+              lastSyncTime.value = dd + '.' + mm + '.' + yyyy + ' ' + hh + ':' + min;
+            } catch (e) {
+              lastSyncTime.value = data.last_sync;
+            }
+          } else {
+            lastSyncTime.value = null;
+          }
+          console.log('[settings] sync status loaded, last_sync:', lastSyncTime.value);
+        }).catch(function(e) {
+          console.error('[settings] sync status load error:', e.message);
+        });
+      }
+
+      function triggerSync() {
+        console.log('[settings] triggerSync: starting');
+        syncing.value = true;
+        syncResult.value = '';
+        api.jiraSync().then(function(data) {
+          console.log('[settings] triggerSync: success', data);
+          syncOk.value = true;
+          syncResult.value = 'OK: ' + (data.new || 0) + ' new, '
+            + (data.updated || 0) + ' updated, '
+            + (data.closed || 0) + ' closed';
+          syncing.value = false;
+          loadSyncStatus();
+          setTimeout(function() { syncResult.value = ''; }, 10000);
+        }).catch(function(e) {
+          console.error('[settings] triggerSync: error', e.message);
+          syncOk.value = false;
+          syncResult.value = 'ERROR: ' + e.message;
+          syncing.value = false;
+        });
+      }
+
+      function setJiraSyncNotify(value) {
+        console.log('[settings] setJiraSyncNotify:', value);
+        jiraSyncNotify.value = value;
+        api.saveUserPrefs(buildPrefsPayload()).then(function(res) {
+          console.log('[settings] jira_sync_notify saved:', res.jira_sync_notify);
+        }).catch(function(err) {
+          console.error('[settings] saveUserPrefs (jira_sync_notify) error:', err.message);
+          jiraSyncNotify.value = !value;
+        });
+      }
+
+      function setLlmProvider(provider) {
+        console.log('[settings] setLlmProvider:', provider);
+        llmProvider.value = provider;
+        saveLlmPrefs();
+        if (provider !== 'claude' && ollamaUrl.value) {
+          testOllamaConnection();
+        }
+      }
+
+      function saveLlmPrefs() {
+        console.log('[settings] saveLlmPrefs');
+        llmSaving.value = true;
+        api.saveUserPrefs(buildPrefsPayload()).then(function() {
+          console.log('[settings] LLM prefs saved');
+          llmSaving.value = false;
+        }).catch(function(err) {
+          console.error('[settings] Failed to save LLM prefs:', err.message);
+          llmSaving.value = false;
+        });
+      }
+
+      function testOllamaConnection() {
+        console.log('[settings] testOllamaConnection called, url:', ollamaUrl.value);
+        if (!ollamaUrl.value) {
+          ollamaStatus.value = { status: 'error', detail: 'Enter Ollama URL first' };
+          return;
+        }
+        ollamaTesting.value = true;
+        ollamaStatus.value = null;
+        api.testOllama(ollamaUrl.value).then(function(data) {
+          console.log('[settings] testOllama success:', data);
+          ollamaStatus.value = data;
+          ollamaTesting.value = false;
+        }).catch(function(err) {
+          console.error('[settings] testOllama error:', err.message);
+          ollamaStatus.value = { status: 'error', detail: err.message || 'Unknown error' };
+          ollamaTesting.value = false;
+        });
+      }
+
+      function saveOllamaSettings() {
+        console.log('[settings] saveOllamaSettings');
+        saveLlmPrefs();
+        if (ollamaUrl.value) {
+          testOllamaConnection();
+        }
+      }
+
+      onMounted(function() {
+        console.log('[settings] component mounted, loading settings');
+        loadSettings();
+        loadSyncStatus();
+        applyPageTheme();
+        api.getUserPrefs().then(function(prefs) {
+          refreshMode.value = prefs.refresh_mode || 'auto';
+          currentTheme.value = prefs.theme || 'matrix';
+          llmProvider.value = prefs.llm_provider || 'claude';
+          ollamaUrl.value = prefs.ollama_url || '';
+          ollamaModel.value = prefs.ollama_model || 'qwen3.5:latest';
+          jiraSyncNotify.value = prefs.jira_sync_notify !== false;
+          console.log('[settings] prefs loaded: refresh=%s theme=%s llm=%s', refreshMode.value, currentTheme.value, llmProvider.value);
+          applyPageTheme(currentTheme.value);
+          if (llmProvider.value !== 'claude' && ollamaUrl.value) {
+            testOllamaConnection();
+          }
+        }).catch(function(err) {
+          console.error('[settings] getUserPrefs error:', err.message);
+        });
+      });
+
+      return {
+        settings: settings,
+        loading: loading,
+        error: error,
+        saving: saving,
+        saveStatus: saveStatus,
+        saveOk: saveOk,
+        loadSettings: loadSettings,
+        saveSettings: saveSettings,
+        refreshMode: refreshMode,
+        refreshSaving: refreshSaving,
+        setRefreshMode: setRefreshMode,
+        currentTheme: currentTheme,
+        setTheme: setTheme,
+        syncing: syncing,
+        lastSyncTime: lastSyncTime,
+        syncResult: syncResult,
+        syncOk: syncOk,
+        triggerSync: triggerSync,
+        llmProvider: llmProvider,
+        ollamaUrl: ollamaUrl,
+        ollamaModel: ollamaModel,
+        ollamaStatus: ollamaStatus,
+        ollamaTesting: ollamaTesting,
+        llmSaving: llmSaving,
+        setLlmProvider: setLlmProvider,
+        testOllamaConnection: testOllamaConnection,
+        saveOllamaSettings: saveOllamaSettings,
+        jiraSyncNotify: jiraSyncNotify,
+        setJiraSyncNotify: setJiraSyncNotify,
+        buildPrefsPayload: buildPrefsPayload,
+      };
+    }
+  });
+
+  registerComponents(app);
+  applyPageTheme().then(function() {
+    app.mount('#app');
+    console.log('[settings] app mounted');
+  });
+  </script>
+</body>
+</html>

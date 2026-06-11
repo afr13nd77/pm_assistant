@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="ru" class="theme-matrix">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Board -- Report</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+  <script>
+  (function() {
+    try {
+      var t = localStorage.getItem('pm_theme');
+      if (t === 'light') {
+        document.documentElement.className = 'theme-light';
+        document.getElementById('theme-css').href = 'style-light.css';
+      }
+    } catch(e) {}
+  })();
+  </script>
+  <style>
+    .report-layout {
+      display: flex;
+      gap: 16px;
+      height: calc(100vh - 120px);
+      min-height: 400px;
+    }
+
+    /* Left column -- report list */
+    .report-list-panel {
+      width: 280px;
+      min-width: 280px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .report-list-header {
+      padding: 10px 12px;
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.1em;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .report-list-scroll {
+      overflow-y: auto;
+      flex: 1;
+    }
+    .report-list-item {
+      padding: 10px 12px;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      border-bottom: 1px solid var(--border);
+      transition: all 0.2s;
+    }
+    .report-list-item:hover {
+      background: var(--card-hover, rgba(0,229,255,0.04));
+      border-left-color: var(--border-hover);
+    }
+    .report-list-item:hover .report-title {
+      color: var(--cyan);
+    }
+    .report-list-item.active {
+      border-left-color: var(--cyan);
+      background: rgba(0,255,255,0.05);
+    }
+    .report-list-item.active .report-title {
+      color: var(--cyan);
+    }
+    .report-list-item .report-date {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+    .report-list-item .report-title {
+      font-size: 12px;
+      color: var(--text-body);
+    }
+    .report-list-empty {
+      padding: 24px 12px;
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* Right column -- report content */
+    .report-detail-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .report-detail-filename {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      letter-spacing: 0.05em;
+      flex-shrink: 0;
+    }
+    .report-detail-scroll {
+      flex: 1;
+      overflow-y: auto;
+    }
+    .report-detail-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      font-size: 12px;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      background: var(--card);
+    }
+
+    /* Report rendered markdown content */
+    .report-content {
+      background: var(--card);
+      border: 1px solid var(--border);
+      padding: 24px;
+      font-size: 12px;
+      line-height: 1.8;
+    }
+    .report-content h1 {
+      font-size: 16px;
+      color: var(--cyan);
+      margin-bottom: 16px;
+      letter-spacing: 0.1em;
+    }
+    .report-content h2 {
+      font-size: 13px;
+      color: var(--cyan);
+      margin-top: 20px;
+      margin-bottom: 8px;
+      letter-spacing: 0.1em;
+    }
+    .report-content h3 {
+      font-size: 12px;
+      color: var(--yellow);
+      margin-top: 16px;
+      margin-bottom: 6px;
+    }
+    .report-content ul {
+      list-style: none;
+      padding-left: 16px;
+    }
+    .report-content li {
+      padding: 2px 0;
+    }
+    .report-content li::before {
+      content: "// ";
+      color: var(--text-muted);
+    }
+    .report-content li.checkbox-item::before {
+      content: none;
+    }
+    .report-content .contains-task-list li::before {
+      content: none;
+    }
+    .report-content p {
+      margin: 8px 0;
+    }
+    .report-content strong {
+      color: var(--text-body);
+      font-weight: normal;
+      border-bottom: 1px solid var(--cyan);
+    }
+    .report-content hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 16px 0;
+    }
+
+    .report-content h4 { font-size: 12px; color: var(--text-body); margin-top: 14px; margin-bottom: 4px; }
+    .report-content h5 { font-size: 11px; color: var(--text-muted); margin-top: 12px; margin-bottom: 4px; }
+    .report-content h6 { font-size: 10px; color: var(--text-muted); margin-top: 10px; margin-bottom: 4px; }
+
+    .report-content code {
+      font-family: inherit;
+      background: rgba(0,255,255,0.08);
+      padding: 1px 4px;
+      border-radius: 2px;
+      font-size: 11px;
+    }
+    .report-content pre {
+      background: rgba(0,0,0,0.4);
+      border: 1px solid var(--border);
+      padding: 12px;
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+    .report-content pre code {
+      background: none;
+      padding: 0;
+      font-size: 11px;
+      line-height: 1.6;
+    }
+    .report-content blockquote {
+      border-left: 3px solid var(--cyan);
+      padding-left: 12px;
+      margin: 12px 0;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+    .report-content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 11px;
+    }
+    .report-content th,
+    .report-content td {
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      text-align: left;
+    }
+    .report-content th {
+      background: rgba(0,255,255,0.06);
+      color: var(--cyan);
+      font-weight: normal;
+      letter-spacing: 0.05em;
+    }
+    .report-content a {
+      color: var(--cyan);
+      text-decoration: none;
+      border-bottom: 1px dotted var(--cyan);
+    }
+    .report-content a:hover {
+      opacity: 0.8;
+    }
+    .report-content em {
+      font-style: italic;
+      color: var(--text-body);
+    }
+    .report-content del {
+      text-decoration: line-through;
+      color: var(--text-muted);
+    }
+    .report-content ol {
+      padding-left: 20px;
+      list-style: decimal;
+    }
+    .report-content ol li::before {
+      content: none;
+    }
+    .report-content input[type="checkbox"] {
+      margin-right: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <app-sidebar active="report"></app-sidebar>
+    <main class="page-content" style="position: relative; overflow: hidden;">
+      <div class="scan-line"></div>
+
+      <!-- Header row -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div class="text-page-title" style="margin-bottom: 0;">WEEKLY_REPORT</div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <cmd-button label="REGENERATE" color="magenta" :loading="regenerating" @click="regenerate"></cmd-button>
+          <cmd-button label="COPY_MARKDOWN" color="cyan" @click="copyMarkdown"></cmd-button>
+          <span v-if="copySuccess" class="tag-sm text-green">COPIED</span>
+        </div>
+      </div>
+
+      <!-- Error state -->
+      <div v-if="error" class="empty-state">{{ error }}</div>
+
+      <!-- Two-column layout -->
+      <div v-if="!error" class="report-layout">
+
+        <!-- Left column: report list -->
+        <div class="report-list-panel">
+          <div class="report-list-header">REPORTS</div>
+          <div class="report-list-scroll">
+            <div v-if="loading" class="report-list-empty">LOADING...</div>
+            <div v-else-if="reports.length === 0" class="report-list-empty">No reports available</div>
+            <div
+              v-else
+              v-for="r in reports"
+              :key="r.filename"
+              class="report-list-item"
+              :class="{ active: selectedFilename === r.filename }"
+              @click="selectReport(r.filename)"
+            >
+              <div class="report-date">{{ formatDate(r.date) }}</div>
+              <div class="report-title">{{ r.title || r.filename }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right column: report detail -->
+        <div class="report-detail-panel">
+          <div v-if="loadingContent" class="report-detail-empty">LOADING REPORT...</div>
+          <template v-else-if="selectedFilename && reportContent">
+            <div class="report-detail-filename">{{ selectedFilename }}</div>
+            <div class="report-detail-scroll">
+              <div class="report-content" v-html="renderMarkdown(reportContent)"></div>
+            </div>
+          </template>
+          <div v-else class="report-detail-empty">Select a report from the list</div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="api.js"></script>
+  <script src="components.js"></script>
+  <script>
+    console.log('[report] initializing report page');
+
+    /* Configure marked.js */
+    (function() {
+      var renderer = new marked.Renderer();
+      renderer.link = function(token) {
+        var href = token.href || '';
+        var title = token.title || '';
+        var text = token.text || '';
+        var titleAttr = title ? ' title="' + title + '"' : '';
+        return '<a href="' + href + '"' + titleAttr + ' target="_blank" rel="noopener">' + text + '</a>';
+      };
+      marked.use({
+        breaks: true,
+        gfm: true,
+        renderer: renderer
+      });
+      console.log('[report] using marked.js v' + marked.version);
+    })();
+
+    /**
+     * Strip YAML frontmatter from markdown content.
+     * Frontmatter is enclosed between two --- markers at the start of the file.
+     * @param {string} md - raw markdown string
+     * @returns {string} - markdown without frontmatter
+     */
+    function stripFrontmatter(md) {
+      if (!md) return '';
+      var trimmed = md.replace(/^\s+/, '');
+      if (trimmed.indexOf('---') !== 0) return md;
+      var secondIdx = trimmed.indexOf('---', 3);
+      if (secondIdx === -1) return md;
+      var result = trimmed.substring(secondIdx + 3).replace(/^\s*\n/, '');
+      console.log('[report] stripped frontmatter');
+      return result;
+    }
+
+    var app = Vue.createApp({
+      setup: function() {
+        var reports = Vue.ref([]);
+        var selectedFilename = Vue.ref(null);
+        var reportContent = Vue.ref('');
+        var loading = Vue.ref(false);
+        var loadingContent = Vue.ref(false);
+        var regenerating = Vue.ref(false);
+        var error = Vue.ref(null);
+        var copySuccess = Vue.ref(false);
+
+        /**
+         * Format a date string for display.
+         * Input: "2026-05-03" or similar. Output: "03 May 2026".
+         * Falls back to the raw string if parsing fails.
+         * @param {string} dateStr
+         * @returns {string}
+         */
+        function formatDate(dateStr) {
+          if (!dateStr) return '';
+          var m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+          return m ? m[3] + '.' + m[2] + '.' + m[1] : dateStr;
+        }
+
+        /**
+         * Load the list of all reports from the API.
+         * Auto-selects the first (newest) report if nothing is currently selected.
+         */
+        function loadReports() {
+          console.log('[report] loading report list');
+          loading.value = true;
+          error.value = null;
+          api.reports().then(function(data) {
+            console.log('[report] report list loaded, count:', data && data.reports ? data.reports.length : 0);
+            var list = (data && data.reports) ? data.reports : [];
+            reports.value = list;
+            loading.value = false;
+            // Auto-select first report if nothing selected and list is non-empty
+            if (list.length > 0 && !selectedFilename.value) {
+              console.log('[report] auto-selecting first report:', list[0].filename);
+              selectReport(list[0].filename);
+            }
+          }).catch(function(err) {
+            if (err.name === 'AbortError') return;
+            console.error('[report] failed to load report list', err.message);
+            error.value = 'Failed to load reports: ' + err.message;
+            loading.value = false;
+          });
+        }
+
+        /**
+         * Select a specific report by filename and load its content.
+         * @param {string} filename
+         */
+        function selectReport(filename) {
+          if (!filename) return;
+          console.log('[report] selecting report:', filename);
+          selectedFilename.value = filename;
+          loadingContent.value = true;
+          reportContent.value = '';
+          api.reportByFilename(filename).then(function(data) {
+            console.log('[report] report content loaded:', filename);
+            if (data && data.content) {
+              reportContent.value = data.content;
+            } else {
+              console.log('[report] report has no content:', filename);
+              reportContent.value = '';
+            }
+            loadingContent.value = false;
+          }).catch(function(err) {
+            if (err.name === 'AbortError') return;
+            console.error('[report] failed to load report content', filename, err.message);
+            error.value = 'Failed to load report: ' + err.message;
+            loadingContent.value = false;
+          });
+        }
+
+        /**
+         * Regenerate the weekly report, then refresh the list and
+         * auto-select the newly generated report.
+         */
+        function regenerate() {
+          console.log('[report] regenerating report');
+          regenerating.value = true;
+          error.value = null;
+          api.regenerate().then(function(data) {
+            console.log('[report] report regenerated', data);
+            var newFilename = (data && data.filename) ? data.filename : null;
+            regenerating.value = false;
+            // Reload the list and select the new report
+            console.log('[report] reloading report list after regeneration');
+            loading.value = true;
+            api.reports().then(function(listData) {
+              var list = (listData && listData.reports) ? listData.reports : [];
+              reports.value = list;
+              loading.value = false;
+              if (newFilename) {
+                console.log('[report] auto-selecting newly generated report:', newFilename);
+                selectReport(newFilename);
+              } else if (list.length > 0) {
+                console.log('[report] auto-selecting first report after regeneration');
+                selectReport(list[0].filename);
+              }
+            }).catch(function(err) {
+              if (err.name === 'AbortError') return;
+              console.error('[report] failed to reload report list after regeneration', err.message);
+              loading.value = false;
+            });
+          }).catch(function(err) {
+            if (err.name === 'AbortError') return;
+            console.error('[report] failed to regenerate report', err.message);
+            error.value = 'Failed to regenerate report: ' + err.message;
+            regenerating.value = false;
+          });
+        }
+
+        /**
+         * Copy the currently displayed report's raw markdown to clipboard.
+         */
+        function copyMarkdown() {
+          if (!reportContent.value) {
+            console.log('[report] nothing to copy');
+            return;
+          }
+          console.log('[report] copying markdown to clipboard');
+          navigator.clipboard.writeText(reportContent.value).then(function() {
+            console.log('[report] copied to clipboard');
+            copySuccess.value = true;
+            setTimeout(function() {
+              copySuccess.value = false;
+            }, 2000);
+          }).catch(function(err) {
+            console.error('[report] clipboard write failed', err.message);
+          });
+        }
+
+        /**
+         * Render markdown content to HTML (stripping frontmatter first).
+         * Uses marked.js for full GFM support.
+         * @param {string} md
+         * @returns {string}
+         */
+        function renderMarkdown(md) {
+          var stripped = stripFrontmatter(md);
+          return marked.parse(stripped);
+        }
+
+        Vue.onMounted(function() {
+          console.log('[report] component mounted, loading reports');
+          loadReports();
+        });
+
+        return {
+          reports: reports,
+          selectedFilename: selectedFilename,
+          reportContent: reportContent,
+          loading: loading,
+          loadingContent: loadingContent,
+          regenerating: regenerating,
+          error: error,
+          copySuccess: copySuccess,
+          loadReports: loadReports,
+          selectReport: selectReport,
+          regenerate: regenerate,
+          copyMarkdown: copyMarkdown,
+          renderMarkdown: renderMarkdown,
+          formatDate: formatDate
+        };
+      }
+    });
+
+    registerComponents(app);
+    applyPageTheme().then(function() {
+      app.mount('#app');
+      console.log('[report] app mounted');
+    });
+  </script>
+</body>
+</html>
