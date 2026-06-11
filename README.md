@@ -309,6 +309,44 @@ In-memory TTL cache (30s) в vault_api.py:
 
 ---
 
+## Здоровье хранилища (Vault Health)
+
+Система оценки качества и полноты хранилища знаний. Endpoint: `GET /api/v1/vault/health`.
+
+### Формула
+
+```
+score = max(0, min(100, 100 - Σ(count × weight) - coverage_penalty))
+```
+
+Грейды:
+- **healthy** (≥80) — хранилище в хорошем состоянии
+- **warning** (50–79) — есть проблемы, требующие внимания
+- **critical** (<50) — серьёзные проблемы со структурой или полнотой
+
+### Метрики
+
+| Метрика | Weight | Что измеряет | Логика |
+|---|---|---|---|
+| `broken_links` | 3 | Битые `[[wikilinks]]` в wiki/ | Сканирует body (не frontmatter) всех wiki/*.md. Резолвит ссылки 3 уровнями: exact name → suffix match → stem match. Игнорирует: @mentions, шаблоны `{{}}`, URL, вложения, имена людей (2-3 слова с заглавной). Резолвит относительные пути (`../`) |
+| `orphan_pages` | 5 | Необработанные raw-файлы | Файлы в `raw/inbound/` (все подпапки), на которые нет ссылки `source:` в frontmatter ни одного wiki-артефакта. Файл сохранён, но не трансформировался ни в одну сущность |
+| `dead_ends` | 1 | Артефакты без исходящих связей | Файлы в `wiki/domains/*/ideas,tasks,epics,prds,bugs,userstories/` без единого `[[wikilink]]` в body. Исключает service-файлы (index.md, log.md) и файлы с `jira_key` |
+| `stale_drafts` | 1 | Устаревшие черновики | Идеи со статусом `draft`/`inbox`, не обновлявшиеся >30 дней |
+| `unsorted_misc` | 0.5 | Неиспользуемые misc-файлы | Файлы в `raw/inbound/misc/`, stem/name которых не упоминается ни в одном `[[wikilink]]` в wiki/. Файлы, на которые есть ссылка — не штрафуются |
+| `ingest_backlog` | 0.2 | Очередь необработанного raw | Файлы в `raw/inbound/ideas/` и `raw/inbound/tasks/`, для которых нет wiki-артефакта с таким же stem |
+| `description_coverage` | — | Полнота описаний | Доля артефактов с ≥2 предложениями в body. Penalty: <50% → 10, <70% → 5, ≥70% → 0 |
+
+### Различие orphan_pages и ingest_backlog
+
+- **orphan_pages** — широкий охват: все подпапки `raw/inbound/`, проверка по `source:` frontmatter. Отвечает на вопрос: «этот файл вообще обработан?»
+- **ingest_backlog** — узкий охват: только `ideas/` и `tasks/`, проверка по совпадению stem. Отвечает на вопрос: «есть ли wiki-аналог этого файла?»
+
+### Тренды
+
+API возвращает `trend_7d` и `trend_30d` — история score за 7 и 30 дней. История хранится в `.health-history.json` в корне vault (TTL 90 дней).
+
+---
+
 ## Статистика проекта
 
 - 54 реализованных фичи

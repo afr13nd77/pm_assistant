@@ -248,64 +248,127 @@ def check_broken_links(vault_path: str) -> list[dict]:
 
 
 def check_orphan_pages(vault_path: str) -> list[dict]:
-    """Find pages in wiki/domains/*/<artifact_type>/ not referenced by any other file.
+    """Find files in raw/inbound/ that have no corresponding wiki artifact
+    with a ``source:`` frontmatter reference pointing back to them.
 
-    Returns a list of dicts with keys: file, domain, artifact_type.
+    These are raw files that were saved but never transformed into a wiki
+    entity.
+
+    Algorithm:
+      1. Scan all wiki/**/*.md, read YAML frontmatter via ``read_frontmatter``.
+      2. Collect every ``source`` value — extract paths from ``[[...]]``
+         brackets, normalise to lowercase / forward-slash.  Also collect
+         stems (filename without extension) for fuzzy matching.
+      3. Scan all files in raw/inbound/ recursively.
+      4. A raw file is an orphan if neither its relative path nor its stem
+         appears among the collected source references.
+
+    Returns:
+        list[dict] with keys:
+          - file  — relative path from vault root (forward slashes)
+          - type  — subdirectory name inside raw/inbound/ (e.g. "ideas",
+            "tasks", "meeting-notes", "misc")
     """
     vault = Path(vault_path)
-    logger.info("check_orphan_pages: starting scan under %s/wiki/domains/", vault)
+    logger.info("check_orphan_pages: starting scan for unreferenced raw/inbound/ files in %s", vault)
 
-    domains = vault_paths.all_domains()
-    logger.info("check_orphan_pages: scanning %d domains", len(domains))
-
-    candidate_files: list[tuple[Path, str, str]] = []
-
-    for domain in domains:
-        for artifact_type in _ARTIFACT_TYPES:
-            artifact_dir = vault / "wiki" / "domains" / domain / artifact_type
-            if not artifact_dir.exists():
-                continue
-            for md_file in artifact_dir.glob("*.md"):
-                if md_file.name in _SERVICE_FILES:
-                    continue
-                candidate_files.append((md_file, domain, artifact_type))
-
-    logger.info("check_orphan_pages: found %d candidate artifact files", len(candidate_files))
-
-    if not candidate_files:
-        return []
-
+    # ------------------------------------------------------------------
+    # Step 1-2: Scan wiki/ frontmatter and collect source references
+    # ------------------------------------------------------------------
     wiki_dir = vault / "wiki"
-    if not wiki_dir.exists():
-        logger.info("check_orphan_pages: wiki/ not found, all candidates are orphans")
-        referenced_targets: set[str] = set()
-    else:
-        referenced_targets: set[str] = set()
+    source_paths: set[str] = set()   # normalised full paths from source values
+    source_stems: set[str] = set()   # filename stems for fuzzy matching
+    wiki_scanned = 0
+
+    if wiki_dir.exists():
         for md_file in wiki_dir.rglob("*.md"):
+            wiki_scanned += 1
             try:
-                text = md_file.read_text(encoding="utf-8")
+                metadata, _ = read_frontmatter(md_file)
             except Exception as exc:
-                logger.error("check_orphan_pages: cannot read %s: %s", md_file, exc)
+                logger.error("check_orphan_pages: cannot read frontmatter from %s: %s", md_file, exc)
                 continue
-            for match in _WIKILINK_RE.finditer(text):
-                raw = match.group(1)
-                target = _resolve_wikilink_target(raw)
-                referenced_targets.add(target.lower())
+
+            raw_source = metadata.get("source")
+            if raw_source is None:
+                continue
+
+            # source can be a single string or a list of strings
+            if isinstance(raw_source, list):
+                values = raw_source
+            else:
+                values = [raw_source]
+
+            for val in values:
+                val = str(val).strip()
+                if not val:
+                    continue
+                # Extract path from [[...]] brackets if present
+                bracket_match = _WIKILINK_RE.search(val)
+                if bracket_match:
+                    path_str = bracket_match.group(1).strip()
+                else:
+                    path_str = val
+
+                # Handle pipe syntax: [[display|target]]
+                if "|" in path_str:
+                    path_str = path_str.split("|", 1)[1].strip()
+
+                normalised = path_str.replace("\\", "/").lower()
+                source_paths.add(normalised)
+
+                # Also store stem for fuzzy matching
+                stem = Path(path_str).stem.lower()
+                if stem:
+                    source_stems.add(stem)
 
     logger.info(
-        "check_orphan_pages: collected %d unique referenced targets", len(referenced_targets)
+        "check_orphan_pages: scanned %d wiki files, collected %d source paths + %d stems",
+        wiki_scanned,
+        len(source_paths),
+        len(source_stems),
     )
 
-    orphans = []
-    for md_file, domain, artifact_type in candidate_files:
-        if md_file.name.lower() not in referenced_targets:
-            orphans.append({
-                "file": str(md_file.relative_to(vault)).replace("\\", "/"),
-                "domain": domain,
-                "artifact_type": artifact_type,
-            })
+    # ------------------------------------------------------------------
+    # Step 3-4: Scan raw/inbound/ and find orphans
+    # ------------------------------------------------------------------
+    raw_inbound = vault / "raw" / "inbound"
+    if not raw_inbound.exists():
+        logger.info("check_orphan_pages: raw/inbound/ not found, returning empty")
+        return []
 
-    logger.info("check_orphan_pages: found %d orphan pages", len(orphans))
+    orphans: list[dict] = []
+    raw_scanned = 0
+
+    for raw_file in raw_inbound.rglob("*"):
+        if not raw_file.is_file():
+            continue
+        raw_scanned += 1
+
+        rel_path = str(raw_file.relative_to(vault)).replace("\\", "/")
+        rel_lower = rel_path.lower()
+        stem_lower = raw_file.stem.lower()
+
+        # Determine the subdirectory type (first directory component after raw/inbound/)
+        try:
+            sub_type = raw_file.relative_to(raw_inbound).parts[0]
+        except (IndexError, ValueError):
+            sub_type = "unknown"
+
+        # Check: is the raw file referenced by any wiki source?
+        if rel_lower in source_paths or stem_lower in source_stems:
+            continue
+
+        orphans.append({
+            "file": rel_path,
+            "type": sub_type,
+        })
+
+    logger.info(
+        "check_orphan_pages: scanned %d raw files, found %d orphans",
+        raw_scanned,
+        len(orphans),
+    )
     return orphans
 
 
