@@ -5,6 +5,16 @@
 
 ---
 
+## 12.06.2026 — knowledge-engine 1.6.0
+- Vault health audit (BL-118): score 0 → 81, grade critical → healthy
+- Linter: фильтр имён людей в wikilinks (2-3 слова с заглавной — игнорируются)
+- Linter: пропуск YAML frontmatter при проверке broken links
+- Linter: резолв относительных путей (../) при проверке broken links
+- Linter: `check_unsorted_misc` переписан — штраф за unreferenced файлы вместо возраста >7 дней
+- Vault: исправлены 620 broken wikilinks в 340+ файлах wiki/
+- Vault: добавлены перекрёстные связи в 23 dead-end артефактах
+- Vault: удалены 68 мусорных тестовых артефактов из wiki/domains/general/
+
 ## 08.06.2026 — pm-bot 1.7.3
 - Daily alert: пропуск проверки в субботу и воскресенье (weekend exclusion)
 - Проверка `today.weekday() >= 5` в начале `run_daily_alert()` — логирует "skipping weekend" и завершается
