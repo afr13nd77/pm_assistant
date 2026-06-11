@@ -437,6 +437,12 @@ def write_idea(idea_data: dict, raw_text: str) -> Path:
 
         filename = f"IDEA-{next_num:04d}-{today}_{slug}.md"
 
+        # 6.5. Fill source placeholders in body
+        raw_rel = f"raw/inbound/ideas/{filename}"
+        content = content.replace("{{source}}", "telegram-inbox")
+        content = content.replace("{{raw_ref}}", raw_rel)
+        logger.info("write_idea: filled source=telegram-inbox, raw_ref=%s", raw_rel)
+
         # 7. Save raw (immutable) copy
         raw_dir = raw_ideas()
         raw_path = raw_dir / filename
