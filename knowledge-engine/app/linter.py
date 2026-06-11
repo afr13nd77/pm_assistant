@@ -12,7 +12,6 @@ _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 _ARTIFACT_TYPES = ("ideas", "prds", "epics", "userstories", "tasks", "bugs")
 _SERVICE_FILES = frozenset({"index.md", "log.md", "decisions.md", "glossary.md"})
 _STALE_DRAFT_DAYS = 30
-_UNSORTED_MISC_DAYS = 7
 _DRAFT_STATUSES = frozenset({"draft", "inbox"})
 _ATTACHMENT_EXTS = frozenset({
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp",
@@ -66,6 +65,20 @@ def _is_ignorable_link(raw: str) -> bool:
         ext = target_part[dot_pos:].lower()
         if ext in _ATTACHMENT_EXTS:
             return True
+
+    # Person names — 2-3 capitalized words, no path-like chars
+    if "/" not in stripped and ".md" not in lower and "." not in stripped and "_" not in stripped and "-" not in stripped:
+        words = stripped.split()
+        if 2 <= len(words) <= 3:
+            all_capitalized = all(
+                len(w) > 0 and (
+                    w[0].isupper()  # covers both Latin A-Z and Cyrillic А-Я
+                )
+                for w in words
+            )
+            if all_capitalized:
+                logger.debug("_is_ignorable_link: treating as person name: %s", stripped)
+                return True
 
     return False
 
@@ -171,7 +184,23 @@ def check_broken_links(vault_path: str) -> list[dict]:
             logger.error("check_broken_links: cannot read %s: %s", md_file, exc)
             continue
 
-        for line_no, line in enumerate(text.splitlines(), start=1):
+        lines = text.splitlines()
+        body_start = 0  # 0-indexed position where body starts
+
+        # Skip YAML frontmatter delimited by --- ... ---
+        if lines and lines[0].strip() == "---":
+            for i in range(1, len(lines)):
+                if lines[i].strip() == "---":
+                    body_start = i + 1
+                    logger.debug(
+                        "check_broken_links: %s — skipping frontmatter (lines 1-%d)",
+                        md_file.name, body_start,
+                    )
+                    break
+
+        for idx in range(body_start, len(lines)):
+            line_no = idx + 1  # 1-based for reporting
+            line = lines[idx]
             for match in _WIKILINK_RE.finditer(line):
                 raw = match.group(1)
                 if _is_ignorable_link(raw):
@@ -181,6 +210,27 @@ def check_broken_links(vault_path: str) -> list[dict]:
                 if not target.lower().endswith(".md"):
                     logger.debug("check_broken_links: skipping non-md target: %s", target)
                     continue
+                # Resolve relative paths (../) against the current file's directory
+                if "../" in target:
+                    resolved_path = (md_file.parent / target).resolve()
+                    if resolved_path.exists():
+                        logger.debug(
+                            "check_broken_links: relative path %s resolved to existing file %s",
+                            target, resolved_path,
+                        )
+                        continue
+                    else:
+                        broken.append({
+                            "file": str(md_file.relative_to(vault)).replace("\\", "/"),
+                            "line": line_no,
+                            "link": raw,
+                            "reason": "relative path target not found",
+                        })
+                        logger.debug(
+                            "check_broken_links: relative path %s did not resolve (tried %s)",
+                            target, resolved_path,
+                        )
+                        continue
                 if not _resolve_wikilink(target, file_index):
                     broken.append({
                         "file": str(md_file.relative_to(vault)).replace("\\", "/"),
@@ -313,37 +363,75 @@ def check_stale_drafts(vault_path: str) -> list[dict]:
 
 
 def check_unsorted_misc(vault_path: str) -> list[dict]:
-    """Find files in raw/inbound/misc/ older than 7 days.
+    """Find files in raw/inbound/misc/ that have no wikilink references from wiki/.
 
-    Returns a list of dicts with keys: file, days_old.
+    Scans all wiki/**/*.md files for [[...]] wikilinks, builds a set of
+    referenced targets (lowercased names and stems), then reports any misc
+    file whose name or stem is not referenced.
+
+    Returns a list of dicts with keys: file (relative path), name (filename).
     """
     vault = Path(vault_path)
     misc_dir = vault / "raw" / "inbound" / "misc"
+    wiki_dir = vault / "wiki"
     logger.info("check_unsorted_misc: scanning %s", misc_dir)
 
     if not misc_dir.exists():
         logger.info("check_unsorted_misc: misc/ not found, returning empty")
         return []
 
-    now = time.time()
+    # --- Build set of all wikilink targets referenced from wiki/ ---
+    referenced: set[str] = set()
+    if wiki_dir.exists():
+        for md_file in wiki_dir.rglob("*.md"):
+            try:
+                text = md_file.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for match in _WIKILINK_RE.finditer(text):
+                raw = match.group(1).strip()
+                # Handle pipe syntax: [[display|target]] → use target
+                if "|" in raw:
+                    target = raw.split("|", 1)[1].strip()
+                else:
+                    target = raw.strip()
+                target_lower = target.lower()
+                referenced.add(target_lower)
+                # Also add the stem (without extension) if target has one
+                target_path = Path(target)
+                if target_path.suffix:
+                    referenced.add(target_path.stem.lower())
+
+    logger.info(
+        "check_unsorted_misc: collected %d unique wikilink targets from wiki/",
+        len(referenced),
+    )
+
+    # --- Scan misc files and check against referenced set ---
     unsorted = []
     scanned = 0
+    referenced_count = 0
 
     for entry in misc_dir.iterdir():
         if not entry.is_file():
             continue
         scanned += 1
-        mtime = entry.stat().st_mtime
-        days_old = int((now - mtime) / 86400)
-        if days_old >= _UNSORTED_MISC_DAYS:
+        name_lower = entry.name.lower()
+        stem_lower = entry.stem.lower()
+        rel_path = str(entry.relative_to(vault)).replace("\\", "/")
+        is_referenced = name_lower in referenced or stem_lower in referenced
+        if is_referenced:
+            referenced_count += 1
+        else:
             unsorted.append({
-                "file": str(entry.relative_to(vault)).replace("\\", "/"),
-                "days_old": days_old,
+                "file": rel_path,
+                "name": entry.name,
             })
 
     logger.info(
-        "check_unsorted_misc: scanned %d files, found %d unsorted items",
+        "check_unsorted_misc: scanned %d files, %d referenced, %d unreferenced",
         scanned,
+        referenced_count,
         len(unsorted),
     )
     return unsorted
