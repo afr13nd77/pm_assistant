@@ -142,7 +142,7 @@ pm_assistant/
 | Компонент | Версия | Последнее изменение | Описание |
 |---|---|---|---|
 | **pm-bot** | 1.7.4 | 2026-06-11 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. Daily Jira Sync. /progress. Меню команд. Jira sync notify toggle. Daily alert (пн-пт). Health popup layout fix (BUG-016) |
-| **knowledge-engine** | 1.5.2 | 2026-06-11 | Enrichment, synthesis, Jira sync, meeting fetch, daily Jira key sync. Гибридная LLM-архитектура. Health false positives fix: _is_ignorable_link, jira_key exclusion (BUG-017) |
+| **knowledge-engine** | 1.6.0 | 2026-06-12 | Enrichment, synthesis, Jira sync, meeting fetch, daily Jira key sync. Гибридная LLM-архитектура. Linter: person names filter, frontmatter skip, relative path resolution, unsorted_misc по ссылкам (BL-118) |
 | **idea-pipeline** | 1.1.0 | 2026-05-08 | Orchestrator: Analyst → PM → Decomposer |
 | **web-ui** | 1.15.5 | 2026-06-11 | Dual-theme SPA дашборд. Health popup light-тема: .theme-light CSS specificity, theme-aware JS colors (BUG-016) |
 | **инфраструктура** | 1.0.0 | 2026-06-11 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120) |
