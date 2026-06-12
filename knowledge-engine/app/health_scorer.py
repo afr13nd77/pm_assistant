@@ -24,6 +24,7 @@ _WEIGHTS = {
 }
 
 _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
+_IDEA_ID_RE = re.compile(r"^(IDEA-\d{4})")
 _ARTIFACT_TYPES = ("ideas", "prds", "epics", "userstories", "tasks", "bugs")
 _SERVICE_FILES = frozenset({"index.md", "log.md", "decisions.md", "glossary.md"})
 
@@ -418,11 +419,17 @@ def _check_ingest_backlog(vault_path: str) -> list:
 
     Scans ``raw/inbound/ideas/*.md`` and ``raw/inbound/tasks/*.md``.
 
-    **Ideas** use id-based matching: reads the ``id`` field from frontmatter
-    of both raw and wiki files.  A raw idea is considered ingested when a wiki
-    idea with the same ``id`` exists (comparison is case-insensitive after
-    strip).  If a raw idea has no ``id`` in its frontmatter, falls back to
-    stem matching.
+    **Ideas** use id-based matching with the following priority:
+
+    1. ``id`` field from frontmatter (highest priority).
+    2. ID extracted from filename via ``_IDEA_ID_RE`` regex
+       (e.g. ``IDEA-0032`` from ``IDEA-0032-2026-04-25_description.md``).
+    3. Stem matching as fallback (if neither frontmatter id nor filename id
+       is found).
+
+    A raw idea is considered ingested when a wiki idea with the same id
+    exists (comparison is case-insensitive after strip).  The same
+    extraction logic applies to wiki idea files.
 
     **Tasks** use stem matching: a raw task is considered ingested when a wiki
     task file with the same stem (case-insensitive) exists in any domain.
@@ -447,21 +454,37 @@ def _check_ingest_backlog(vault_path: str) -> list:
             if not domain_dir.is_dir():
                 continue
 
-            # Ideas: collect ids from frontmatter + stems as fallback
+            # Ideas: collect ids from frontmatter / filename + stems as fallback
             ideas_dir = domain_dir / "ideas"
             if ideas_dir.exists():
+                wiki_fm_id_count = 0
+                wiki_fn_id_count = 0
                 for f in ideas_dir.glob("*.md"):
                     wiki_idea_stems.add(f.stem.lower())
+                    idea_id: str | None = None
                     try:
                         meta, _ = read_frontmatter(f)
-                        idea_id = meta.get("id")
-                        if idea_id and isinstance(idea_id, str):
-                            wiki_idea_ids.add(idea_id.strip().lower())
+                        raw_fm_id = meta.get("id")
+                        if raw_fm_id and isinstance(raw_fm_id, str):
+                            idea_id = raw_fm_id.strip().lower()
+                            wiki_fm_id_count += 1
                     except Exception:
                         logger.warning(
                             "_check_ingest_backlog: failed to read frontmatter from wiki idea %s, using stem only",
                             f,
                         )
+                    # Fallback: extract ID from filename
+                    if idea_id is None:
+                        m = _IDEA_ID_RE.match(f.stem)
+                        if m:
+                            idea_id = m.group(1).lower()
+                            wiki_fn_id_count += 1
+                    if idea_id is not None:
+                        wiki_idea_ids.add(idea_id)
+                logger.info(
+                    "_check_ingest_backlog: wiki ideas in %s: %d from frontmatter, %d from filename",
+                    ideas_dir, wiki_fm_id_count, wiki_fn_id_count,
+                )
 
             # Tasks: collect stems only
             tasks_dir = domain_dir / "tasks"
@@ -496,29 +519,41 @@ def _check_ingest_backlog(vault_path: str) -> list:
             raw_scanned += 1
 
             if art_type == "ideas":
-                # Try id-based matching first
+                # Try id-based matching: frontmatter id > filename id > stem
                 raw_id: str | None = None
+                id_source: str = "none"
                 try:
                     meta, _ = read_frontmatter(f)
                     raw_id_val = meta.get("id")
                     if raw_id_val and isinstance(raw_id_val, str):
                         raw_id = raw_id_val.strip().lower()
+                        id_source = "frontmatter"
                 except Exception:
                     logger.warning(
-                        "_check_ingest_backlog: failed to read frontmatter from raw idea %s, skipping",
+                        "_check_ingest_backlog: failed to read frontmatter from raw idea %s, trying filename",
                         f,
                     )
-                    continue  # cannot determine id -> skip, do not count as backlog
+
+                # Fallback: extract ID from filename
+                if raw_id is None:
+                    m = _IDEA_ID_RE.match(f.stem)
+                    if m:
+                        raw_id = m.group(1).lower()
+                        id_source = "filename"
 
                 if raw_id is not None:
-                    # id-based matching
+                    # id-based matching (from frontmatter or filename)
                     if raw_id not in wiki_idea_ids:
                         backlog.append({
                             "file": str(f.relative_to(vault)).replace("\\", "/"),
                             "type": art_type,
                         })
+                    logger.debug(
+                        "_check_ingest_backlog: raw idea %s id=%s source=%s matched=%s",
+                        f.name, raw_id, id_source, raw_id in wiki_idea_ids,
+                    )
                 else:
-                    # Fallback: stem matching (raw idea has no id)
+                    # Fallback: stem matching (no id from frontmatter or filename)
                     if f.stem.lower() not in wiki_idea_stems:
                         backlog.append({
                             "file": str(f.relative_to(vault)).replace("\\", "/"),

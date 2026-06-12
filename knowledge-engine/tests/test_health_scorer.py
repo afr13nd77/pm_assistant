@@ -375,20 +375,22 @@ class TestCheckIngestBacklog:
         types = {r["type"] for r in result}
         assert types == {"ideas", "tasks"}
 
-    def test_raw_idea_bad_frontmatter_skipped(self, tmp_path):
-        """Raw idea with unreadable frontmatter is skipped (not counted as backlog)."""
+    def test_raw_idea_bad_frontmatter_falls_back(self, tmp_path):
+        """Raw idea with unreadable frontmatter falls back to filename/stem matching."""
         scorer = _import_health_scorer(tmp_path)
         # Write a valid raw idea -> backlog (no wiki match)
         _write_raw(tmp_path, "ideas", "IDEA-010-good.md", {"id": "IDEA-010", "type": "idea"})
-        # Write a raw idea with broken frontmatter
+        # Write a raw idea with broken frontmatter; IDEA-011 is 3 digits -> no filename match -> stem fallback -> backlog
         bad_path = tmp_path / "raw" / "inbound" / "ideas" / "IDEA-011-bad.md"
         bad_path.parent.mkdir(parents=True, exist_ok=True)
         bad_path.write_text("---\ninvalid: [unclosed\n---\nBody.", encoding="utf-8")
 
         result = scorer._check_ingest_backlog(str(tmp_path))
-        # Only IDEA-010 is in backlog; IDEA-011 is skipped
-        assert len(result) == 1
-        assert "IDEA-010" in result[0]["file"]
+        # Both are in backlog: IDEA-010 (id not in wiki), IDEA-011-bad (stem not in wiki)
+        assert len(result) == 2
+        files = {r["file"] for r in result}
+        assert any("IDEA-010" in f for f in files)
+        assert any("IDEA-011" in f for f in files)
 
     def test_wiki_idea_bad_frontmatter_uses_stem(self, tmp_path):
         """Wiki idea with unreadable frontmatter still contributes its stem."""
@@ -432,3 +434,37 @@ class TestCheckIngestBacklog:
         assert len(result) == 1
         assert "\\" not in result[0]["file"]
         assert result[0]["file"] == "raw/inbound/ideas/IDEA-099-test.md"
+
+    def test_idea_id_from_filename(self, tmp_path):
+        """Raw idea without id in frontmatter matched by filename IDEA-NNNN pattern."""
+        scorer = _import_health_scorer(tmp_path)
+        # Raw idea has no 'id' in frontmatter, but filename contains IDEA-0032
+        _write_raw(tmp_path, "ideas", "IDEA-0032-2026-04-25_getresults.md", {"type": "idea"})
+        # Wiki idea has id in frontmatter
+        _write_wiki_idea(tmp_path, "search-engine", "IDEA-0032-cashback.md", idea_id="IDEA-0032")
+
+        result = scorer._check_ingest_backlog(str(tmp_path))
+        assert result == []
+
+    def test_idea_id_from_filename_both_sides(self, tmp_path):
+        """Both raw and wiki idea lack frontmatter id but match via filename IDEA-NNNN."""
+        scorer = _import_health_scorer(tmp_path)
+        # Raw idea: no frontmatter id, filename IDEA-0032
+        _write_raw(tmp_path, "ideas", "IDEA-0032-2026-04-25_getresults.md", {"type": "idea"})
+        # Wiki idea: no frontmatter id, filename IDEA-0032
+        _write_wiki_idea(tmp_path, "search-engine", "IDEA-0032-rest-method.md", idea_id=None)
+
+        result = scorer._check_ingest_backlog(str(tmp_path))
+        assert result == []
+
+    def test_idea_id_frontmatter_overrides_filename(self, tmp_path):
+        """Frontmatter id takes priority over filename id."""
+        scorer = _import_health_scorer(tmp_path)
+        # Raw idea: filename says IDEA-0099, but frontmatter says IDEA-0032
+        _write_raw(tmp_path, "ideas", "IDEA-0099-wrong-name.md", {"id": "IDEA-0032", "type": "idea"})
+        # Wiki idea has id IDEA-0032 in frontmatter
+        _write_wiki_idea(tmp_path, "general", "IDEA-0032-correct.md", idea_id="IDEA-0032")
+
+        result = scorer._check_ingest_backlog(str(tmp_path))
+        # Should match by frontmatter id (IDEA-0032), not filename (IDEA-0099)
+        assert result == []
