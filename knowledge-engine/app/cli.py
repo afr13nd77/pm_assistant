@@ -131,6 +131,14 @@ def main():
     lint_parser = subparsers.add_parser("lint", help="Run vault health checks")
     lint_parser.add_argument("--vault", default=None, help="Vault root path")
 
+    migrate_parser = subparsers.add_parser(
+        "migrate-statuses",
+        help="Migrate idea statuses from legacy values to canonical (C-0003)"
+    )
+    migrate_parser.add_argument("--vault", default=None, help="Vault root path")
+    migrate_parser.add_argument("--dry-run", action="store_true",
+                                help="Show what would be migrated without modifying files")
+
     health_parser = subparsers.add_parser("health", help="Calculate vault health score")
     health_parser.add_argument("--vault", default=None, help="Vault root path")
     health_parser.add_argument("--save", action="store_true", help="Save score to history file")
@@ -423,6 +431,17 @@ def main():
             logger.error("jira-issue-types: failed: %s", e)
             print(json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False))
             sys.exit(1)
+
+    elif args.command == "migrate-statuses":
+        from . import vault_paths as _vp
+        _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
+        from .status_migrator import migrate_statuses
+        logger.info("migrate-statuses: starting, vault=%s, dry_run=%s", vault_path, args.dry_run)
+        result = migrate_statuses(vault_path, dry_run=args.dry_run)
+        logger.info("migrate-statuses: completed, migrated=%d, skipped=%d, errors=%d",
+                    result["migrated"], result["skipped"], result["errors"])
+        _output_json(result)
+        sys.exit(0)
 
     elif args.command == "lint":
         from . import vault_paths as _vp

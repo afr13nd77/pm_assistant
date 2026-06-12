@@ -95,6 +95,7 @@ pm_assistant/
 │       ├── watcher.py              # watchdog: Inbox/ → auto-enrichment
 │       ├── artifact_extractor.py   # извлечение артефактов
 │       ├── linter.py               # линтер vault-файлов
+│       ├── status_migrator.py          # миграция статусов идей: STATUS_MAP + VALID_STATUSES + migrate_statuses()
 │       ├── process_one.py          # обработка одного файла
 │       ├── domain_config.py        # загрузка/сохранение domain-config.yaml
 │       ├── jira_fetcher/           # модуль синхронизации с Jira
@@ -141,8 +142,8 @@ pm_assistant/
 
 | Компонент | Версия | Последнее изменение | Описание |
 |---|---|---|---|
-| **pm-bot** | 1.7.5 | 2026-06-12 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. Daily Jira Sync. /progress. Меню команд. Jira sync notify toggle. Daily alert (пн-пт). Health popup layout fix (BUG-016). Vault health audit закрыт (BL-118) |
-| **knowledge-engine** | 1.6.2 | 2026-06-12 | Enrichment, synthesis, Jira sync, meeting fetch, daily Jira key sync. Гибридная LLM-архитектура. Linter: orphan_pages date matching, file index wiki/+raw/, person names filter, unsorted_misc по ссылкам. Vault health audit закрыт (BL-118): score 83, grade healthy |
+| **pm-bot** | 1.7.6 | 2026-06-12 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. Daily Jira Sync. /progress. Меню команд. Jira sync notify toggle. Daily alert (пн-пт). Health popup layout fix (BUG-016). Vault health audit закрыт (BL-118). Fallback status "inbox" → "Новая" (BL-122) |
+| **knowledge-engine** | 1.6.3 | 2026-06-12 | Enrichment, synthesis, Jira sync, meeting fetch, daily Jira key sync. Гибридная LLM-архитектура. Linter: orphan_pages date matching, file index wiki/+raw/, person names filter, unsorted_misc по ссылкам. Vault health audit закрыт (BL-118): score 83, grade healthy. Status migrator + linter check_invalid_idea_statuses + watcher skip-statuses (BL-122) |
 | **idea-pipeline** | 1.1.0 | 2026-05-08 | Orchestrator: Analyst → PM → Decomposer |
 | **web-ui** | 1.15.5 | 2026-06-11 | Dual-theme SPA дашборд. Health popup light-тема: .theme-light CSS specificity, theme-aware JS colors (BUG-016) |
 | **инфраструктура** | 1.0.0 | 2026-06-11 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120) |
@@ -310,6 +311,7 @@ pm_assistant/
 | ds v4/ | — | Дизайн-система v4: HTML-макеты matrix theme (matrix-ds-v4, pmassistant-design-system-v2) |
 | guided-enrichment/ | APPROVED, IMPLEMENTED | Telegram-напоминания о незаполненных секциях идей (enrichment_reminder.py + enrichment_db.py, daily cron, SQLite cooldown) |
 | health-scoring/ | APPROVED, IMPLEMENTED | Vault health score (0-100) + wikilink resolver. 7 категорий штрафов, endpoint /vault/health, overview виджет, ke-cron 04:00, .health-history.json 90д (requirements, design, tasks — 14 задач, BL-114, BL-115) |
+| idea-status-unification/ | APPROVED, IMPLEMENTED | Унификация статусов идей: миграция legacy→каноничные, linter проверка, fallback fix (requirements, design, tasks — 7 задач, BL-122) |
 | idea-board/ | APPROVED, IMPLEMENTED | Канбан-доска идей с 4 колонками (requirements, design, tasks) |
 | idea-pipeline/ | APPROVED, IMPLEMENTED | Orchestrator Analyst→PM→Decomposer (requirements, design, tasks) |
 | ideas-drag-n-drop/ | APPROVED, IMPLEMENTED | Drag-n-drop для идей (requirements, design, tasks) |

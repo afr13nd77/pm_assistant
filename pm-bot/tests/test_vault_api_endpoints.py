@@ -236,7 +236,7 @@ class TestIdeasEndpoint:
         assert len(data) == 1
         assert data[0]["title"] == "Plain Note"
         assert data[0]["tags"] == []
-        assert data[0]["status"] == "inbox"
+        assert data[0]["status"] == "Новая"
         assert data[0]["domain"] == "content"
 
     def test_ideas_excludes_service_files(self, client, vault_dir):

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from . import vault_paths
 from .frontmatter_utils import read_frontmatter
+from .status_migrator import VALID_STATUSES
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +13,7 @@ _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 _ARTIFACT_TYPES = ("ideas", "prds", "epics", "userstories", "tasks", "bugs")
 _SERVICE_FILES = frozenset({"index.md", "log.md", "decisions.md", "glossary.md"})
 _STALE_DRAFT_DAYS = 30
-_DRAFT_STATUSES = frozenset({"draft", "inbox"})
+_DRAFT_STATUSES = frozenset({"новая"})
 _ATTACHMENT_EXTS = frozenset({
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp",
     ".pdf", ".csv", ".xlsx", ".xls", ".docx", ".pptx",
@@ -490,6 +491,48 @@ def check_unsorted_misc(vault_path: str) -> list[dict]:
     return unsorted
 
 
+def check_invalid_idea_statuses(vault_path: str) -> list[dict]:
+    logger.info("check_invalid_idea_statuses: starting scan")
+    results = []
+    root = Path(vault_path) / "wiki" / "domains"
+    if not root.exists():
+        logger.info("check_invalid_idea_statuses: wiki/domains not found, returning empty")
+        return results
+
+    for domain_dir in sorted(root.iterdir()):
+        if not domain_dir.is_dir():
+            continue
+        ideas_dir = domain_dir / "ideas"
+        if not ideas_dir.exists():
+            continue
+        domain = domain_dir.name
+        for f in sorted(ideas_dir.glob("*.md")):
+            if f.name in _SERVICE_FILES:
+                continue
+            try:
+                metadata, _ = read_frontmatter(f)
+                status = metadata.get("status")
+                if status is None or status.strip() == "":
+                    results.append({
+                        "file": str(f.relative_to(Path(vault_path))),
+                        "domain": domain,
+                        "status": status,
+                        "reason": "missing_status",
+                    })
+                elif status not in VALID_STATUSES:
+                    results.append({
+                        "file": str(f.relative_to(Path(vault_path))),
+                        "domain": domain,
+                        "status": status,
+                        "reason": "unknown_status",
+                    })
+            except Exception as exc:
+                logger.warning(f"check_invalid_idea_statuses: error reading {f.name}: {exc}")
+
+    logger.info(f"check_invalid_idea_statuses: found {len(results)} invalid statuses")
+    return results
+
+
 def lint(vault_path: str) -> dict:
     """Run all vault health checks and return a structured report.
 
@@ -506,22 +549,19 @@ def lint(vault_path: str) -> dict:
     orphan_pages = check_orphan_pages(vault_path)
     stale_drafts = check_stale_drafts(vault_path)
     unsorted_misc = check_unsorted_misc(vault_path)
+    invalid_idea_statuses = check_invalid_idea_statuses(vault_path)
 
     summary = {
         "broken_links_count": len(broken_links),
         "orphan_pages_count": len(orphan_pages),
         "stale_drafts_count": len(stale_drafts),
         "unsorted_misc_count": len(unsorted_misc),
-        "total_issues": len(broken_links) + len(orphan_pages) + len(stale_drafts) + len(unsorted_misc),
+        "invalid_idea_statuses_count": len(invalid_idea_statuses),
+        "total_issues": len(broken_links) + len(orphan_pages) + len(stale_drafts) + len(unsorted_misc) + len(invalid_idea_statuses),
     }
 
     logger.info(
-        "lint: completed — broken_links=%d orphan_pages=%d stale_drafts=%d unsorted_misc=%d total=%d",
-        summary["broken_links_count"],
-        summary["orphan_pages_count"],
-        summary["stale_drafts_count"],
-        summary["unsorted_misc_count"],
-        summary["total_issues"],
+        f"lint: completed — broken_links={summary['broken_links_count']} orphan_pages={summary['orphan_pages_count']} stale_drafts={summary['stale_drafts_count']} unsorted_misc={summary['unsorted_misc_count']} invalid_idea_statuses={summary['invalid_idea_statuses_count']} total={summary['total_issues']}"
     )
 
     return {
@@ -530,5 +570,6 @@ def lint(vault_path: str) -> dict:
         "orphan_pages": orphan_pages,
         "stale_drafts": stale_drafts,
         "unsorted_misc": unsorted_misc,
+        "invalid_idea_statuses": invalid_idea_statuses,
         "summary": summary,
     }

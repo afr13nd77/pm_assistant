@@ -9,8 +9,11 @@ from watchdog.observers.polling import PollingObserver
 from . import vault_paths
 from .enricher import enrich
 from .frontmatter_utils import read_frontmatter
+from .status_migrator import VALID_STATUSES
 
 logger = logging.getLogger(__name__)
+
+_SKIP_ENRICH_STATUSES = frozenset({"enriched"}) | VALID_STATUSES
 
 
 class InboxHandler(FileSystemEventHandler):
@@ -33,8 +36,8 @@ class InboxHandler(FileSystemEventHandler):
 
         try:
             metadata, _ = read_frontmatter(path)
-            status = metadata.get("status", "inbox")
-            if status in ("enriched", "processed"):
+            status = metadata.get("status", "Новая")
+            if status in _SKIP_ENRICH_STATUSES:
                 logger.info(f"File already {status}, skipping: {path.name}")
                 return
         except Exception as e:

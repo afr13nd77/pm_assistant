@@ -335,7 +335,7 @@ class TestCheckStaleDrafts:
     def test_stale_draft_reported(self, tmp_path):
         linter = _import_linter(tmp_path)
         md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "old-idea.md"
-        _write_md_with_frontmatter(md, status="draft", body="# Old idea")
+        _write_md_with_frontmatter(md, status="Новая", body="# Old idea")
         _set_mtime_days_ago(md, 35)
 
         result = linter.check_stale_drafts(str(tmp_path))
@@ -344,23 +344,23 @@ class TestCheckStaleDrafts:
         item = result[0]
         assert item["domain"] == "test-domain"
         assert item["days_old"] >= 35
-        assert item["status"] == "draft"
+        assert item["status"] == "новая"
 
-    def test_inbox_status_also_reported(self, tmp_path):
+    def test_new_status_also_reported(self, tmp_path):
         linter = _import_linter(tmp_path)
-        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "inbox-idea.md"
-        _write_md_with_frontmatter(md, status="inbox", body="# Old inbox idea")
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "new-idea.md"
+        _write_md_with_frontmatter(md, status="Новая", body="# Old new idea")
         _set_mtime_days_ago(md, 31)
 
         result = linter.check_stale_drafts(str(tmp_path))
 
         assert len(result) == 1
-        assert result[0]["status"] == "inbox"
+        assert result[0]["status"] == "новая"
 
     def test_recent_draft_not_reported(self, tmp_path):
         linter = _import_linter(tmp_path)
         md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "new-idea.md"
-        _write_md_with_frontmatter(md, status="draft", body="# New idea")
+        _write_md_with_frontmatter(md, status="Новая", body="# New idea")
         _set_mtime_days_ago(md, 5)
 
         result = linter.check_stale_drafts(str(tmp_path))
@@ -369,7 +369,7 @@ class TestCheckStaleDrafts:
     def test_non_draft_status_not_reported(self, tmp_path):
         linter = _import_linter(tmp_path)
         md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "active.md"
-        _write_md_with_frontmatter(md, status="active", body="# Active idea")
+        _write_md_with_frontmatter(md, status="Проверка гипотезы", body="# Active idea")
         _set_mtime_days_ago(md, 60)
 
         result = linter.check_stale_drafts(str(tmp_path))
@@ -378,7 +378,7 @@ class TestCheckStaleDrafts:
     def test_exactly_30_days_old_is_stale(self, tmp_path):
         linter = _import_linter(tmp_path)
         md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "boundary.md"
-        _write_md_with_frontmatter(md, status="draft", body="# Boundary")
+        _write_md_with_frontmatter(md, status="Новая", body="# Boundary")
         _set_mtime_days_ago(md, 30)
 
         result = linter.check_stale_drafts(str(tmp_path))
@@ -388,7 +388,7 @@ class TestCheckStaleDrafts:
         linter = _import_linter(tmp_path)
         for service_name in ("index.md", "log.md"):
             f = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / service_name
-            _write_md_with_frontmatter(f, status="draft", body="# Service")
+            _write_md_with_frontmatter(f, status="Новая", body="# Service")
             _set_mtime_days_ago(f, 60)
 
         result = linter.check_stale_drafts(str(tmp_path))
@@ -397,7 +397,7 @@ class TestCheckStaleDrafts:
     def test_stale_draft_file_path_is_relative(self, tmp_path):
         linter = _import_linter(tmp_path)
         md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "old.md"
-        _write_md_with_frontmatter(md, status="draft")
+        _write_md_with_frontmatter(md, status="Новая")
         _set_mtime_days_ago(md, 40)
 
         result = linter.check_stale_drafts(str(tmp_path))
@@ -414,7 +414,7 @@ class TestCheckStaleDrafts:
         """Stale draft check only looks in ideas/, not prds/ or tasks/."""
         linter = _import_linter(tmp_path)
         prd = tmp_path / "wiki" / "domains" / "test-domain" / "prds" / "old-prd.md"
-        _write_md_with_frontmatter(prd, status="draft")
+        _write_md_with_frontmatter(prd, status="Новая")
         _set_mtime_days_ago(prd, 60)
 
         result = linter.check_stale_drafts(str(tmp_path))
@@ -493,6 +493,105 @@ class TestCheckUnsortedMisc:
 
 
 # ---------------------------------------------------------------------------
+# check_invalid_idea_statuses
+# ---------------------------------------------------------------------------
+
+class TestCheckInvalidIdeaStatuses:
+    def test_valid_status_not_reported(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "good.md"
+        _write_md_with_frontmatter(md, status="Новая")
+
+        result = linter.check_invalid_idea_statuses(str(tmp_path))
+        assert result == []
+
+    def test_unknown_status_reported(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "bad.md"
+        _write_md_with_frontmatter(md, status="archived")
+
+        result = linter.check_invalid_idea_statuses(str(tmp_path))
+        assert len(result) == 1
+        assert result[0]["status"] == "archived"
+        assert result[0]["reason"] == "unknown_status"
+        assert result[0]["domain"] == "test-domain"
+
+    def test_missing_status_reported(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "no-status.md"
+        _write_md(md, "---\ntitle: test\n---\n\nbody")
+
+        result = linter.check_invalid_idea_statuses(str(tmp_path))
+        assert len(result) == 1
+        assert result[0]["reason"] == "missing_status"
+        assert result[0]["status"] is None
+
+    def test_empty_status_reported(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "empty.md"
+        _write_md(md, "---\nstatus: \n---\n\nbody")
+
+        result = linter.check_invalid_idea_statuses(str(tmp_path))
+        assert len(result) == 1
+        assert result[0]["reason"] == "missing_status"
+
+    def test_service_files_excluded(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "index.md"
+        _write_md_with_frontmatter(md, status="archived")
+
+        result = linter.check_invalid_idea_statuses(str(tmp_path))
+        assert result == []
+
+    def test_no_domains_dir_returns_empty(self, tmp_path):
+        linter = _import_linter(tmp_path)
+
+        result = linter.check_invalid_idea_statuses(str(tmp_path))
+        assert result == []
+
+    def test_multiple_domains_scanned(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md1 = tmp_path / "wiki" / "domains" / "domain-a" / "ideas" / "a.md"
+        _write_md_with_frontmatter(md1, status="bogus")
+        md2 = tmp_path / "wiki" / "domains" / "domain-b" / "ideas" / "b.md"
+        _write_md_with_frontmatter(md2, status="unknown")
+
+        result = linter.check_invalid_idea_statuses(str(tmp_path))
+        assert len(result) == 2
+        domains = {r["domain"] for r in result}
+        assert domains == {"domain-a", "domain-b"}
+
+    def test_all_valid_statuses_accepted(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        from app.status_migrator import VALID_STATUSES
+        for i, status in enumerate(sorted(VALID_STATUSES)):
+            md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / f"idea-{i}.md"
+            _write_md_with_frontmatter(md, status=status)
+
+        result = linter.check_invalid_idea_statuses(str(tmp_path))
+        assert result == []
+
+    def test_result_contains_file_path(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "bad.md"
+        _write_md_with_frontmatter(md, status="old-status")
+
+        result = linter.check_invalid_idea_statuses(str(tmp_path))
+        assert len(result) == 1
+        assert "bad.md" in result[0]["file"]
+
+    def test_lint_includes_invalid_idea_statuses(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "bad.md"
+        _write_md_with_frontmatter(md, status="obsolete")
+
+        result = linter.lint(str(tmp_path))
+        assert result["summary"]["invalid_idea_statuses_count"] == 1
+        assert len(result["invalid_idea_statuses"]) == 1
+        assert result["summary"]["total_issues"] >= 1
+
+
+# ---------------------------------------------------------------------------
 # lint() integration
 # ---------------------------------------------------------------------------
 
@@ -531,11 +630,13 @@ class TestLintIntegration:
         assert result["summary"]["orphan_pages_count"] == len(result["orphan_pages"])
         assert result["summary"]["stale_drafts_count"] == len(result["stale_drafts"])
         assert result["summary"]["unsorted_misc_count"] == len(result["unsorted_misc"])
+        assert result["summary"]["invalid_idea_statuses_count"] == len(result["invalid_idea_statuses"])
         assert result["summary"]["total_issues"] == (
             result["summary"]["broken_links_count"]
             + result["summary"]["orphan_pages_count"]
             + result["summary"]["stale_drafts_count"]
             + result["summary"]["unsorted_misc_count"]
+            + result["summary"]["invalid_idea_statuses_count"]
         )
 
     def test_result_has_all_required_keys(self, tmp_path):
@@ -547,6 +648,7 @@ class TestLintIntegration:
         assert "orphan_pages" in result
         assert "stale_drafts" in result
         assert "unsorted_misc" in result
+        assert "invalid_idea_statuses" in result
         assert "summary" in result
 
         summary = result["summary"]

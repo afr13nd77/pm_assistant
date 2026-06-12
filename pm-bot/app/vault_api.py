@@ -687,7 +687,7 @@ def get_ideas(domain: str | None = Query(default=None)):
                     "updated": note.get("updated", note["date"]),
                     "title": note["title"],
                     "tags": _parse_tags(note.get("tags", "")),
-                    "status": note.get("status", "inbox"),
+                    "status": note.get("status", "Новая"),
                     "body": note["body"],
                     "domain": _domain_from_path(f),
                     "id": note.get("id", ""),

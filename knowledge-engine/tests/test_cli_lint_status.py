@@ -84,6 +84,7 @@ class TestCliLint:
         assert "orphan_pages" in data
         assert "stale_drafts" in data
         assert "unsorted_misc" in data
+        assert "invalid_idea_statuses" in data
         assert "summary" in data
 
     def test_lint_summary_has_required_keys(self, tmp_path):
@@ -98,6 +99,7 @@ class TestCliLint:
         assert "orphan_pages_count" in summary
         assert "stale_drafts_count" in summary
         assert "unsorted_misc_count" in summary
+        assert "invalid_idea_statuses_count" in summary
         assert "total_issues" in summary
 
     def test_lint_clean_vault_zero_issues(self, tmp_path):
@@ -128,7 +130,7 @@ class TestCliLint:
         _reload_modules(tmp_path)
         md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "stale.md"
         md.parent.mkdir(parents=True, exist_ok=True)
-        md.write_text("---\nstatus: draft\n---\n\n# Stale\n", encoding="utf-8")
+        md.write_text("---\nstatus: Новая\n---\n\n# Stale\n", encoding="utf-8")
         past = time.time() - 35 * 86400
         os.utime(str(md), (past, past))
 
