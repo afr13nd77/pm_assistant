@@ -119,7 +119,7 @@ Jira-статусы не нормализуются — Jira является и
 
 ## Компоненты
 
-### pm-bot (v1.7.5)
+### pm-bot (v1.7.7)
 
 Telegram-бот + Vault API + Web UI сервер. Точка входа для всех взаимодействий.
 
@@ -133,7 +133,7 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 - APScheduler: weekly report (Mon 09:00), enrichment reminders (daily)
 - SQLite: дедупликация enrichment-напоминаний (cooldown 24ч)
 
-### knowledge-engine (v1.6.2)
+### knowledge-engine (v1.6.4)
 
 Сервис обогащения и синтеза знаний.
 
@@ -146,7 +146,9 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 - Jira create: создание тикетов из vault
 - Meeting fetcher: IMAP клиент -> classify -> wiki -> enrich -> notify
 - Vault index: сканирование, in-memory индекс, keyword + tag matching
-- Linter: проверка frontmatter, структуры, битых ссылок
+- Linter: проверка frontmatter, структуры, битых ссылок, валидация статусов идей
+- Status migrator: миграция legacy-статусов в канонический словарь (4 статуса)
+- Pipeline metrics: ingest ratio, avg lag raw→wiki, raw counts по типам
 - Domain manager: scaffold, index, activity log
 - Watchdog: auto-enrichment при появлении файлов в raw/inbound/
 
@@ -334,7 +336,7 @@ score = max(0, min(100, 100 - Σ(count × weight) - coverage_penalty))
 | `broken_links` | 3 | Битые `[[wikilinks]]` в wiki/ | Сканирует body (не frontmatter) всех wiki/*.md. Резолвит ссылки 3 уровнями: exact name → suffix match → stem match. Игнорирует: @mentions, шаблоны `{{}}`, URL, вложения, имена людей (2-3 слова с заглавной). Резолвит относительные пути (`../`). Файловый индекс покрывает wiki/ и raw/ |
 | `orphan_pages` | 5 | Необработанные raw-файлы | Проверяет `raw/inbound/daily-logs/` и `raw/inbound/meeting-notes/`. Извлекает дату (YYYY-MM-DD или YYYY.MM.DD) из имени raw-файла и ищет wiki-аналог: daily-logs → `wiki/daily-logs/`, meeting-notes → `wiki/meetings/` + `wiki/daily-logs/` (Daily стендапы трансформируются в daily-logs). Остальные типы покрыты другими метриками |
 | `dead_ends` | 1 | Артефакты без исходящих связей | Файлы в `wiki/domains/*/ideas,tasks,epics,prds,bugs,userstories/` без единого `[[wikilink]]` в body. Исключает service-файлы (index.md, log.md) и файлы с `jira_key` |
-| `stale_drafts` | 1 | Устаревшие черновики | Идеи со статусом `draft`/`inbox`, не обновлявшиеся >30 дней |
+| `stale_drafts` | 1 | Устаревшие черновики | Идеи со статусом «Новая», не обновлявшиеся >30 дней |
 | `unsorted_misc` | 0.5 | Неиспользуемые misc-файлы | Файлы в `raw/inbound/misc/`, stem/name которых не упоминается ни в одном `[[wikilink]]` в wiki/. Файлы, на которые есть ссылка — не штрафуются |
 | `ingest_backlog` | 0.2 | Очередь необработанного raw | Ideas: совпадение `id:` из frontmatter raw и wiki (fallback на stem). Tasks: совпадение stem |
 | `description_coverage` | — | Полнота описаний | Доля артефактов с ≥2 предложениями в body. Penalty: <50% → 10, <70% → 5, ≥70% → 0 |
@@ -367,16 +369,30 @@ Raw файл считается обработанным, если выполн�
 
 API возвращает `trend_7d` и `trend_30d` — история score за 7 и 30 дней. История хранится в `.health-history.json` в корне vault (TTL 90 дней).
 
+### Метрики pipeline (BL-123)
+
+Поверх health score (штрафного) — информационные метрики эффективности pipeline обработки. Не влияют на score.
+
+| Метрика | Тип | Описание |
+|---|---|---|
+| `ingest_ratio` | float 0-100 | % обработанных raw файлов (processed / raw_total × 100) |
+| `avg_lag_hours` | float \| null | Среднее время raw→wiki в часах (по matched парам mtime) |
+| `raw_total` | int | Всего .md файлов в raw/inbound/ideas/ + raw/inbound/tasks/ |
+| `raw_counts` | dict | Разбивка: `{"ideas": N, "tasks": M}` |
+| `matched_pairs` | int | Количество raw-файлов, для которых найдена wiki-копия |
+
+Отображаются в overview.html в секции Pipeline под категориями штрафов. Тренды (trend_7d, trend_30d) — текстовые ↑↓→.
+
 ---
 
 ## Статистика проекта
 
-- 65 реализованных фичи
+- 67 реализованных фичи
 - 24 исправленных бага
 - 29 идей в бэклоге
 - 129 пунктов бэклога всего
 
-Разработка ведется с 07.05.2026. Текущие версии: pm-bot 1.7.5, knowledge-engine 1.6.2, idea-pipeline 1.1.0, web-ui 1.15.6.
+Разработка ведется с 07.05.2026. Текущие версии: pm-bot 1.7.7, knowledge-engine 1.6.4, idea-pipeline 1.1.0, web-ui 1.15.6.
 
 ---
 
@@ -482,7 +498,7 @@ PM Assistant превращает эти правила в работающие 
 |---|---|
 | Расписание | Еженедельно (пятница) |
 | Исполнитель | Cowork scheduled task |
-| Статус | 🔲 Не настроено |
+| Task ID | weekly-pm-report |
 
 Агрегированный еженедельный отчёт: закрытые задачи, блокеры, прогресс по эпикам.
 

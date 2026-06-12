@@ -5,7 +5,24 @@
 
 ---
 
-## 12.06.2026 — knowledge-engine 1.6.2, web-ui 1.15.6
+## 12.06.2026 — knowledge-engine 1.6.4, pm-bot 1.7.7, web-ui 1.15.6
+
+### BL-123: Метрики системы (self-measurement)
+- Pipeline metrics: `_calculate_pipeline_metrics()` в health_scorer.py — ingest_ratio, avg_lag_hours, raw_counts
+- CLI `health --json` расширен: pipeline_metrics с трендами trend_7d / trend_30d
+- overview.html: секция Pipeline в health breakdown-панели (ratio %, lag, raw counts, тренды ↑↓→)
+- 13 unit-тестов для _calculate_pipeline_metrics()
+- Текущие значения на live vault: ratio=90.1%, lag=512.1ч, raw=513, processed=462
+
+### BL-122: Унификация статусов идей
+- Status migrator: STATUS_MAP (8 legacy → 4 канонических), VALID_STATUSES frozenset
+- CLI `migrate-statuses` (--dry-run поддержка), миграция 8 файлов vault (4 draft→Новая, 3 missing→Новая, 1 enriched→Новая)
+- Linter: check_invalid_idea_statuses() — валидация статусов по словарю C-0003
+- pm-bot: fallback status "inbox" → "Новая" в vault_api.py
+- Watcher: _SKIP_ENRICH_STATUSES расширен, fallback "inbox" → "Новая"
+- 35 unit-тестов (25 migrator + 10 linter)
+
+### BL-118: Vault health audit (закрытие)
 - Vault health audit закрыт (BL-118): score 83/100, grade healthy
 - Health endpoint верифицирован: broken_links 0, orphan_pages 0, dead_ends 0, stale_drafts 0
 - Ingest backlog: 51 файл (17 IDEA без wiki-копий + 34 Jira-задачи) — корректная работа scorer'а, не false positive
