@@ -328,18 +328,24 @@ score = max(0, min(100, 100 - Σ(count × weight) - coverage_penalty))
 
 | Метрика | Weight | Что измеряет | Логика |
 |---|---|---|---|
-| `broken_links` | 3 | Битые `[[wikilinks]]` в wiki/ | Сканирует body (не frontmatter) всех wiki/*.md. Резолвит ссылки 3 уровнями: exact name → suffix match → stem match. Игнорирует: @mentions, шаблоны `{{}}`, URL, вложения, имена людей (2-3 слова с заглавной). Резолвит относительные пути (`../`) |
-| `orphan_pages` | 5 | Необработанные raw-файлы | Файлы в `raw/inbound/` (все подпапки), на которые нет ссылки `source:` в frontmatter ни одного wiki-артефакта. Файл сохранён, но не трансформировался ни в одну сущность |
+| `broken_links` | 3 | Битые `[[wikilinks]]` в wiki/ | Сканирует body (не frontmatter) всех wiki/*.md. Резолвит ссылки 3 уровнями: exact name → suffix match → stem match. Игнорирует: @mentions, шаблоны `{{}}`, URL, вложения, имена людей (2-3 слова с заглавной). Резолвит относительные пути (`../`). Файловый индекс покрывает wiki/ и raw/ |
+| `orphan_pages` | 5 | Необработанные raw-файлы | Проверяет `raw/inbound/daily-logs/` и `raw/inbound/meeting-notes/`. Извлекает дату (YYYY-MM-DD или YYYY.MM.DD) из имени raw-файла и ищет wiki-аналог: daily-logs → `wiki/daily-logs/`, meeting-notes → `wiki/meetings/` + `wiki/daily-logs/` (Daily стендапы трансформируются в daily-logs). Остальные типы покрыты другими метриками |
 | `dead_ends` | 1 | Артефакты без исходящих связей | Файлы в `wiki/domains/*/ideas,tasks,epics,prds,bugs,userstories/` без единого `[[wikilink]]` в body. Исключает service-файлы (index.md, log.md) и файлы с `jira_key` |
 | `stale_drafts` | 1 | Устаревшие черновики | Идеи со статусом `draft`/`inbox`, не обновлявшиеся >30 дней |
 | `unsorted_misc` | 0.5 | Неиспользуемые misc-файлы | Файлы в `raw/inbound/misc/`, stem/name которых не упоминается ни в одном `[[wikilink]]` в wiki/. Файлы, на которые есть ссылка — не штрафуются |
 | `ingest_backlog` | 0.2 | Очередь необработанного raw | Файлы в `raw/inbound/ideas/` и `raw/inbound/tasks/`, для которых нет wiki-артефакта с таким же stem |
 | `description_coverage` | — | Полнота описаний | Доля артефактов с ≥2 предложениями в body. Penalty: <50% → 10, <70% → 5, ≥70% → 0 |
 
-### Различие orphan_pages и ingest_backlog
+### Распределение проверок по типам raw/
 
-- **orphan_pages** — широкий охват: все подпапки `raw/inbound/`, проверка по `source:` frontmatter. Отвечает на вопрос: «этот файл вообще обработан?»
-- **ingest_backlog** — узкий охват: только `ideas/` и `tasks/`, проверка по совпадению stem. Отвечает на вопрос: «есть ли wiki-аналог этого файла?»
+| Тип raw/inbound/ | Метрика | Стратегия matching |
+|---|---|---|
+| `ideas/` | `ingest_backlog` | Совпадение stem с wiki/domains/*/ideas/ |
+| `tasks/` | `ingest_backlog` | Совпадение stem с wiki/domains/*/tasks/ |
+| `daily-logs/` | `orphan_pages` | Дата из имени файла → wiki/daily-logs/ |
+| `meeting-notes/` | `orphan_pages` | Дата из имени файла → wiki/meetings/ + wiki/daily-logs/ |
+| `misc/` | `unsorted_misc` | Stem/name в [[wikilinks]] wiki/ |
+| `clippings/` | — | Справочный материал, трансформация не ожидается |
 
 ### Тренды
 
@@ -349,12 +355,12 @@ API возвращает `trend_7d` и `trend_30d` — история score за
 
 ## Статистика проекта
 
-- 54 реализованных фичи
-- 18 исправленных багов
-- 27 идей в бэклоге
-- 99 пунктов бэклога всего
+- 64 реализованных фичи
+- 24 исправленных бага
+- 31 идея в бэклоге
+- 128 пунктов бэклога всего
 
-Разработка ведется с 07.05.2026. Текущие версии: pm-bot 1.5.4, knowledge-engine 1.4.2, idea-pipeline 1.1.0, web-ui 1.15.6.
+Разработка ведется с 07.05.2026. Текущие версии: pm-bot 1.7.3, knowledge-engine 1.6.1, idea-pipeline 1.1.0, web-ui 1.15.6.
 
 ---
 

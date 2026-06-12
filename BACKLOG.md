@@ -1,6 +1,6 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.7.3 / knowledge-engine 1.6.0 / idea-pipeline 1.1.0 / web-ui 1.15.6
+**Версии:** pm-bot 1.7.3 / knowledge-engine 1.6.1 / idea-pipeline 1.1.0 / web-ui 1.15.6
 **Обновлён:** 12.06.2026
 
 ---
@@ -258,7 +258,7 @@
 
 | # | Название | Компонент | Описание |
 |---|:---|:---|:---|
-| BL-118 | Definition of Done для ingest + обработка очереди через Cowork | Cowork, knowledge-engine | Решение 10.06.2026: текущий поток (daily, meetings) остаётся в KE — качество приемлемо; проблема в неработающем ingest остального raw. (1) Формализовать критерий «обработано» в CLAUDE.md vault'а; (2) обработка очереди — headless Claude Code. **Vault health audit 12.06.2026:** score 0→81 (critical→healthy). Linter fix: person names filter, frontmatter skip, relative paths, unsorted_misc по ссылкам. Broken links 620→0, dead ends 468→0, orphan pages 3→0. Осталось: ingest backlog (60 raw), unsorted misc (13 unreferenced). Поглощает BL-09, BL-10. |
+| BL-118 | Definition of Done для ingest + обработка очереди через Cowork | Cowork, knowledge-engine | Решение 10.06.2026: текущий поток (daily, meetings) остаётся в KE. **Vault health audit 12.06.2026:** score 0→81 (critical→healthy). Переписан `check_orphan_pages` (date matching для daily-logs/meeting-notes вместо source: frontmatter). Расширен `_build_file_index` на raw/. Broken links 620→0, dead ends 468→0, orphan pages 490→0. Шаблон idea.md: добавлен {{raw_ref}} placeholder. Осталось: ingest backlog (58 raw), unsorted misc (13 unreferenced). Поглощает BL-09, BL-10. |
 | BL-119 | Единый источник domain-правил | knowledge-engine, pm-bot | domain detection дублируется: CLAUDE.md vault'а (LLM) vs `ingest.py` TAG_TO_DOMAIN (код); `_VALID_DOMAINS` в claude_client.py не содержит partner-search-engine. Вынести в один domain-config.yaml, читаемый всеми компонентами и CLAUDE.md. Аудит: §2, Н-5 |
 | ~~BL-120~~ | ~~CI: тесты + линт + типизация~~ | ~~инфраструктура~~ | ✅ **Реализовано 11.06.2026.** GitHub Actions CI (lint + typecheck + test matrix), pyproject.toml (ruff E/F/W/I + mypy lenient), pre-commit hook (ruff --fix), requirements-dev.txt. 28 pre-existing test failures помечены xfail. |
 

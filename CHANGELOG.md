@@ -5,14 +5,15 @@
 
 ---
 
-## 12.06.2026 — knowledge-engine 1.6.0
+## 12.06.2026 — knowledge-engine 1.6.1
 - Vault health audit (BL-118): score 0 → 81, grade critical → healthy
-- Linter: фильтр имён людей в wikilinks (2-3 слова с заглавной — игнорируются)
-- Linter: пропуск YAML frontmatter при проверке broken links
-- Linter: резолв относительных путей (../) при проверке broken links
-- Linter: `check_unsorted_misc` переписан — штраф за unreferenced файлы вместо возраста >7 дней
-- Vault: исправлены 620 broken wikilinks в 340+ файлах wiki/
-- Vault: добавлены перекрёстные связи в 23 dead-end артефактах
+- Linter: `check_orphan_pages` переписан — проверка daily-logs и meeting-notes по дате (YYYY-MM-DD и YYYY.MM.DD), meeting-notes матчатся и против wiki/meetings/ и wiki/daily-logs/
+- Linter: `_build_file_index` расширен на raw/ для поддержки wikilinks на raw-файлы
+- Linter: фильтр имён людей в wikilinks, пропуск frontmatter, резолв относительных путей
+- Linter: `check_unsorted_misc` — штраф за unreferenced файлы вместо возраста >7 дней
+- Writer: заполнение raw file wikilink в теле идеи (шаблон {{raw_ref}})
+- Vault: исправлены broken wikilinks в synthesis reports и idea files
+- Vault: добавлены перекрёстные связи в 12+23 dead-end артефактах
 - Vault: удалены 68 мусорных тестовых артефактов из wiki/domains/general/
 
 ## 08.06.2026 — pm-bot 1.7.3
