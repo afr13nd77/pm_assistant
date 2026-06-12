@@ -13,7 +13,30 @@ def _load_prompt(name: str) -> str:
 
 
 _IDEA_REQUIRED_KEYS = ("title", "domain", "problem", "solution", "usp", "metric", "tags")
-_VALID_DOMAINS = ("static-metadata", "suggester", "search-engine", "general")
+_FALLBACK_DOMAINS = ("static-metadata", "suggester", "search-engine", "general")
+
+
+def _get_valid_domains() -> tuple[str, ...]:
+    """Return valid domain slugs from domain-config.yaml with fallback."""
+    try:
+        from . import domain_config
+        domains = domain_config.get_valid_domains()
+        if domains:
+            logger.info(
+                "_get_valid_domains: loaded %d domain(s) from config", len(domains)
+            )
+            return domains
+    except Exception as exc:
+        logger.warning(
+            "_get_valid_domains: failed to load config, using fallback: %s", exc
+        )
+
+    logger.info(
+        "_get_valid_domains: domain-config.yaml not found or empty, "
+        "using hardcoded defaults (%d domains)",
+        len(_FALLBACK_DOMAINS),
+    )
+    return _FALLBACK_DOMAINS
 
 
 def _extract_json_from_response(text: str) -> dict | None:
@@ -56,8 +79,13 @@ def _validate_idea_data(data: dict) -> dict:
     for key in _IDEA_REQUIRED_KEYS:
         result[key] = data.get(key, "")
 
-    if result["domain"] not in _VALID_DOMAINS:
-        logger.warning("_validate_idea_data: invalid domain '%s', falling back to 'general'", result["domain"])
+    valid_domains = _get_valid_domains()
+    if result["domain"] not in valid_domains:
+        logger.warning(
+            "_validate_idea_data: invalid domain '%s' (not in %s), "
+            "falling back to 'general'",
+            result["domain"], valid_domains,
+        )
         result["domain"] = "general"
 
     if not isinstance(result["tags"], list):
@@ -78,14 +106,76 @@ def _validate_idea_data(data: dict) -> dict:
     return result
 
 
+def _inject_domains_section(template: str, domains_section: str) -> str:
+    """Replace the static domain list in the prompt template with dynamic one."""
+    # Strategy 1: explicit placeholder
+    placeholder = "{domains_section}"
+    if placeholder in template:
+        logger.info("_inject_domains_section: found placeholder, replacing")
+        return template.replace(placeholder, domains_section)
+
+    # Strategy 2: regex replace of static domain block
+    pattern = (
+        r"(Определи домен идеи по содержанию сообщения\. Доступные домены:\n)"
+        r"(- .+\n?)+"
+    )
+    match = re.search(pattern, template)
+    if match:
+        header = match.group(1)
+        replacement = header + domains_section + "\n"
+        result = template[:match.start()] + replacement + template[match.end():]
+        logger.info("_inject_domains_section: replaced static block via regex")
+        return result
+
+    # Strategy 3: append before JSON format block
+    logger.warning(
+        "_inject_domains_section: could not locate domain block in template, "
+        "appending section before JSON block"
+    )
+    json_marker = "Верни ТОЛЬКО JSON"
+    if json_marker in template:
+        idx = template.index(json_marker)
+        injected = (
+            f"Определи домен идеи по содержанию сообщения. "
+            f"Доступные домены:\n{domains_section}\n\n"
+        )
+        return template[:idx] + injected + template[idx:]
+
+    return template
+
+
+def _build_idea_prompt(raw_text: str) -> str:
+    """Build the full idea prompt with dynamic domain section."""
+    try:
+        from . import domain_config
+        domains_section = domain_config.build_prompt_section()
+        if domains_section:
+            prompt_template = _load_prompt("idea")
+            prompt = _inject_domains_section(prompt_template, domains_section)
+            logger.info(
+                "_build_idea_prompt: using dynamic domains section (%d domains)",
+                domains_section.count("\n") + 1,
+            )
+            return f"{prompt}\n\n---\n{raw_text}"
+    except Exception as exc:
+        logger.warning(
+            "_build_idea_prompt: failed to build dynamic prompt, "
+            "using static: %s", exc,
+        )
+
+    logger.info("_build_idea_prompt: using static prompt from idea.txt")
+    prompt = _load_prompt("idea")
+    return f"{prompt}\n\n---\n{raw_text}"
+
+
 def process_idea(raw_text: str) -> dict:
     """Send raw text to Claude, return structured idea dict."""
     logger.info("process_idea: processing raw_text, len=%d", len(raw_text))
-    prompt = _load_prompt("idea")
+    prompt_with_text = _build_idea_prompt(raw_text)
     try:
         response_text = llm_client.call_with_fallback(
             operation="idea",
-            messages=[{"role": "user", "content": f"{prompt}\n\n---\n{raw_text}"}],
+            messages=[{"role": "user", "content": prompt_with_text}],
             max_tokens=1000,
         )
         logger.info("process_idea: received response, len=%d", len(response_text))

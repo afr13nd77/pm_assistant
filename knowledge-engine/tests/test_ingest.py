@@ -527,3 +527,101 @@ class TestBuildWikiContent:
         assert "  - reference" in content
         # "clippings" (plural) must be removed
         assert "  - clippings" not in content
+
+
+# ---------------------------------------------------------------------------
+# _merged_keyword_map
+# ---------------------------------------------------------------------------
+
+
+class TestMergedKeywordMap:
+    """Tests for _merged_keyword_map function (BL-119)."""
+
+    def test_merged_keyword_map_with_config(self, vault):
+        """Config keywords overlay hardcoded KEYWORD_TO_DOMAIN; config has priority."""
+        ing = _import_ingest(vault)
+
+        config_keywords = {"новое_слово": "search-engine"}
+
+        with patch("app.ingest.build_keyword_map", create=True):
+            with patch(
+                "app.domain_config.build_keyword_map",
+                return_value=config_keywords,
+            ):
+                result = ing._merged_keyword_map()
+
+        # Contains hardcoded entries
+        for key, domain in ing.KEYWORD_TO_DOMAIN.items():
+            if key not in config_keywords:
+                assert key in result, f"hardcoded keyword {key!r} missing"
+
+        # Contains config entry
+        assert result["новое_слово"] == "search-engine"
+
+        # Config has priority -- if we override a hardcoded key, config wins
+        override_keywords = {"поиск": "partner-search-engine"}
+        with patch("app.ingest.build_keyword_map", create=True):
+            with patch(
+                "app.domain_config.build_keyword_map",
+                return_value=override_keywords,
+            ):
+                result2 = ing._merged_keyword_map()
+        assert result2["поиск"] == "partner-search-engine"
+
+    def test_merged_keyword_map_no_config(self, vault):
+        """ImportError from build_keyword_map -> fallback to KEYWORD_TO_DOMAIN only."""
+        ing = _import_ingest(vault)
+
+        with patch(
+            "app.domain_config.build_keyword_map",
+            side_effect=ImportError("no module"),
+        ):
+            result = ing._merged_keyword_map()
+
+        assert result == dict(ing.KEYWORD_TO_DOMAIN)
+
+
+# ---------------------------------------------------------------------------
+# detect_domain with config keywords
+# ---------------------------------------------------------------------------
+
+
+class TestDetectDomainConfigKeyword:
+    """Tests for detect_domain using config-driven keywords (BL-119)."""
+
+    def test_detect_domain_config_keyword(self, vault):
+        """Custom keyword from config triggers domain detection via keyword step."""
+        ing = _import_ingest(vault)
+
+        config_keywords = {"микросервисы": "search-engine"}
+
+        with patch.object(ing, "_merged_tag_map", return_value=dict(ing.TAG_TO_DOMAIN)):
+            with patch.object(
+                ing,
+                "_merged_keyword_map",
+                return_value={**ing.KEYWORD_TO_DOMAIN, **config_keywords},
+            ):
+                domain, method = ing.detect_domain(
+                    {"tags": ["clippings"]},
+                    "микросервисы в архитектуре",
+                )
+
+        assert domain == "search-engine"
+        assert method == "keyword"
+
+    def test_detect_domain_no_config_fallback(self, vault):
+        """ImportError in build_keyword_map -> detect_domain still works with KEYWORD_TO_DOMAIN."""
+        ing = _import_ingest(vault)
+
+        with patch.object(ing, "_merged_tag_map", return_value=dict(ing.TAG_TO_DOMAIN)):
+            with patch(
+                "app.domain_config.build_keyword_map",
+                side_effect=ImportError("no module"),
+            ):
+                domain, method = ing.detect_domain(
+                    {"tags": ["clippings"]},
+                    "подсказчик для автокомплита",
+                )
+
+        assert domain == "suggester"
+        assert method == "keyword"

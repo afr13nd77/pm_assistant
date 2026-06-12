@@ -5,6 +5,23 @@
 
 ---
 
+## 13.06.2026 — pm-bot 1.8.0, knowledge-engine 1.7.0
+
+### BL-119: Единый источник domain-правил
+- domain-config.yaml расширен: `tags`, `keywords`, `prompt_hint` для всех 5 доменов
+- `build_keyword_map()`, `build_prompt_section()`, `get_valid_domains()` — новые функции в domain_config.py (pm-bot + KE)
+- `validate_domain_entry()` — валидация keywords, prompt_hint (+ tags в pm-bot)
+- `set_domain()` — merge с existing записью при обновлении (защита от затирания через Web UI)
+- `_SEED_DOMAIN_DATA` — полные данные 5 доменов для seed_from_defaults()
+- claude_client.py: `_get_valid_domains()` с fallback на `_FALLBACK_DOMAINS`, `_build_idea_prompt()` + `_inject_domains_section()` — динамический LLM-промпт из конфига (3 стратегии: placeholder → regex → append)
+- artifact_extractor.py: `_merged_keyword_map()` — config extends hardcoded `_DOMAIN_KEYWORDS`
+- ingest.py: `_merged_keyword_map()` — config extends hardcoded `KEYWORD_TO_DOMAIN`
+- idea.txt: убраны хардкоженные домены из JSON-шаблона и правил
+- partner-search-engine теперь доступен во всех 6 точках детекции
+- 30+ новых unit-тестов, 1036 passed, 0 new failures
+
+---
+
 ## 12.06.2026 — knowledge-engine 1.6.4, pm-bot 1.7.7, web-ui 1.15.6
 
 ### BL-123: Метрики системы (self-measurement)

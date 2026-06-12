@@ -34,6 +34,53 @@ _DOMAIN_KEYWORDS: dict[str, list[str]] = {
 
 _DEFAULT_DOMAIN = "general"
 
+
+def _merged_keyword_map() -> dict[str, list[str]]:
+    """Merge hardcoded _DOMAIN_KEYWORDS with domain-config.yaml keywords."""
+    logger.info("_merged_keyword_map: building merged keyword map")
+    result: dict[str, list[str]] = {}
+
+    # Start with hardcoded
+    for domain, kw_list in _DOMAIN_KEYWORDS.items():
+        result[domain] = list(kw_list)
+
+    # Overlay config keywords
+    try:
+        from . import domain_config
+        config = domain_config.load()
+        domains = config.get("domains", {})
+        config_count = 0
+        for slug, entry in domains.items():
+            if not isinstance(entry, dict):
+                continue
+            config_keywords = entry.get("keywords", [])
+            if not config_keywords:
+                continue
+            if slug not in result:
+                result[slug] = []
+            existing_lower = {kw.lower() for kw in result[slug]}
+            for kw in config_keywords:
+                if isinstance(kw, str) and kw and kw.lower() not in existing_lower:
+                    result[slug].append(kw)
+                    existing_lower.add(kw.lower())
+                    config_count += 1
+        logger.info(
+            "_merged_keyword_map: added %d keyword(s) from config across %d domain(s)",
+            config_count, len(domains),
+        )
+    except Exception as exc:
+        logger.warning(
+            "_merged_keyword_map: could not load config keywords, "
+            "using hardcoded only: %s", exc,
+        )
+
+    logger.info(
+        "_merged_keyword_map: total %d domain(s), %d keyword(s)",
+        len(result), sum(len(v) for v in result.values()),
+    )
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -267,24 +314,22 @@ def _extract_ideas(body: str) -> list[str]:
 
 
 def _detect_domain(text: str) -> str:
-    """Determine the domain for an artifact based on keyword matching.
-
-    Checks the text (lowercased) against known keyword lists.
-    Returns the first matching domain, or ``'general'`` if none match.
-    """
+    """Determine the domain for an artifact based on keyword matching."""
     lower = text.lower()
+    keyword_map = _merged_keyword_map()
 
-    for domain, keywords in _DOMAIN_KEYWORDS.items():
+    for domain, keywords in keyword_map.items():
         for kw in keywords:
-            if kw in lower:
+            if kw.lower() in lower:
                 logger.info(
                     "_detect_domain: matched keyword '%s' -> domain '%s'",
-                    kw,
-                    domain,
+                    kw, domain,
                 )
                 return domain
 
-    logger.info("_detect_domain: no keyword match, defaulting to '%s'", _DEFAULT_DOMAIN)
+    logger.info(
+        "_detect_domain: no keyword match, defaulting to '%s'", _DEFAULT_DOMAIN
+    )
     return _DEFAULT_DOMAIN
 
 

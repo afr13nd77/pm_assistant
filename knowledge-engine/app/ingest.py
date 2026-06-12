@@ -186,6 +186,41 @@ def _merged_tag_map() -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
+# Merged keyword map: hardcoded + domain-config.yaml
+# ---------------------------------------------------------------------------
+
+def _merged_keyword_map() -> dict[str, str]:
+    """Merge hardcoded KEYWORD_TO_DOMAIN with domain-config.yaml keywords."""
+    logger.info("_merged_keyword_map: building merged keyword map")
+    result = dict(KEYWORD_TO_DOMAIN)
+
+    try:
+        from .domain_config import build_keyword_map
+        config_keywords = build_keyword_map()
+        if config_keywords:
+            result.update(config_keywords)
+            logger.info(
+                "_merged_keyword_map: overlayed %d keywords from domain-config.yaml",
+                len(config_keywords),
+            )
+    except (ImportError, AttributeError) as exc:
+        logger.warning(
+            "_merged_keyword_map: could not load build_keyword_map from domain_config, "
+            "using hardcoded KEYWORD_TO_DOMAIN only: %s",
+            exc,
+        )
+    except Exception as exc:
+        logger.warning(
+            "_merged_keyword_map: unexpected error loading config keywords, "
+            "using hardcoded KEYWORD_TO_DOMAIN only: %s",
+            exc,
+        )
+
+    logger.info("_merged_keyword_map: total %d entries in merged map", len(result))
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Domain detection (3-step algorithm)
 # ---------------------------------------------------------------------------
 
@@ -232,9 +267,10 @@ def detect_domain(metadata: dict, body: str) -> tuple[str, str]:
     # Step 2: Content keyword matching (only if Step 1 gave no results)
     if not matched_domains:
         logger.info("detect_domain: no tag matches, trying keyword matching")
+        keyword_map = _merged_keyword_map()
         body_lower = body.lower()
         seen_domains: set[str] = set()
-        for keyword, domain in KEYWORD_TO_DOMAIN.items():
+        for keyword, domain in keyword_map.items():
             if domain in seen_domains:
                 continue
             if keyword.lower() in body_lower:

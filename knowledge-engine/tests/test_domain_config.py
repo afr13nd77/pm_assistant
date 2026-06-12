@@ -623,3 +623,259 @@ class TestSeedFromDefaults:
         assert dc.config_path().exists()
         reloaded = dc.load()
         assert "my-domain" in reloaded["domains"]
+
+
+# ---------------------------------------------------------------------------
+# build_keyword_map
+# ---------------------------------------------------------------------------
+
+
+class TestBuildKeywordMap:
+    def test_two_domains_with_keywords(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        config = {
+            "domains": {
+                "search": {
+                    "display_name": "Search",
+                    "description": "",
+                    "color": "#607D8B",
+                    "jira_labels": [],
+                    "keywords": ["Search", "fulltext"],
+                },
+                "catalog": {
+                    "display_name": "Catalog",
+                    "description": "",
+                    "color": "#607D8B",
+                    "jira_labels": [],
+                    "keywords": ["Catalog", "directory"],
+                },
+            }
+        }
+        dc.save(config)
+        kw_map = dc.build_keyword_map()
+        assert kw_map["search"] == "search"
+        assert kw_map["fulltext"] == "search"
+        assert kw_map["catalog"] == "catalog"
+        assert kw_map["directory"] == "catalog"
+
+    def test_empty_config_returns_empty_dict(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        # No config file at all
+        kw_map = dc.build_keyword_map()
+        assert kw_map == {}
+
+    def test_duplicate_keyword_first_domain_wins(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        # Manually write YAML so order is preserved and both domains have same keyword
+        path = dc.config_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # YAML preserves insertion order; "alpha" comes first
+        content = yaml.dump(
+            {
+                "domains": {
+                    "alpha": {
+                        "display_name": "Alpha",
+                        "description": "",
+                        "color": "#607D8B",
+                        "jira_labels": ["alpha-lbl"],
+                        "keywords": ["shared"],
+                    },
+                    "beta": {
+                        "display_name": "Beta",
+                        "description": "",
+                        "color": "#607D8B",
+                        "jira_labels": ["beta-lbl"],
+                        "keywords": ["shared"],
+                    },
+                }
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        )
+        path.write_text(content, encoding="utf-8")
+        dc._cache = None
+        dc._cache_mtime = 0.0
+        kw_map = dc.build_keyword_map()
+        assert kw_map["shared"] == "alpha"
+
+
+# ---------------------------------------------------------------------------
+# build_prompt_section
+# ---------------------------------------------------------------------------
+
+
+class TestBuildPromptSection:
+    def test_prompt_hint_used(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        config = {
+            "domains": {
+                "search": {
+                    "display_name": "Search",
+                    "description": "Generic description",
+                    "color": "#607D8B",
+                    "jira_labels": [],
+                    "prompt_hint": "Custom hint for LLM",
+                }
+            }
+        }
+        dc.save(config)
+        section = dc.build_prompt_section()
+        assert "Custom hint for LLM" in section
+        assert "Generic description" not in section
+
+    def test_fallback_to_description(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        config = {
+            "domains": {
+                "search": {
+                    "display_name": "Search",
+                    "description": "Fallback description",
+                    "color": "#607D8B",
+                    "jira_labels": [],
+                    "prompt_hint": "",
+                }
+            }
+        }
+        dc.save(config)
+        section = dc.build_prompt_section()
+        assert "Fallback description" in section
+
+    def test_empty_config_returns_empty_string(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        # No config file — load returns {"domains": {}}
+        section = dc.build_prompt_section()
+        assert section == ""
+
+
+# ---------------------------------------------------------------------------
+# get_valid_domains
+# ---------------------------------------------------------------------------
+
+
+class TestGetValidDomains:
+    def test_three_domains_returns_tuple(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        config = {
+            "domains": {
+                "alpha": {"display_name": "Alpha", "description": "", "color": "#607D8B", "jira_labels": []},
+                "beta": {"display_name": "Beta", "description": "", "color": "#607D8B", "jira_labels": []},
+                "gamma": {"display_name": "Gamma", "description": "", "color": "#607D8B", "jira_labels": []},
+            }
+        }
+        dc.save(config)
+        result = dc.get_valid_domains()
+        assert isinstance(result, tuple)
+        assert len(result) == 3
+        assert set(result) == {"alpha", "beta", "gamma"}
+
+    def test_empty_config_returns_empty_tuple(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        result = dc.get_valid_domains()
+        assert isinstance(result, tuple)
+        assert len(result) == 0
+
+
+# ---------------------------------------------------------------------------
+# validate_domain_entry — keywords
+# ---------------------------------------------------------------------------
+
+
+class TestValidateKeywords:
+    def test_valid_keywords_list(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        errors = dc.validate_domain_entry(
+            "ok-slug",
+            {"display_name": "X", "keywords": ["a", "b"]},
+        )
+        assert not any("keywords" in e for e in errors)
+
+    def test_keywords_not_a_list(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        errors = dc.validate_domain_entry(
+            "ok-slug",
+            {"display_name": "X", "keywords": "not-a-list"},
+        )
+        assert any("keywords" in e for e in errors)
+
+    def test_keywords_contains_empty_string(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        errors = dc.validate_domain_entry(
+            "ok-slug",
+            {"display_name": "X", "keywords": ["a", ""]},
+        )
+        assert any("keywords" in e for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# validate_domain_entry — prompt_hint
+# ---------------------------------------------------------------------------
+
+
+class TestValidatePromptHint:
+    def test_valid_prompt_hint(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        errors = dc.validate_domain_entry(
+            "ok-slug",
+            {"display_name": "X", "prompt_hint": "ok"},
+        )
+        assert not any("prompt_hint" in e for e in errors)
+
+    def test_prompt_hint_too_long(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        errors = dc.validate_domain_entry(
+            "ok-slug",
+            {"display_name": "X", "prompt_hint": "x" * 501},
+        )
+        assert any("prompt_hint" in e for e in errors)
+
+    def test_prompt_hint_not_a_string(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        errors = dc.validate_domain_entry(
+            "ok-slug",
+            {"display_name": "X", "prompt_hint": 123},
+        )
+        assert any("prompt_hint" in e for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# set_domain — merge preserves keywords
+# ---------------------------------------------------------------------------
+
+
+class TestSetDomainMergeKeywords:
+    def test_update_display_name_preserves_keywords(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        # Create domain with keywords
+        dc.set_domain("alpha", {
+            "display_name": "Alpha v1",
+            "keywords": ["a", "b"],
+        })
+        # Update only display_name — do NOT pass keywords
+        result = dc.set_domain("alpha", {
+            "display_name": "Alpha v2",
+        })
+        entry = result["domains"]["alpha"]
+        assert entry["display_name"] == "Alpha v2"
+        assert entry["keywords"] == ["a", "b"]
+
+
+# ---------------------------------------------------------------------------
+# seed_from_defaults — full data from _SEED_DOMAIN_DATA
+# ---------------------------------------------------------------------------
+
+
+class TestSeedWithFullData:
+    def test_seed_includes_keywords_and_prompt_hint(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        # Use a slug that exists in _SEED_DOMAIN_DATA
+        result = dc.seed_from_defaults({"search-lbl": "search-engine"}, [])
+        entry = result["domains"]["search-engine"]
+        # keywords come from _SEED_DOMAIN_DATA["search-engine"]["keywords"]
+        assert isinstance(entry["keywords"], list)
+        assert len(entry["keywords"]) > 0
+        # prompt_hint comes from _SEED_DOMAIN_DATA["search-engine"]["prompt_hint"]
+        assert isinstance(entry["prompt_hint"], str)
+        assert len(entry["prompt_hint"]) > 0
+        # Verify specific values from _SEED_DOMAIN_DATA
+        assert "search-engine" in result["domains"]
+        assert entry["display_name"] == dc._SEED_DOMAIN_DATA["search-engine"]["display_name"]

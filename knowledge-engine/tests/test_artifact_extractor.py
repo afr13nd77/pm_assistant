@@ -656,3 +656,93 @@ class TestExtractArtifacts:
         assert tasks[2]["filename"] == "2026-05-01-action-03.md"
 
         ext._TODAY = None
+
+
+# ---------------------------------------------------------------------------
+# _merged_keyword_map — config integration (BL-119)
+# ---------------------------------------------------------------------------
+
+
+class TestMergedKeywordMap:
+    def test_merged_keyword_map_with_config(self, tmp_path):
+        """Config keywords are merged with hardcoded _DOMAIN_KEYWORDS."""
+        ext = _import_extractor(tmp_path)
+
+        fake_config = {
+            "domains": {
+                "partner-search-engine": {
+                    "display_name": "Partner Search",
+                    "keywords": ["поставщик", "b2b"],
+                },
+            },
+        }
+
+        with patch("app.domain_config.load", return_value=fake_config):
+            result = ext._merged_keyword_map()
+
+        # Hardcoded domains are present
+        assert "search-engine" in result
+        assert "suggester" in result
+        assert "static-metadata" in result
+
+        # Config domain is also present
+        assert "partner-search-engine" in result
+        assert "поставщик" in result["partner-search-engine"]
+        assert "b2b" in result["partner-search-engine"]
+
+    def test_merged_keyword_map_no_config(self, tmp_path):
+        """When config loading fails, only hardcoded keywords are returned."""
+        ext = _import_extractor(tmp_path)
+
+        with patch(
+            "app.domain_config.load", side_effect=Exception("config unavailable"),
+        ):
+            result = ext._merged_keyword_map()
+
+        # Hardcoded domains are present
+        assert "search-engine" in result
+        assert "suggester" in result
+        assert "static-metadata" in result
+
+        # No config-only domains
+        assert "partner-search-engine" not in result
+
+        # Verify hardcoded keywords survived
+        assert "поиск" in result["search-engine"]
+        assert "автокомплит" in result["suggester"]
+
+
+# ---------------------------------------------------------------------------
+# _detect_domain — config-based detection (BL-119)
+# ---------------------------------------------------------------------------
+
+
+class TestDetectDomainWithConfig:
+    def test_detect_domain_partner_search(self, tmp_path):
+        """Config keywords enable detection of config-only domains."""
+        ext = _import_extractor(tmp_path)
+
+        fake_config = {
+            "domains": {
+                "partner-search-engine": {
+                    "display_name": "Partner Search",
+                    "keywords": ["поставщик", "b2b"],
+                },
+            },
+        }
+
+        with patch("app.domain_config.load", return_value=fake_config):
+            result = ext._detect_domain("настроить B2B-интеграцию")
+
+        assert result == "partner-search-engine"
+
+    def test_detect_domain_general_fallback(self, tmp_path):
+        """Text without any matching keywords falls back to 'general'."""
+        ext = _import_extractor(tmp_path)
+
+        # No config keywords either — use empty config
+        fake_config = {"domains": {}}
+        with patch("app.domain_config.load", return_value=fake_config):
+            result = ext._detect_domain("провести ретроспективу по спринту")
+
+        assert result == "general"

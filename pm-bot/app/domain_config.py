@@ -23,6 +23,7 @@ _DEFAULT_COLOR = "#607D8B"
 _MAX_DOMAINS = 100
 _MAX_DISPLAY_NAME = 100
 _MAX_DESCRIPTION = 500
+_MAX_PROMPT_HINT = 500
 
 _YAML_HEADER = (
     "# Domain Configuration\n"
@@ -252,6 +253,56 @@ def validate_domain_entry(slug: str, entry: dict) -> list[str]:
                         i, slug, label,
                     )
 
+    # tags: optional list of non-empty strings
+    tags = entry.get("tags", [])
+    if tags is not None:
+        if not isinstance(tags, list):
+            errors.append("'tags' must be a list")
+            logger.warning("validate_domain_entry: tags for slug %r is not a list", slug)
+        else:
+            for i, tag in enumerate(tags):
+                if not isinstance(tag, str) or not tag:
+                    errors.append(f"'tags[{i}]' must be a non-empty string")
+                    logger.warning(
+                        "validate_domain_entry: tags[%d] for slug %r is invalid: %r",
+                        i, slug, tag,
+                    )
+
+    # keywords: optional list of non-empty strings
+    keywords = entry.get("keywords", [])
+    if keywords is not None:
+        if not isinstance(keywords, list):
+            errors.append("'keywords' must be a list")
+            logger.warning(
+                "validate_domain_entry: keywords for slug %r is not a list", slug
+            )
+        else:
+            for i, kw in enumerate(keywords):
+                if not isinstance(kw, str) or not kw:
+                    errors.append(f"'keywords[{i}]' must be a non-empty string")
+                    logger.warning(
+                        "validate_domain_entry: keywords[%d] for slug %r is invalid: %r",
+                        i, slug, kw,
+                    )
+
+    # prompt_hint: optional string, max _MAX_PROMPT_HINT chars
+    prompt_hint = entry.get("prompt_hint", "")
+    if prompt_hint is not None:
+        if not isinstance(prompt_hint, str):
+            errors.append("'prompt_hint' must be a string")
+            logger.warning(
+                "validate_domain_entry: prompt_hint for slug %r is not a string", slug
+            )
+        elif len(prompt_hint) > _MAX_PROMPT_HINT:
+            errors.append(
+                f"'prompt_hint' exceeds max length {_MAX_PROMPT_HINT} "
+                f"(got {len(prompt_hint)})"
+            )
+            logger.warning(
+                "validate_domain_entry: prompt_hint for slug %r is too long (%d > %d)",
+                slug, len(prompt_hint), _MAX_PROMPT_HINT,
+            )
+
     if errors:
         logger.debug(
             "validate_domain_entry: %d error(s) for slug %r: %s", len(errors), slug, errors
@@ -311,12 +362,18 @@ def set_domain(slug: str, entry: dict, config: dict | None = None) -> dict:
                 logger.warning(msg)
                 raise ValueError(msg)
 
+    # Merge with existing entry to preserve fields not passed (e.g. Web UI)
+    existing = config.get("domains", {}).get(slug)
+
     # Normalize entry — fill in defaults for missing optional fields
     normalized = {
         "display_name": entry["display_name"],
         "description": entry.get("description", ""),
         "color": entry.get("color", _DEFAULT_COLOR),
         "jira_labels": entry.get("jira_labels", []),
+        "tags": entry.get("tags", existing.get("tags", []) if existing else []),
+        "keywords": entry.get("keywords", existing.get("keywords", []) if existing else []),
+        "prompt_hint": entry.get("prompt_hint", existing.get("prompt_hint", "") if existing else ""),
     }
 
     config.setdefault("domains", {})[slug] = normalized
@@ -359,6 +416,77 @@ def build_label_map() -> dict[str, str]:
     logger.info("build_label_map: built map with %d label(s) from %d domain(s)",
                 len(label_map), len(domains))
     return label_map
+
+
+def build_keyword_map() -> dict[str, str]:
+    """Build {keyword_lower: domain_slug} map from config."""
+    logger.info("build_keyword_map: building keyword map from config")
+    config = load()
+    keyword_map: dict[str, str] = {}
+    domains = config.get("domains", {})
+
+    for slug, entry in domains.items():
+        if not isinstance(entry, dict):
+            logger.warning(
+                "build_keyword_map: entry for slug %r is not a dict, skipping", slug
+            )
+            continue
+        for kw in entry.get("keywords", []):
+            if isinstance(kw, str) and kw:
+                key = kw.lower()
+                if key in keyword_map:
+                    logger.warning(
+                        "build_keyword_map: duplicate keyword %r (domains %r and %r) "
+                        "— keeping first",
+                        kw, keyword_map[key], slug,
+                    )
+                else:
+                    keyword_map[key] = slug
+
+    logger.info(
+        "build_keyword_map: built map with %d keyword(s) from %d domain(s)",
+        len(keyword_map), len(domains),
+    )
+    return keyword_map
+
+
+def build_prompt_section() -> str:
+    """Generate the domain list section for LLM prompt."""
+    logger.info("build_prompt_section: generating prompt section from config")
+    config = load()
+    domains = config.get("domains", {})
+
+    if not domains:
+        logger.warning("build_prompt_section: no domains in config, returning empty")
+        return ""
+
+    lines: list[str] = []
+    for slug, entry in domains.items():
+        if not isinstance(entry, dict):
+            continue
+        hint = entry.get("prompt_hint", "").strip()
+        if not hint:
+            hint = entry.get("description", "").strip()
+        if not hint:
+            hint = slug
+        lines.append(f"- {slug} — {hint}")
+
+    section = "\n".join(lines)
+    logger.info(
+        "build_prompt_section: generated section with %d domain(s) (%d chars)",
+        len(lines), len(section),
+    )
+    return section
+
+
+def get_valid_domains() -> tuple[str, ...]:
+    """Return tuple of all domain slugs from config."""
+    logger.info("get_valid_domains: reading domain slugs from config")
+    config = load()
+    domains = config.get("domains", {})
+    slugs = tuple(domains.keys())
+    logger.info("get_valid_domains: found %d domain(s): %s", len(slugs), slugs)
+    return slugs
 
 
 def seed_from_defaults(hardcoded_map: dict[str, str], existing_domains: list[str]) -> dict:
