@@ -156,87 +156,175 @@ class TestCheckBrokenLinks:
 # ---------------------------------------------------------------------------
 
 class TestCheckOrphanPages:
-    def test_unreferenced_page_is_orphan(self, tmp_path):
-        linter = _import_linter(tmp_path)
-        orphan = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "lonely.md"
-        _write_md(orphan, "# Lonely idea")
-
-        result = linter.check_orphan_pages(str(tmp_path))
-
-        assert len(result) == 1
-        item = result[0]
-        assert item["domain"] == "test-domain"
-        assert item["artifact_type"] == "ideas"
-        assert "lonely.md" in item["file"]
-
-    def test_referenced_page_not_orphan(self, tmp_path):
-        linter = _import_linter(tmp_path)
-        target = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "referenced.md"
-        _write_md(target, "# Referenced")
-
-        referrer = tmp_path / "wiki" / "domains" / "test-domain" / "prds" / "prd-01.md"
-        _write_md(referrer, "See [[referenced]]\n")
-
-        result = linter.check_orphan_pages(str(tmp_path))
-        orphan_files = [item["file"] for item in result]
-        assert not any("referenced.md" in f for f in orphan_files)
-
-    def test_referenced_with_extension_not_orphan(self, tmp_path):
-        linter = _import_linter(tmp_path)
-        target = tmp_path / "wiki" / "domains" / "test-domain" / "tasks" / "task-01.md"
-        _write_md(target, "# Task")
-
-        referrer = tmp_path / "wiki" / "domains" / "test-domain" / "prds" / "prd-01.md"
-        _write_md(referrer, "See [[task-01.md]]\n")
-
-        result = linter.check_orphan_pages(str(tmp_path))
-        orphan_files = [item["file"] for item in result]
-        assert not any("task-01.md" in f for f in orphan_files)
-
-    def test_service_files_excluded_from_orphan_check(self, tmp_path):
-        linter = _import_linter(tmp_path)
-        for service_name in ("index.md", "log.md", "decisions.md", "glossary.md"):
-            f = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / service_name
-            _write_md(f, "# Service")
-
-        result = linter.check_orphan_pages(str(tmp_path))
-        assert result == []
-
-    def test_orphan_result_has_correct_artifact_type(self, tmp_path):
-        linter = _import_linter(tmp_path)
-        for artifact_type in ("ideas", "prds", "bugs"):
-            f = tmp_path / "wiki" / "domains" / "test-domain" / artifact_type / "item.md"
-            _write_md(f, "# Item")
-
-        result = linter.check_orphan_pages(str(tmp_path))
-        artifact_types = {item["artifact_type"] for item in result}
-        assert artifact_types == {"ideas", "prds", "bugs"}
+    """Tests for check_orphan_pages — checks raw/inbound/daily-logs and
+    raw/inbound/meeting-notes for files without a wiki counterpart."""
 
     def test_empty_vault_returns_no_orphans(self, tmp_path):
         linter = _import_linter(tmp_path)
         result = linter.check_orphan_pages(str(tmp_path))
         assert result == []
 
-    def test_pipe_syntax_reference_counts_as_valid(self, tmp_path):
+    def test_no_raw_inbound_returns_empty(self, tmp_path):
         linter = _import_linter(tmp_path)
-        target = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "target.md"
-        _write_md(target, "# Target")
-
-        referrer = tmp_path / "wiki" / "domains" / "test-domain" / "prds" / "prd-01.md"
-        _write_md(referrer, "See [[display|target]]\n")
-
+        # Only wiki exists, no raw/inbound at all
+        _write_md(tmp_path / "wiki" / "daily-logs" / "2026-06-01.md", "# Day")
         result = linter.check_orphan_pages(str(tmp_path))
-        orphan_files = [item["file"] for item in result]
-        assert not any("target.md" in f for f in orphan_files)
+        assert result == []
+
+    def test_daily_log_with_wiki_counterpart_not_orphan(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        _write_md(tmp_path / "wiki" / "daily-logs" / "2026-06-01.md", "# Day")
+        _write_md(
+            tmp_path / "raw" / "inbound" / "daily-logs" / "2026-06-01 1004 (MSK) notes.txt",
+            "raw content",
+        )
+        result = linter.check_orphan_pages(str(tmp_path))
+        assert result == []
+
+    def test_daily_log_without_wiki_counterpart_is_orphan(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        # wiki has 2026-06-01 but raw has 2026-06-02
+        _write_md(tmp_path / "wiki" / "daily-logs" / "2026-06-01.md", "# Day")
+        _write_md(
+            tmp_path / "raw" / "inbound" / "daily-logs" / "2026-06-02 notes.md",
+            "raw content",
+        )
+        result = linter.check_orphan_pages(str(tmp_path))
+        assert len(result) == 1
+        assert result[0]["type"] == "daily-logs"
+        assert "2026-06-02" in result[0]["file"]
+
+    def test_meeting_note_with_wiki_counterpart_not_orphan(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        _write_md(
+            tmp_path / "wiki" / "meetings" / "2026-06-01-standup.md", "# Meeting"
+        )
+        _write_md(
+            tmp_path / "raw" / "inbound" / "meeting-notes" / "2026-06-01 standup raw.txt",
+            "raw content",
+        )
+        result = linter.check_orphan_pages(str(tmp_path))
+        assert result == []
+
+    def test_meeting_note_without_wiki_counterpart_is_orphan(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        _write_md(
+            tmp_path / "raw" / "inbound" / "meeting-notes" / "2026-06-03 planning.txt",
+            "raw content",
+        )
+        result = linter.check_orphan_pages(str(tmp_path))
+        assert len(result) == 1
+        assert result[0]["type"] == "meeting-notes"
+        assert "2026-06-03" in result[0]["file"]
+
+    def test_ideas_and_tasks_are_ignored(self, tmp_path):
+        """ideas and tasks are covered by _check_ingest_backlog, not here."""
+        linter = _import_linter(tmp_path)
+        _write_md(
+            tmp_path / "raw" / "inbound" / "ideas" / "some-idea.md", "# Idea"
+        )
+        _write_md(
+            tmp_path / "raw" / "inbound" / "tasks" / "GO-103.md", "# Task"
+        )
+        result = linter.check_orphan_pages(str(tmp_path))
+        assert result == []
+
+    def test_misc_and_clippings_are_ignored(self, tmp_path):
+        """misc is covered by check_unsorted_misc; clippings need no transform."""
+        linter = _import_linter(tmp_path)
+        _write_md(
+            tmp_path / "raw" / "inbound" / "misc" / "random.md", "# Misc"
+        )
+        _write_md(
+            tmp_path / "raw" / "inbound" / "clippings" / "article.md", "# Clip"
+        )
+        result = linter.check_orphan_pages(str(tmp_path))
+        assert result == []
+
+    def test_raw_file_without_date_prefix_is_orphan(self, tmp_path):
+        linter = _import_linter(tmp_path)
+        _write_md(
+            tmp_path / "raw" / "inbound" / "daily-logs" / "no-date-here.txt",
+            "raw",
+        )
+        result = linter.check_orphan_pages(str(tmp_path))
+        assert len(result) == 1
+        assert result[0]["type"] == "daily-logs"
 
     def test_orphan_file_path_uses_forward_slashes(self, tmp_path):
         linter = _import_linter(tmp_path)
-        f = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "lonely.md"
-        _write_md(f, "# Lonely")
-
+        _write_md(
+            tmp_path / "raw" / "inbound" / "daily-logs" / "2026-06-05 notes.md",
+            "raw",
+        )
         result = linter.check_orphan_pages(str(tmp_path))
         assert len(result) == 1
         assert "\\" not in result[0]["file"]
+
+    def test_multiple_raw_files_same_date_all_matched(self, tmp_path):
+        """Multiple raw files sharing one date should all be non-orphan
+        if the wiki counterpart exists."""
+        linter = _import_linter(tmp_path)
+        _write_md(tmp_path / "wiki" / "daily-logs" / "2026-06-01.md", "# Day")
+        _write_md(
+            tmp_path / "raw" / "inbound" / "daily-logs" / "2026-06-01 morning.txt",
+            "a",
+        )
+        _write_md(
+            tmp_path / "raw" / "inbound" / "daily-logs" / "2026-06-01 evening.txt",
+            "b",
+        )
+        result = linter.check_orphan_pages(str(tmp_path))
+        assert result == []
+
+    def test_wiki_daily_log_with_dots_matches_raw_with_dashes(self, tmp_path):
+        """wiki daily-log uses dots (2026.03.10-067-Daily-summary.md) but raw
+        daily-log uses dashes (2026-03-10 0933 (MSK) notes.txt). They should
+        match on the same date after normalization."""
+        linter = _import_linter(tmp_path)
+        _write_md(
+            tmp_path / "wiki" / "daily-logs" / "2026.03.10-067-Daily-summary.md",
+            "# Daily summary",
+        )
+        _write_md(
+            tmp_path / "raw" / "inbound" / "daily-logs"
+            / "2026-03-10 0933 (MSK) Konspekt dnya.txt",
+            "raw content",
+        )
+        result = linter.check_orphan_pages(str(tmp_path))
+        assert result == [], (
+            "Raw daily-log with dashes should match wiki daily-log with dots"
+        )
+
+    def test_wiki_daily_log_with_dots_unmatched_date_is_orphan(self, tmp_path):
+        """wiki daily-log with dots for one date should NOT match a raw file
+        with a different date."""
+        linter = _import_linter(tmp_path)
+        _write_md(
+            tmp_path / "wiki" / "daily-logs" / "2026.03.10-067-Daily-summary.md",
+            "# Daily summary",
+        )
+        _write_md(
+            tmp_path / "raw" / "inbound" / "daily-logs"
+            / "2026-03-11 0933 (MSK) Konspekt dnya.txt",
+            "raw content",
+        )
+        result = linter.check_orphan_pages(str(tmp_path))
+        assert len(result) == 1
+        assert result[0]["type"] == "daily-logs"
+
+    def test_meeting_date_match_ignores_suffix(self, tmp_path):
+        """wiki/meetings/2026-06-01-retro.md should match raw with date 2026-06-01."""
+        linter = _import_linter(tmp_path)
+        _write_md(
+            tmp_path / "wiki" / "meetings" / "2026-06-01-retro.md", "# Retro"
+        )
+        _write_md(
+            tmp_path / "raw" / "inbound" / "meeting-notes" / "2026-06-01 retro raw.txt",
+            "raw",
+        )
+        result = linter.check_orphan_pages(str(tmp_path))
+        assert result == []
 
 
 # ---------------------------------------------------------------------------
@@ -486,8 +574,11 @@ class TestLintIntegration:
 
     def test_orphan_page_counted_in_summary(self, tmp_path):
         linter = _import_linter(tmp_path)
-        f = tmp_path / "wiki" / "domains" / "test-domain" / "prds" / "prd-01.md"
-        _write_md(f, "# PRD with no references")
+        # Create a raw daily-log with no wiki counterpart
+        _write_md(
+            tmp_path / "raw" / "inbound" / "daily-logs" / "2026-06-10 notes.md",
+            "raw content",
+        )
 
         result = linter.lint(str(tmp_path))
         assert result["summary"]["orphan_pages_count"] == 1

@@ -102,14 +102,17 @@ def _build_file_index(vault: Path) -> dict:
     by_stem: dict[str, list[str]] = {}
     all_paths: list[str] = []
 
-    for file in wiki_dir.rglob("*.md"):
-        rel_path = str(file.relative_to(vault)).replace("\\", "/").lower()
-        name = file.name.lower()
-        stem = file.stem.lower()
+    for scan_dir in (wiki_dir, vault / "raw"):
+        if not scan_dir.exists():
+            continue
+        for file in scan_dir.rglob("*.md"):
+            rel_path = str(file.relative_to(vault)).replace("\\", "/").lower()
+            name = file.name.lower()
+            stem = file.stem.lower()
 
-        by_name.setdefault(name, []).append(rel_path)
-        by_stem.setdefault(stem, []).append(rel_path)
-        all_paths.append(rel_path)
+            by_name.setdefault(name, []).append(rel_path)
+            by_stem.setdefault(stem, []).append(rel_path)
+            all_paths.append(rel_path)
 
     logger.info(
         "_build_file_index: indexed %d files, %d unique names, %d unique stems",
@@ -247,90 +250,71 @@ def check_broken_links(vault_path: str) -> list[dict]:
     return broken
 
 
+_DATE_PREFIX_RE = re.compile(r"^\d{4}[-\.]\d{2}[-\.]\d{2}")
+
+
 def check_orphan_pages(vault_path: str) -> list[dict]:
-    """Find files in raw/inbound/ that have no corresponding wiki artifact
-    with a ``source:`` frontmatter reference pointing back to them.
+    """Find raw/inbound/ files (daily-logs, meeting-notes) with no wiki counterpart.
 
-    These are raw files that were saved but never transformed into a wiki
-    entity.
+    Only checks two categories that have a transformation pipeline and are NOT
+    covered by other checks:
 
-    Algorithm:
-      1. Scan all wiki/**/*.md, read YAML frontmatter via ``read_frontmatter``.
-      2. Collect every ``source`` value — extract paths from ``[[...]]``
-         brackets, normalise to lowercase / forward-slash.  Also collect
-         stems (filename without extension) for fuzzy matching.
-      3. Scan all files in raw/inbound/ recursively.
-      4. A raw file is an orphan if neither its relative path nor its stem
-         appears among the collected source references.
+    * ``raw/inbound/daily-logs/`` -- matched against ``wiki/daily-logs/YYYY-MM-DD.md``
+      by extracting the date prefix from the raw filename.
+    * ``raw/inbound/meeting-notes/`` -- matched against ``wiki/meetings/YYYY-MM-DD*.md``
+      by extracting the date prefix from the raw filename.
+
+    Categories excluded from this check (covered elsewhere):
+
+    * ideas, tasks -- covered by ``_check_ingest_backlog`` (stem matching)
+    * misc -- covered by ``check_unsorted_misc`` (wikilink reference matching)
+    * clippings -- reference material, no transformation expected
 
     Returns:
         list[dict] with keys:
-          - file  — relative path from vault root (forward slashes)
-          - type  — subdirectory name inside raw/inbound/ (e.g. "ideas",
-            "tasks", "meeting-notes", "misc")
+          - file  -- relative path from vault root (forward slashes)
+          - type  -- "daily-logs" or "meeting-notes"
     """
     vault = Path(vault_path)
-    logger.info("check_orphan_pages: starting scan for unreferenced raw/inbound/ files in %s", vault)
+    logger.info("check_orphan_pages: starting scan for orphan daily-logs/meeting-notes in %s", vault)
 
     # ------------------------------------------------------------------
-    # Step 1-2: Scan wiki/ frontmatter and collect source references
+    # Step 1: Collect dates from wiki/daily-logs/*.md
     # ------------------------------------------------------------------
-    wiki_dir = vault / "wiki"
-    source_paths: set[str] = set()   # normalised full paths from source values
-    source_stems: set[str] = set()   # filename stems for fuzzy matching
-    wiki_scanned = 0
-
-    if wiki_dir.exists():
-        for md_file in wiki_dir.rglob("*.md"):
-            wiki_scanned += 1
-            try:
-                metadata, _ = read_frontmatter(md_file)
-            except Exception as exc:
-                logger.error("check_orphan_pages: cannot read frontmatter from %s: %s", md_file, exc)
-                continue
-
-            raw_source = metadata.get("source")
-            if raw_source is None:
-                continue
-
-            # source can be a single string or a list of strings
-            if isinstance(raw_source, list):
-                values = raw_source
-            else:
-                values = [raw_source]
-
-            for val in values:
-                val = str(val).strip()
-                if not val:
-                    continue
-                # Extract path from [[...]] brackets if present
-                bracket_match = _WIKILINK_RE.search(val)
-                if bracket_match:
-                    path_str = bracket_match.group(1).strip()
-                else:
-                    path_str = val
-
-                # Handle pipe syntax: [[display|target]]
-                if "|" in path_str:
-                    path_str = path_str.split("|", 1)[1].strip()
-
-                normalised = path_str.replace("\\", "/").lower()
-                source_paths.add(normalised)
-
-                # Also store stem for fuzzy matching
-                stem = Path(path_str).stem.lower()
-                if stem:
-                    source_stems.add(stem)
+    wiki_daily_dates: set[str] = set()
+    wiki_daily_dir = vault / "wiki" / "daily-logs"
+    if wiki_daily_dir.exists():
+        for md_file in wiki_daily_dir.glob("*.md"):
+            # stem is expected to be "YYYY-MM-DD"
+            m = _DATE_PREFIX_RE.match(md_file.stem)
+            if m:
+                wiki_daily_dates.add(m.group(0).replace(".", "-"))
 
     logger.info(
-        "check_orphan_pages: scanned %d wiki files, collected %d source paths + %d stems",
-        wiki_scanned,
-        len(source_paths),
-        len(source_stems),
+        "check_orphan_pages: collected %d wiki daily-log dates from %s",
+        len(wiki_daily_dates),
+        wiki_daily_dir,
     )
 
     # ------------------------------------------------------------------
-    # Step 3-4: Scan raw/inbound/ and find orphans
+    # Step 2: Collect dates from wiki/meetings/*.md
+    # ------------------------------------------------------------------
+    wiki_meeting_dates: set[str] = set()
+    wiki_meetings_dir = vault / "wiki" / "meetings"
+    if wiki_meetings_dir.exists():
+        for md_file in wiki_meetings_dir.glob("*.md"):
+            m = _DATE_PREFIX_RE.match(md_file.stem)
+            if m:
+                wiki_meeting_dates.add(m.group(0).replace(".", "-"))
+
+    logger.info(
+        "check_orphan_pages: collected %d wiki meeting dates from %s",
+        len(wiki_meeting_dates),
+        wiki_meetings_dir,
+    )
+
+    # ------------------------------------------------------------------
+    # Step 3-5: Scan raw/inbound/daily-logs and meeting-notes, find orphans
     # ------------------------------------------------------------------
     raw_inbound = vault / "raw" / "inbound"
     if not raw_inbound.exists():
@@ -340,29 +324,35 @@ def check_orphan_pages(vault_path: str) -> list[dict]:
     orphans: list[dict] = []
     raw_scanned = 0
 
-    for raw_file in raw_inbound.rglob("*"):
-        if not raw_file.is_file():
-            continue
-        raw_scanned += 1
+    # meeting-notes can transform into wiki/daily-logs/ (Daily standups)
+    # or wiki/meetings/ (other meetings), so check both sets
+    scan_config = [
+        ("daily-logs", wiki_daily_dates),
+        ("meeting-notes", wiki_meeting_dates | wiki_daily_dates),
+    ]
 
-        rel_path = str(raw_file.relative_to(vault)).replace("\\", "/")
-        rel_lower = rel_path.lower()
-        stem_lower = raw_file.stem.lower()
-
-        # Determine the subdirectory type (first directory component after raw/inbound/)
-        try:
-            sub_type = raw_file.relative_to(raw_inbound).parts[0]
-        except (IndexError, ValueError):
-            sub_type = "unknown"
-
-        # Check: is the raw file referenced by any wiki source?
-        if rel_lower in source_paths or stem_lower in source_stems:
+    for sub_type, wiki_dates in scan_config:
+        raw_dir = raw_inbound / sub_type
+        if not raw_dir.exists():
+            logger.info("check_orphan_pages: %s not found, skipping", raw_dir)
             continue
 
-        orphans.append({
-            "file": rel_path,
-            "type": sub_type,
-        })
+        for raw_file in raw_dir.iterdir():
+            if not raw_file.is_file():
+                continue
+            raw_scanned += 1
+
+            date_match = _DATE_PREFIX_RE.match(raw_file.stem)
+            if not date_match:
+                # No date prefix -- cannot match, treat as orphan
+                rel_path = str(raw_file.relative_to(vault)).replace("\\", "/")
+                orphans.append({"file": rel_path, "type": sub_type})
+                continue
+
+            date_str = date_match.group(0).replace(".", "-")
+            if date_str not in wiki_dates:
+                rel_path = str(raw_file.relative_to(vault)).replace("\\", "/")
+                orphans.append({"file": rel_path, "type": sub_type})
 
     logger.info(
         "check_orphan_pages: scanned %d raw files, found %d orphans",

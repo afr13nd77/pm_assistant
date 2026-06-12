@@ -369,3 +369,109 @@ PM Assistant — это программная реализация правил
 - Интеграцию с Jira
 
 PM Assistant превращает эти правила в работающие сервисы: watchdog вместо ручного /ingest, cron вместо ручного /rebuild-index, API вместо ручного чтения index.md, Web UI вместо навигации по файловой системе.
+
+## Форматы нейминга файлов в vault
+
+### raw/ — исходники
+
+| Тип | Формат | Пример |
+|---|---|---|
+| Идеи | `IDEA-{NNNN}-{YYYY-MM-DD}_{slug}.md` | `IDEA-0025-2026-06-10_монолит-2.5к.md` |
+| Протоколы встреч | `{YYYY-MM-DD} {HHmm} (MSK) {название}.txt` | `2026-05-06 1237 (MSK) SearchOffersByTiles.txt` |
+| Дейли-логи | `{YYYY-MM-DD} {HHmm} (MSK) {название}.txt` | `2026-05-04 0959 (MSK) R6 Daily.txt` |
+
+### wiki/ — обработанные артефакты
+
+| Тип | Формат | Пример |
+|---|---|---|
+| Дейли-саммари | `{YYYY.MM.DD}-{NNN}-Daily-summary.md` | `2026.06.09-142-Daily-summary.md` |
+| Встречи | `{YYYY-MM-DD}-{HHmm}-{slug}.md` | `2026-05-06-1237-searchoffersbytiles-логика.md` |
+| Идеи | `IDEA-{NNNN}-{YYYY-MM-DD}_{slug}.md` | `IDEA-0025-2026-06-10_монолит-2.5к.md` |
+| Задачи (Jira) | `{JIRA-KEY}.md` | `GO-223.md`, `TMPL-15257.md` |
+| Баги (Jira) | `{JIRA-KEY}.md` | `AN-12675.md` |
+| Эпики | `{JIRA-KEY}.md` или `E-{NN}-{slug}.md` | `E-12-унификация-rules.md` |
+| Knowledge | `knowledge-{slug}.md` или `K-{DOMAIN}-{NNNN}.md` | `K-SEARCH-ENGINE-0004.md` |
+| Концепции | `C-{NNNN}-{slug}.md` | `C-0003-process-idea-workflow-v1.0.md` |
+| Проекты | `{slug}.md` | `r6.md`, `r7.md` |
+| Ежедневный отчёт разработки | `{YYYY.MM.DD}-Daily_Dev_Report.md` | `2026.06.09-Daily_Dev_Report.md` |
+| Еженедельный отчёт | `{YYYY-MM-DD}-week-{NN}.md` | `2026-06-08-week-24.md` |
+| Конкурентный анализ | `{YYYY-MM-DD}-feature-analysis-week{NN}-{NN}.md` | `2026-06-07-feature-analysis-week22-23.md` |
+| Синтезы | `synthesis-{YYYY-MM-DD}.md` | `synthesis-2026-05-21.md` |
+| Конкуренты (страницы) | `{slug}.md` | `airbnb.md`, `booking-com.md` |
+
+> ⚠️ Форматы в `wiki/reports/` неоднородны — встречаются `YYYY-MM-DD-*`, `YYYY.MM.DD-*` и просто `{slug}.md`. Единого стандарта для отчётов нет.
+
+
+
+## pm_assistant — Регулярные задачи
+
+### Настроенные автоматические запуски
+
+#### 1. Ночная обработка очереди raw (vault-ingest-queue)
+
+| Параметр | Значение |
+|---|---|
+| Расписание | Ежедневно в 02:00 МСК |
+| Исполнитель | Headless Claude Code (Windows Task Scheduler) |
+| Модель | `claude-sonnet-4-6` (зафиксирована флагом `--model`) |
+| Скрипт | `pm_assistant/jobs/vault-ingest-queue/` |
+
+Обрабатывает необработанные raw-файлы батчами по 10–15 штук (с самых свежих):
+- `raw/inbound/meeting-notes/`
+- `raw/inbound/clippings/`
+- `raw/inbound/misc/`
+- `raw/inbound/ideas/`
+
+Файлы из `raw/competitors/` — только по команде `/compile-competitor-report`.
+
+Критерий обработки: DoD §6a — в wiki должен существовать артефакт с `source:`, указывающим на raw-файл.
+
+> ⚠️ Cowork-задача `vault-ingest-queue` отключена (нет контроля модели). Активен только headless-джоб.
+
+---
+
+#### 2. Утренний дайджест задач (morning-digest)
+
+| Параметр | Значение |
+|---|---|
+| Расписание | Пн–Пт в 08:31 МСК |
+| Исполнитель | Cowork scheduled task |
+| Task ID | `morning-digest` |
+
+Формирует дайджест продуктового бэклога и личных ToDo на текущий день.
+
+---
+
+#### 3. Ежедневный статус разработки (daily-dev-status-report)
+
+| Параметр | Значение |
+|---|---|
+| Расписание | Ежедневно в 18:00 МСК |
+| Исполнитель | Cowork scheduled task |
+| Task ID | `daily-dev-status-report` |
+
+Итоговый статус разработки по активным задачам.
+
+---
+
+#### 4. Еженедельный отчёт по результатам разработки *(запланировано)*
+
+| Параметр | Значение |
+|---|---|
+| Расписание | Еженедельно (пятница) |
+| Исполнитель | Cowork scheduled task |
+| Статус | 🔲 Не настроено |
+
+Агрегированный еженедельный отчёт: закрытые задачи, блокеры, прогресс по эпикам.
+
+---
+
+#### 5. Анализ конкурентов *(запланировано)*
+
+| Параметр | Значение |
+|---|---|
+| Расписание | Раз в 2 недели |
+| Исполнитель | Cowork scheduled task |
+| Статус | 🔲 Не настроено |
+
+Сбор и анализ данных по конкурентам из `raw/competitors/`. Формирует отчёт в `wiki/domains/search-engine/reports/competitors/`.
