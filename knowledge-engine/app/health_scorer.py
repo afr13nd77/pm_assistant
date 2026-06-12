@@ -417,9 +417,15 @@ def _check_ingest_backlog(vault_path: str) -> list:
     """Find raw inbound files not yet ingested into wiki.
 
     Scans ``raw/inbound/ideas/*.md`` and ``raw/inbound/tasks/*.md``.
-    For each raw file, checks whether a wiki artifact with the same stem
-    exists anywhere in ``wiki/domains/*/ideas/`` or ``wiki/domains/*/tasks/``
-    respectively.  Files without a wiki counterpart are considered backlog.
+
+    **Ideas** use id-based matching: reads the ``id`` field from frontmatter
+    of both raw and wiki files.  A raw idea is considered ingested when a wiki
+    idea with the same ``id`` exists (comparison is case-insensitive after
+    strip).  If a raw idea has no ``id`` in its frontmatter, falls back to
+    stem matching.
+
+    **Tasks** use stem matching: a raw task is considered ingested when a wiki
+    task file with the same stem (case-insensitive) exists in any domain.
 
     Returns list[dict] with keys ``file`` (relative to vault, forward slashes)
     and ``type`` ("ideas" or "tasks").
@@ -427,29 +433,56 @@ def _check_ingest_backlog(vault_path: str) -> list:
     logger.info("_check_ingest_backlog: starting, vault_path=%s", vault_path)
 
     vault = Path(vault_path)
-
-    # Build set of all wiki artifact stems (lowercased) across all domains
-    wiki_stems: set[str] = set()
     domains_dir = vault / "wiki" / "domains"
+
+    # ------------------------------------------------------------------
+    # 1. Collect wiki ids for ideas and wiki stems for tasks
+    # ------------------------------------------------------------------
+    wiki_idea_ids: set[str] = set()
+    wiki_idea_stems: set[str] = set()  # fallback for ideas without id
+    wiki_task_stems: set[str] = set()
+
     if domains_dir.exists():
         for domain_dir in domains_dir.iterdir():
             if not domain_dir.is_dir():
                 continue
-            for art_type in ("ideas", "tasks"):
-                art_dir = domain_dir / art_type
-                if art_dir.exists():
-                    for f in art_dir.glob("*.md"):
-                        wiki_stems.add(f.stem.lower())
+
+            # Ideas: collect ids from frontmatter + stems as fallback
+            ideas_dir = domain_dir / "ideas"
+            if ideas_dir.exists():
+                for f in ideas_dir.glob("*.md"):
+                    wiki_idea_stems.add(f.stem.lower())
+                    try:
+                        meta, _ = read_frontmatter(f)
+                        idea_id = meta.get("id")
+                        if idea_id and isinstance(idea_id, str):
+                            wiki_idea_ids.add(idea_id.strip().lower())
+                    except Exception:
+                        logger.warning(
+                            "_check_ingest_backlog: failed to read frontmatter from wiki idea %s, using stem only",
+                            f,
+                        )
+
+            # Tasks: collect stems only
+            tasks_dir = domain_dir / "tasks"
+            if tasks_dir.exists():
+                for f in tasks_dir.glob("*.md"):
+                    wiki_task_stems.add(f.stem.lower())
 
     logger.info(
-        "_check_ingest_backlog: collected %d wiki stems from %s",
-        len(wiki_stems),
+        "_check_ingest_backlog: collected %d wiki idea ids, %d wiki idea stems, %d wiki task stems from %s",
+        len(wiki_idea_ids),
+        len(wiki_idea_stems),
+        len(wiki_task_stems),
         domains_dir,
     )
 
-    # Scan raw inbound directories and find files not yet ingested into wiki
+    # ------------------------------------------------------------------
+    # 2. Scan raw inbound directories
+    # ------------------------------------------------------------------
     backlog: list[dict] = []
     raw_scanned = 0
+
     for art_type in ("ideas", "tasks"):
         raw_dir = vault / "raw" / "inbound" / art_type
         if not raw_dir.exists():
@@ -458,13 +491,47 @@ def _check_ingest_backlog(vault_path: str) -> list:
                 raw_dir,
             )
             continue
+
         for f in raw_dir.glob("*.md"):
             raw_scanned += 1
-            if f.stem.lower() not in wiki_stems:
-                backlog.append({
-                    "file": str(f.relative_to(vault)).replace("\\", "/"),
-                    "type": art_type,
-                })
+
+            if art_type == "ideas":
+                # Try id-based matching first
+                raw_id: str | None = None
+                try:
+                    meta, _ = read_frontmatter(f)
+                    raw_id_val = meta.get("id")
+                    if raw_id_val and isinstance(raw_id_val, str):
+                        raw_id = raw_id_val.strip().lower()
+                except Exception:
+                    logger.warning(
+                        "_check_ingest_backlog: failed to read frontmatter from raw idea %s, skipping",
+                        f,
+                    )
+                    continue  # cannot determine id -> skip, do not count as backlog
+
+                if raw_id is not None:
+                    # id-based matching
+                    if raw_id not in wiki_idea_ids:
+                        backlog.append({
+                            "file": str(f.relative_to(vault)).replace("\\", "/"),
+                            "type": art_type,
+                        })
+                else:
+                    # Fallback: stem matching (raw idea has no id)
+                    if f.stem.lower() not in wiki_idea_stems:
+                        backlog.append({
+                            "file": str(f.relative_to(vault)).replace("\\", "/"),
+                            "type": art_type,
+                        })
+
+            else:
+                # Tasks: stem matching
+                if f.stem.lower() not in wiki_task_stems:
+                    backlog.append({
+                        "file": str(f.relative_to(vault)).replace("\\", "/"),
+                        "type": art_type,
+                    })
 
     logger.info(
         "_check_ingest_backlog: completed, raw_scanned=%d backlog=%d",

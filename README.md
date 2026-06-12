@@ -333,19 +333,32 @@ score = max(0, min(100, 100 - Σ(count × weight) - coverage_penalty))
 | `dead_ends` | 1 | Артефакты без исходящих связей | Файлы в `wiki/domains/*/ideas,tasks,epics,prds,bugs,userstories/` без единого `[[wikilink]]` в body. Исключает service-файлы (index.md, log.md) и файлы с `jira_key` |
 | `stale_drafts` | 1 | Устаревшие черновики | Идеи со статусом `draft`/`inbox`, не обновлявшиеся >30 дней |
 | `unsorted_misc` | 0.5 | Неиспользуемые misc-файлы | Файлы в `raw/inbound/misc/`, stem/name которых не упоминается ни в одном `[[wikilink]]` в wiki/. Файлы, на которые есть ссылка — не штрафуются |
-| `ingest_backlog` | 0.2 | Очередь необработанного raw | Файлы в `raw/inbound/ideas/` и `raw/inbound/tasks/`, для которых нет wiki-артефакта с таким же stem |
+| `ingest_backlog` | 0.2 | Очередь необработанного raw | Ideas: совпадение `id:` из frontmatter raw и wiki (fallback на stem). Tasks: совпадение stem |
 | `description_coverage` | — | Полнота описаний | Доля артефактов с ≥2 предложениями в body. Penalty: <50% → 10, <70% → 5, ≥70% → 0 |
 
 ### Распределение проверок по типам raw/
 
 | Тип raw/inbound/ | Метрика | Стратегия matching |
 |---|---|---|
-| `ideas/` | `ingest_backlog` | Совпадение stem с wiki/domains/*/ideas/ |
+| `ideas/` | `ingest_backlog` | Совпадение `id:` из frontmatter (fallback: stem) с wiki/domains/*/ideas/ |
 | `tasks/` | `ingest_backlog` | Совпадение stem с wiki/domains/*/tasks/ |
 | `daily-logs/` | `orphan_pages` | Дата из имени файла → wiki/daily-logs/ |
 | `meeting-notes/` | `orphan_pages` | Дата из имени файла → wiki/meetings/ + wiki/daily-logs/ |
 | `misc/` | `unsorted_misc` | Stem/name в [[wikilinks]] wiki/ |
 | `clippings/` | — | Справочный материал, трансформация не ожидается |
+
+### Критерий «обработано» (Definition of Done для ingest)
+
+Raw файл считается обработанным, если выполняется условие для его типа:
+
+| Тип raw/inbound/ | Обработан, когда |
+|---|---|
+| `ideas/` | В `wiki/domains/*/ideas/` есть файл с тем же `id:` из frontmatter |
+| `tasks/` | В `wiki/domains/*/tasks/` есть файл с тем же stem |
+| `daily-logs/` | В `wiki/daily-logs/` есть файл с той же датой |
+| `meeting-notes/` | В `wiki/meetings/` или `wiki/daily-logs/` есть файл с той же датой |
+| `misc/` | Stem или имя файла упоминается в `[[wikilink]]` хотя бы одного wiki-файла |
+| `clippings/` | Обработка не требуется (справочный материал) |
 
 ### Тренды
 

@@ -223,3 +223,212 @@ class TestCheckDescriptionCoverage:
         result = scorer._check_description_coverage(str(tmp_path))
 
         assert result["total_pages"] >= 1  # at least the good file is counted
+
+
+# ---------------------------------------------------------------------------
+# Helpers for ingest backlog tests
+# ---------------------------------------------------------------------------
+
+def _write_raw(tmp_path: Path, art_type: str, filename: str, frontmatter_fields: dict | None = None) -> Path:
+    """Write a raw inbound .md file with optional frontmatter."""
+    lines = []
+    if frontmatter_fields:
+        lines.append("---")
+        for k, v in frontmatter_fields.items():
+            lines.append(f"{k}: {v}")
+        lines.append("---")
+    lines.append("")
+    lines.append("Body content.")
+    content = "\n".join(lines)
+    path = tmp_path / "raw" / "inbound" / art_type / filename
+    return _write_md(path, content)
+
+
+def _write_wiki_idea(tmp_path: Path, domain: str, filename: str,
+                     idea_id: str | None = None) -> Path:
+    """Write a wiki idea .md file with optional id in frontmatter."""
+    fm = {"type": "idea", "status": "draft", "title": "test"}
+    if idea_id is not None:
+        fm["id"] = idea_id
+    lines = ["---"]
+    for k, v in fm.items():
+        lines.append(f"{k}: {v}")
+    lines.append("---")
+    lines.append("")
+    lines.append("Wiki body.")
+    content = "\n".join(lines)
+    path = tmp_path / "wiki" / "domains" / domain / "ideas" / filename
+    return _write_md(path, content)
+
+
+def _write_wiki_task(tmp_path: Path, domain: str, filename: str) -> Path:
+    """Write a wiki task .md file."""
+    content = "---\nstatus: draft\ntitle: test\n---\n\nTask body."
+    path = tmp_path / "wiki" / "domains" / domain / "tasks" / filename
+    return _write_md(path, content)
+
+
+# ---------------------------------------------------------------------------
+# Tests: _check_ingest_backlog
+# ---------------------------------------------------------------------------
+
+class TestCheckIngestBacklog:
+
+    def test_empty_vault_returns_empty(self, tmp_path):
+        """No raw or wiki dirs -> empty backlog."""
+        scorer = _import_health_scorer(tmp_path)
+        result = scorer._check_ingest_backlog(str(tmp_path))
+        assert result == []
+
+    def test_idea_matched_by_id_different_stem(self, tmp_path):
+        """Raw idea with id matching wiki idea (different stem) -> not backlog."""
+        scorer = _import_health_scorer(tmp_path)
+        _write_raw(tmp_path, "ideas", "IDEA-0032-rest-method.md", {"id": "IDEA-0032", "type": "idea"})
+        _write_wiki_idea(tmp_path, "search-engine", "IDEA-0032-cashback.md", idea_id="IDEA-0032")
+
+        result = scorer._check_ingest_backlog(str(tmp_path))
+        assert result == []
+
+    def test_idea_not_matched_by_id(self, tmp_path):
+        """Raw idea with id NOT in wiki -> backlog."""
+        scorer = _import_health_scorer(tmp_path)
+        _write_raw(tmp_path, "ideas", "IDEA-0099-new-feature.md", {"id": "IDEA-0099", "type": "idea"})
+        _write_wiki_idea(tmp_path, "search-engine", "IDEA-0032-cashback.md", idea_id="IDEA-0032")
+
+        result = scorer._check_ingest_backlog(str(tmp_path))
+        assert len(result) == 1
+        assert result[0]["type"] == "ideas"
+        assert "IDEA-0099" in result[0]["file"]
+
+    def test_idea_id_case_insensitive(self, tmp_path):
+        """Id comparison is case-insensitive."""
+        scorer = _import_health_scorer(tmp_path)
+        _write_raw(tmp_path, "ideas", "idea-005.md", {"id": "idea-005", "type": "idea"})
+        _write_wiki_idea(tmp_path, "general", "IDEA-005-title.md", idea_id="IDEA-005")
+
+        result = scorer._check_ingest_backlog(str(tmp_path))
+        assert result == []
+
+    def test_idea_id_with_whitespace_stripped(self, tmp_path):
+        """Id values are stripped before comparison."""
+        scorer = _import_health_scorer(tmp_path)
+        _write_raw(tmp_path, "ideas", "idea-010.md", {"id": "  IDEA-010  ", "type": "idea"})
+        _write_wiki_idea(tmp_path, "general", "IDEA-010-whatever.md", idea_id="IDEA-010")
+
+        result = scorer._check_ingest_backlog(str(tmp_path))
+        assert result == []
+
+    def test_idea_no_id_falls_back_to_stem(self, tmp_path):
+        """Raw idea without id field -> stem matching (same stem = not backlog)."""
+        scorer = _import_health_scorer(tmp_path)
+        _write_raw(tmp_path, "ideas", "my-idea.md", {"type": "idea"})  # no id
+        _write_wiki_idea(tmp_path, "general", "my-idea.md", idea_id=None)
+
+        result = scorer._check_ingest_backlog(str(tmp_path))
+        assert result == []
+
+    def test_idea_no_id_stem_not_found(self, tmp_path):
+        """Raw idea without id, stem not in wiki -> backlog."""
+        scorer = _import_health_scorer(tmp_path)
+        _write_raw(tmp_path, "ideas", "unique-idea.md", {"type": "idea"})  # no id
+        _write_wiki_idea(tmp_path, "general", "other-idea.md", idea_id=None)
+
+        result = scorer._check_ingest_backlog(str(tmp_path))
+        assert len(result) == 1
+        assert result[0]["type"] == "ideas"
+
+    def test_task_still_uses_stem_matching(self, tmp_path):
+        """Tasks use stem matching, not id-based."""
+        scorer = _import_health_scorer(tmp_path)
+        _write_raw(tmp_path, "tasks", "JIRA-123-do-thing.md", {"id": "JIRA-123", "type": "task"})
+        _write_wiki_task(tmp_path, "general", "JIRA-123-do-thing.md")
+
+        result = scorer._check_ingest_backlog(str(tmp_path))
+        assert result == []
+
+    def test_task_different_stem_is_backlog(self, tmp_path):
+        """Task with different stem is backlog (even if hypothetical id matches)."""
+        scorer = _import_health_scorer(tmp_path)
+        _write_raw(tmp_path, "tasks", "JIRA-456-new-name.md", {"id": "JIRA-456", "type": "task"})
+        _write_wiki_task(tmp_path, "general", "JIRA-456-old-name.md")
+
+        result = scorer._check_ingest_backlog(str(tmp_path))
+        assert len(result) == 1
+        assert result[0]["type"] == "tasks"
+
+    def test_mixed_ideas_and_tasks(self, tmp_path):
+        """Mixed scenario with ideas (id-based) and tasks (stem-based)."""
+        scorer = _import_health_scorer(tmp_path)
+        # Idea matched by id (different stem) -> not backlog
+        _write_raw(tmp_path, "ideas", "IDEA-001-v1.md", {"id": "IDEA-001", "type": "idea"})
+        _write_wiki_idea(tmp_path, "search", "IDEA-001-v2.md", idea_id="IDEA-001")
+        # Idea not matched -> backlog
+        _write_raw(tmp_path, "ideas", "IDEA-002-new.md", {"id": "IDEA-002", "type": "idea"})
+        # Task matched by stem -> not backlog
+        _write_raw(tmp_path, "tasks", "TASK-100.md", {"type": "task"})
+        _write_wiki_task(tmp_path, "search", "TASK-100.md")
+        # Task not matched -> backlog
+        _write_raw(tmp_path, "tasks", "TASK-200.md", {"type": "task"})
+
+        result = scorer._check_ingest_backlog(str(tmp_path))
+        assert len(result) == 2
+        types = {r["type"] for r in result}
+        assert types == {"ideas", "tasks"}
+
+    def test_raw_idea_bad_frontmatter_skipped(self, tmp_path):
+        """Raw idea with unreadable frontmatter is skipped (not counted as backlog)."""
+        scorer = _import_health_scorer(tmp_path)
+        # Write a valid raw idea -> backlog (no wiki match)
+        _write_raw(tmp_path, "ideas", "IDEA-010-good.md", {"id": "IDEA-010", "type": "idea"})
+        # Write a raw idea with broken frontmatter
+        bad_path = tmp_path / "raw" / "inbound" / "ideas" / "IDEA-011-bad.md"
+        bad_path.parent.mkdir(parents=True, exist_ok=True)
+        bad_path.write_text("---\ninvalid: [unclosed\n---\nBody.", encoding="utf-8")
+
+        result = scorer._check_ingest_backlog(str(tmp_path))
+        # Only IDEA-010 is in backlog; IDEA-011 is skipped
+        assert len(result) == 1
+        assert "IDEA-010" in result[0]["file"]
+
+    def test_wiki_idea_bad_frontmatter_uses_stem(self, tmp_path):
+        """Wiki idea with unreadable frontmatter still contributes its stem."""
+        scorer = _import_health_scorer(tmp_path)
+        # Wiki idea with broken frontmatter — stem still collected
+        bad_wiki = tmp_path / "wiki" / "domains" / "general" / "ideas" / "my-idea.md"
+        bad_wiki.parent.mkdir(parents=True, exist_ok=True)
+        bad_wiki.write_text("---\ninvalid: [unclosed\n---\nBody.", encoding="utf-8")
+        # Raw idea with no id, same stem -> not backlog (stem fallback)
+        _write_raw(tmp_path, "ideas", "my-idea.md", {"type": "idea"})
+
+        result = scorer._check_ingest_backlog(str(tmp_path))
+        assert result == []
+
+    def test_multiple_domains_idea_ids_merged(self, tmp_path):
+        """Ids from wiki ideas across multiple domains are all considered."""
+        scorer = _import_health_scorer(tmp_path)
+        _write_wiki_idea(tmp_path, "search", "IDEA-001-search.md", idea_id="IDEA-001")
+        _write_wiki_idea(tmp_path, "booking", "IDEA-002-booking.md", idea_id="IDEA-002")
+        # Raw ideas match ids from different domains
+        _write_raw(tmp_path, "ideas", "IDEA-001-raw.md", {"id": "IDEA-001", "type": "idea"})
+        _write_raw(tmp_path, "ideas", "IDEA-002-raw.md", {"id": "IDEA-002", "type": "idea"})
+
+        result = scorer._check_ingest_backlog(str(tmp_path))
+        assert result == []
+
+    def test_no_raw_dirs_returns_empty(self, tmp_path):
+        """Wiki exists but no raw dirs -> empty backlog."""
+        scorer = _import_health_scorer(tmp_path)
+        _write_wiki_idea(tmp_path, "general", "IDEA-001.md", idea_id="IDEA-001")
+
+        result = scorer._check_ingest_backlog(str(tmp_path))
+        assert result == []
+
+    def test_return_format_file_uses_forward_slashes(self, tmp_path):
+        """Returned file paths use forward slashes."""
+        scorer = _import_health_scorer(tmp_path)
+        _write_raw(tmp_path, "ideas", "IDEA-099-test.md", {"id": "IDEA-099", "type": "idea"})
+
+        result = scorer._check_ingest_backlog(str(tmp_path))
+        assert len(result) == 1
+        assert "\\" not in result[0]["file"]
+        assert result[0]["file"] == "raw/inbound/ideas/IDEA-099-test.md"
