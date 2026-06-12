@@ -123,9 +123,15 @@ Watchdog следит за `/transcripts/inbox`. При появлении `.txt
 - На Windows пути в `VAULT_PATH` указывать с прямыми слешами: `C:/Users/...`
 - Watchdog на Windows требует `pip install watchdog[inotify]` для некоторых конфигураций — если watcher не срабатывает, попробуй этот вариант
 
+## Domain-правила
+
+Все домены определены в `domain-config.yaml` (в корне vault). Файл содержит display_name, description, color, jira_labels, tags, keywords, prompt_hint для каждого домена. Читается через `domain_config.load()` с mtime-кешем. Используется для:
+- LLM-промпта идей (динамическая инжекция через `_build_idea_prompt`)
+- Валидации доменов (`_get_valid_domains` с fallback на хардкод)
+- Keyword-detection в `artifact_extractor` и `ingest` (merged maps: config extends hardcoded)
+
 ## Что не реализовано (backlog)
 
-- [ ] Прямая интеграция с Jira API (сейчас — только черновик в Obsidian)
-- [ ] Голосовые сообщения (Telegram voice → транскрибация → обработка)
-- [ ] Веб-интерфейс для просмотра inbox
 - [ ] Автосинхронизация Obsidian vault через облако
+
+Актуальный бэклог: см. [BACKLOG.md](BACKLOG.md)
