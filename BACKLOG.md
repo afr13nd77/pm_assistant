@@ -1,6 +1,6 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.7.3 / knowledge-engine 1.6.1 / idea-pipeline 1.1.0 / web-ui 1.15.6
+**Версии:** pm-bot 1.7.5 / knowledge-engine 1.6.2 / idea-pipeline 1.1.0 / web-ui 1.15.6
 **Обновлён:** 12.06.2026
 
 ---
