@@ -258,7 +258,7 @@
 
 | # | Название | Компонент | Описание |
 |---|:---|:---|:---|
-| BL-118 | Definition of Done для ingest + обработка очереди через Cowork | Cowork, knowledge-engine | Решение 10.06.2026: текущий поток (daily, meetings) остаётся в KE. **Vault health audit 12.06.2026:** score 0→81 (critical→healthy). Переписан `check_orphan_pages` (date matching для daily-logs/meeting-notes вместо source: frontmatter). Расширен `_build_file_index` на raw/. Broken links 620→0, dead ends 468→0, orphan pages 490→0. Шаблон idea.md: добавлен {{raw_ref}} placeholder. Осталось: ingest backlog (58 raw), unsorted misc (13 unreferenced). Поглощает BL-09, BL-10. |
+| ~~BL-118~~ | ~~Definition of Done для ingest + обработка очереди через Cowork~~ | ~~Cowork, knowledge-engine~~ | ✅ **Закрыто 12.06.2026.** Vault health audit: score 0→83 (critical→healthy). Переписан `check_orphan_pages` (date matching для daily-logs/meeting-notes вместо source: frontmatter). Расширен `_build_file_index` на raw/. Broken links 620→0, dead ends 468→0, orphan pages 490→0. Шаблон idea.md: добавлен {{raw_ref}} placeholder. Остаток ingest backlog (51 raw: 17 IDEA без wiki-копий + 34 Jira-задачи) и unsorted misc (13) — контент, не баги scorer'а. Поглощает BL-09, BL-10. |
 | BL-119 | Единый источник domain-правил | knowledge-engine, pm-bot | domain detection дублируется: CLAUDE.md vault'а (LLM) vs `ingest.py` TAG_TO_DOMAIN (код); `_VALID_DOMAINS` в claude_client.py не содержит partner-search-engine. Вынести в один domain-config.yaml, читаемый всеми компонентами и CLAUDE.md. Аудит: §2, Н-5 |
 | ~~BL-120~~ | ~~CI: тесты + линт + типизация~~ | ~~инфраструктура~~ | ✅ **Реализовано 11.06.2026.** GitHub Actions CI (lint + typecheck + test matrix), pyproject.toml (ruff E/F/W/I + mypy lenient), pre-commit hook (ruff --fix), requirements-dev.txt. 28 pre-existing test failures помечены xfail. |
 
@@ -280,9 +280,9 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 64 | BL-01..BL-08, BL-11..BL-18, BL-25..BL-29, BL-31..BL-34, BL-40..BL-57, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-109, BL-114..BL-117, BL-120 |
+| ✅ Реализовано | 65 | BL-01..BL-08, BL-11..BL-18, BL-25..BL-29, BL-31..BL-34, BL-40..BL-57, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-109, BL-114..BL-118, BL-120 |
 | ✅ Баги исправлены | 24 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129 |
-| Идея | 31 | BL-09, BL-10, BL-19..BL-24, BL-30, BL-35..BL-39, BL-58..BL-65, BL-70..BL-73, BL-81, BL-100, BL-110..BL-113 |
-| Аудит 10.06.2026 | 9 | BL-118..BL-119 (P1), BL-122..BL-127, BL-130 (P2) |
+| Идея | 29 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-24, BL-30, BL-35..BL-39, BL-58..BL-65, BL-70..BL-73, BL-81, BL-100, BL-110..BL-113 |
+| Аудит 10.06.2026 | 8 | BL-119 (P1), BL-122..BL-127, BL-130 (P2) |
 | ❌ Удалено | 1 | BL-121 |
 | **Итого** | **129** | |

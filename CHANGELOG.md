@@ -5,6 +5,13 @@
 
 ---
 
+## 12.06.2026 — knowledge-engine 1.6.2, web-ui 1.15.6
+- Vault health audit закрыт (BL-118): score 83/100, grade healthy
+- Health endpoint верифицирован: broken_links 0, orphan_pages 0, dead_ends 0, stale_drafts 0
+- Ingest backlog: 51 файл (17 IDEA без wiki-копий + 34 Jira-задачи) — корректная работа scorer'а, не false positive
+- Unsorted misc: 13 архивных файлов в raw/inbound/misc/ — контентная задача, не баг
+- BL-118 закрыт в BACKLOG.md, сводка пересчитана (реализовано: 64→65)
+
 ## 12.06.2026 — knowledge-engine 1.6.1
 - Vault health audit (BL-118): score 0 → 81, grade critical → healthy
 - Linter: `check_orphan_pages` переписан — проверка daily-logs и meeting-notes по дате (YYYY-MM-DD и YYYY.MM.DD), meeting-notes матчатся и против wiki/meetings/ и wiki/daily-logs/
