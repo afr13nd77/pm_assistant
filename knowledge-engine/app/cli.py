@@ -475,6 +475,15 @@ def main():
                 "grade": result["grade"],
                 "breakdown": {k: {"count": v.get("count", 0), "penalty": v.get("penalty", 0)} for k, v in result["breakdown"].items()},
             }
+            pm = result.get("pipeline_metrics")
+            if pm:
+                entry["pipeline_metrics"] = {
+                    "ingest_ratio": pm.get("ingest_ratio"),
+                    "avg_lag_hours": pm.get("avg_lag_hours"),
+                    "raw_total": pm.get("raw_total"),
+                    "processed_count": pm.get("processed_count"),
+                    "backlog_count": pm.get("backlog_count"),
+                }
             save_history(vault_path, entry)
             logger.info("health: saved history entry for date=%s", today)
 
@@ -490,6 +499,20 @@ def main():
                 "trend_30d": trend_30d,
                 "calculated_at": result["calculated_at"],
             }
+            pm = result.get("pipeline_metrics")
+            if pm:
+                pm_entries_7d = [e for e in history[-7:] if "pipeline_metrics" in e]
+                pm_entries_30d = [e for e in history[-30:] if "pipeline_metrics" in e]
+                pm_with_trends = dict(pm)
+                pm_with_trends["trend_7d"] = [
+                    {"date": e["date"], "ingest_ratio": e["pipeline_metrics"].get("ingest_ratio"), "avg_lag_hours": e["pipeline_metrics"].get("avg_lag_hours")}
+                    for e in pm_entries_7d
+                ]
+                pm_with_trends["trend_30d"] = [
+                    {"date": e["date"], "ingest_ratio": e["pipeline_metrics"].get("ingest_ratio"), "avg_lag_hours": e["pipeline_metrics"].get("avg_lag_hours")}
+                    for e in pm_entries_30d
+                ]
+                output["pipeline_metrics"] = pm_with_trends
             _output_json(output)
         else:
             # Human-readable output

@@ -733,6 +733,41 @@
   text-overflow: ellipsis;
 }
 .hbp-file:hover { color: #00ff41; }
+        .hbp-pipeline-divider {
+            border-top: 1px solid var(--border-color, #333);
+            margin: 10px 0 6px;
+            opacity: 0.4;
+        }
+        .hbp-pipeline-header {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--text-muted, #888);
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+        .hbp-pipeline-row {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            padding: 3px 0;
+            font-size: 13px;
+        }
+        .hbp-pipeline-label {
+            min-width: 110px;
+            color: var(--text-muted, #aaa);
+        }
+        .hbp-pipeline-value {
+            font-weight: 600;
+            color: var(--text-color, #e0e0e0);
+            min-width: 100px;
+        }
+        .hbp-pipeline-detail {
+            font-size: 11px;
+            color: var(--text-muted, #888);
+        }
+        .hbp-trend-up { color: #4caf50; }
+        .hbp-trend-down { color: #f44336; }
+        .hbp-trend-flat { color: var(--text-muted, #888); }
 </style>
 </head>
 <body>
@@ -1570,6 +1605,54 @@ function renderHealthBreakdown() {
       html += '</div>';
     }
   });
+
+  // Pipeline metrics section (informational, not penalty-based)
+  var pm = _healthData.pipeline_metrics;
+  if (pm) {
+      html += '<div class="hbp-pipeline-divider"></div>';
+      html += '<div class="hbp-pipeline-header">PIPELINE</div>';
+
+      // Ingest ratio with trend
+      var ratioTrend = '';
+      if (pm.trend_7d && pm.trend_7d.length >= 2) {
+          var first = pm.trend_7d[0].ingest_ratio;
+          var last = pm.trend_7d[pm.trend_7d.length - 1].ingest_ratio;
+          if (last > first) ratioTrend = ' <span class="hbp-trend-up">↑</span>';
+          else if (last < first) ratioTrend = ' <span class="hbp-trend-down">↓</span>';
+          else ratioTrend = ' <span class="hbp-trend-flat">→</span>';
+      }
+      html += '<div class="hbp-pipeline-row">';
+      html += '  <span class="hbp-pipeline-label">📥 Ingest ratio</span>';
+      html += '  <span class="hbp-pipeline-value">' + pm.ingest_ratio + '%' + ratioTrend + '</span>';
+      html += '  <span class="hbp-pipeline-detail">' + pm.processed_count + ' / ' + pm.raw_total + ' обработано</span>';
+      html += '</div>';
+
+      // Avg lag with trend
+      var lagTrend = '';
+      if (pm.trend_7d && pm.trend_7d.length >= 2) {
+          var firstLag = pm.trend_7d[0].avg_lag_hours;
+          var lastLag = pm.trend_7d[pm.trend_7d.length - 1].avg_lag_hours;
+          if (firstLag !== null && lastLag !== null) {
+              if (lastLag < firstLag) lagTrend = ' <span class="hbp-trend-up">↑</span>';  // less lag is better
+              else if (lastLag > firstLag) lagTrend = ' <span class="hbp-trend-down">↓</span>';
+              else lagTrend = ' <span class="hbp-trend-flat">→</span>';
+          }
+      }
+      var lagText = pm.avg_lag_hours !== null ? pm.avg_lag_hours + ' ч' : '—';
+      html += '<div class="hbp-pipeline-row">';
+      html += '  <span class="hbp-pipeline-label">⏱ Avg lag</span>';
+      html += '  <span class="hbp-pipeline-value">' + lagText + lagTrend + '</span>';
+      html += '  <span class="hbp-pipeline-detail">' + pm.matched_pairs + ' пар raw→wiki</span>';
+      html += '</div>';
+
+      // Raw counts
+      var rc = pm.raw_counts || {};
+      html += '<div class="hbp-pipeline-row">';
+      html += '  <span class="hbp-pipeline-label">📊 Raw counts</span>';
+      html += '  <span class="hbp-pipeline-value">ideas: ' + (rc.ideas || 0) + ', tasks: ' + (rc.tasks || 0) + '</span>';
+      html += '  <span class="hbp-pipeline-detail">backlog: ' + pm.backlog_count + '</span>';
+      html += '</div>';
+  }
 
   body.innerHTML = html;
 }

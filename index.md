@@ -142,10 +142,10 @@ pm_assistant/
 
 | Компонент | Версия | Последнее изменение | Описание |
 |---|---|---|---|
-| **pm-bot** | 1.7.6 | 2026-06-12 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. Daily Jira Sync. /progress. Меню команд. Jira sync notify toggle. Daily alert (пн-пт). Health popup layout fix (BUG-016). Vault health audit закрыт (BL-118). Fallback status "inbox" → "Новая" (BL-122) |
-| **knowledge-engine** | 1.6.3 | 2026-06-12 | Enrichment, synthesis, Jira sync, meeting fetch, daily Jira key sync. Гибридная LLM-архитектура. Linter: orphan_pages date matching, file index wiki/+raw/, person names filter, unsorted_misc по ссылкам. Vault health audit закрыт (BL-118): score 83, grade healthy. Status migrator + linter check_invalid_idea_statuses + watcher skip-statuses (BL-122) |
+| **pm-bot** | 1.7.7 | 2026-06-12 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. Daily Jira Sync. /progress. Меню команд. Jira sync notify toggle. Daily alert (пн-пт). Health popup layout fix (BUG-016). Vault health audit закрыт (BL-118). Fallback status "inbox" → "Новая" (BL-122). Pipeline metrics UI секция в overview.html (BL-123) |
+| **knowledge-engine** | 1.6.4 | 2026-06-12 | Enrichment, synthesis, Jira sync, meeting fetch, daily Jira key sync. Гибридная LLM-архитектура. Linter: orphan_pages date matching, file index wiki/+raw/, person names filter, unsorted_misc по ссылкам. Vault health audit закрыт (BL-118): score 83, grade healthy. Status migrator + linter check_invalid_idea_statuses + watcher skip-statuses (BL-122). Pipeline metrics: ingest_ratio, avg_lag_hours, raw_counts (BL-123) |
 | **idea-pipeline** | 1.1.0 | 2026-05-08 | Orchestrator: Analyst → PM → Decomposer |
-| **web-ui** | 1.15.5 | 2026-06-11 | Dual-theme SPA дашборд. Health popup light-тема: .theme-light CSS specificity, theme-aware JS colors (BUG-016) |
+| **web-ui** | 1.15.6 | 2026-06-12 | Dual-theme SPA дашборд. Health popup light-тема: .theme-light CSS specificity, theme-aware JS colors (BUG-016). Pipeline metrics секция в health breakdown (BL-123) |
 | **инфраструктура** | 1.0.0 | 2026-06-11 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120) |
 
 Схема: semver `MAJOR.MINOR.PATCH`. MAJOR — ломающие изменения API/контрактов. MINOR — новый функционал. PATCH — багофиксы.

@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -160,6 +161,20 @@ def calculate_health(vault_path: str) -> dict:
             "error": f"check failed: {exc}",
         }
 
+    # pipeline_metrics (informational, does not affect score)
+    try:
+        pipeline_metrics = _calculate_pipeline_metrics(vault_path, breakdown["ingest_backlog"]["items"])
+        logger.info("calculate_health: pipeline_metrics ratio=%.1f lag=%s",
+                     pipeline_metrics["ingest_ratio"],
+                     pipeline_metrics.get("avg_lag_hours", "N/A"))
+    except Exception as exc:
+        logger.warning("calculate_health: pipeline_metrics failed: %s", exc, exc_info=True)
+        pipeline_metrics = {
+            "raw_total": 0, "processed_count": 0, "backlog_count": 0,
+            "ingest_ratio": 100.0, "avg_lag_hours": None, "matched_pairs": 0,
+            "raw_counts": {"ideas": 0, "tasks": 0}, "error": f"check failed: {exc}",
+        }
+
     # description_coverage
     try:
         coverage = _check_description_coverage(vault_path)
@@ -195,6 +210,7 @@ def calculate_health(vault_path: str) -> dict:
         "grade": grade,
         "breakdown": breakdown,
         "calculated_at": calculated_at,
+        "pipeline_metrics": pipeline_metrics,
     }
 
     logger.info("calculate_health: completed, score=%d grade=%s", score, grade)
@@ -574,3 +590,143 @@ def _check_ingest_backlog(vault_path: str) -> list:
         len(backlog),
     )
     return backlog
+
+
+def _calculate_pipeline_metrics(vault_path: str, ingest_backlog: list[dict]) -> dict:
+    """Calculate pipeline processing metrics for raw inbound files.
+
+    Computes ingest ratio (processed vs total raw files) and average lag
+    (hours between raw file modification and wiki file modification) for
+    matched raw→wiki pairs.
+
+    Args:
+        vault_path: absolute path to the vault root.
+        ingest_backlog: list of dicts with keys ``file`` and ``type``,
+            representing raw files not yet ingested (from _check_ingest_backlog).
+
+    Returns:
+        dict with keys: raw_total, processed_count, backlog_count,
+        ingest_ratio, avg_lag_hours, matched_pairs, raw_counts.
+    """
+    logger.info("_calculate_pipeline_metrics: starting, vault_path=%s", vault_path)
+
+    vault = Path(vault_path)
+
+    # 1. Count raw files
+    raw_ideas_dir = vault / "raw" / "inbound" / "ideas"
+    raw_tasks_dir = vault / "raw" / "inbound" / "tasks"
+
+    ideas_count = len(list(raw_ideas_dir.glob("*.md"))) if raw_ideas_dir.exists() else 0
+    tasks_count = len(list(raw_tasks_dir.glob("*.md"))) if raw_tasks_dir.exists() else 0
+    raw_total = ideas_count + tasks_count
+    raw_counts = {"ideas": ideas_count, "tasks": tasks_count}
+
+    # 2. Ingest ratio
+    backlog_count = len(ingest_backlog)
+    processed_count = raw_total - backlog_count
+    ingest_ratio = round(processed_count / raw_total * 100, 1) if raw_total > 0 else 100.0
+
+    # 3. Avg lag — for processed files (NOT in backlog)
+    # Build set of backlog file paths for fast lookup
+    backlog_files = {item["file"] for item in ingest_backlog}
+
+    # Build mapping of wiki files: id/stem → filepath for ideas and tasks
+    domains_dir = vault / "wiki" / "domains"
+    wiki_idea_map: dict[str, Path] = {}  # id/stem (lowercase) → filepath
+    wiki_task_map: dict[str, Path] = {}  # stem (lowercase) → filepath
+
+    if domains_dir.exists():
+        for domain_dir in domains_dir.iterdir():
+            if not domain_dir.is_dir():
+                continue
+            ideas_dir = domain_dir / "ideas"
+            if ideas_dir.exists():
+                for f in ideas_dir.glob("*.md"):
+                    wiki_idea_map[f.stem.lower()] = f
+                    # Also by id from frontmatter
+                    try:
+                        meta, _ = read_frontmatter(f)
+                        raw_id = meta.get("id")
+                        if raw_id and isinstance(raw_id, str):
+                            wiki_idea_map[raw_id.strip().lower()] = f
+                    except Exception:
+                        pass
+                    # By IDEA-NNNN from filename
+                    m = _IDEA_ID_RE.match(f.stem)
+                    if m:
+                        wiki_idea_map[m.group(1).lower()] = f
+
+            tasks_dir = domain_dir / "tasks"
+            if tasks_dir.exists():
+                for f in tasks_dir.glob("*.md"):
+                    wiki_task_map[f.stem.lower()] = f
+
+    # For each raw file NOT in backlog, find wiki pair and compute lag
+    lags: list[float] = []
+    matched_pairs = 0
+
+    for art_type, raw_dir_path, wiki_map in [
+        ("ideas", raw_ideas_dir, wiki_idea_map),
+        ("tasks", raw_tasks_dir, wiki_task_map),
+    ]:
+        if not raw_dir_path.exists():
+            continue
+        for raw_file in raw_dir_path.glob("*.md"):
+            rel_path = str(raw_file.relative_to(vault)).replace("\\", "/")
+            if rel_path in backlog_files:
+                continue  # File not yet processed
+
+            # Find wiki pair
+            wiki_file: Path | None = None
+            if art_type == "ideas":
+                # By id from frontmatter
+                try:
+                    meta, _ = read_frontmatter(raw_file)
+                    raw_id = meta.get("id")
+                    if raw_id and isinstance(raw_id, str):
+                        wiki_file = wiki_map.get(raw_id.strip().lower())
+                except Exception:
+                    pass
+                # By IDEA-NNNN from filename
+                if wiki_file is None:
+                    m = _IDEA_ID_RE.match(raw_file.stem)
+                    if m:
+                        wiki_file = wiki_map.get(m.group(1).lower())
+                # By stem
+                if wiki_file is None:
+                    wiki_file = wiki_map.get(raw_file.stem.lower())
+            else:
+                wiki_file = wiki_map.get(raw_file.stem.lower())
+
+            if wiki_file is not None and wiki_file.exists():
+                matched_pairs += 1
+                raw_mtime = os.path.getmtime(raw_file)
+                wiki_mtime = os.path.getmtime(wiki_file)
+                lag_hours = (wiki_mtime - raw_mtime) / 3600
+                if lag_hours < 0:
+                    logger.warning(
+                        "_calculate_pipeline_metrics: negative lag for %s (wiki older than raw), clamping to 0",
+                        raw_file.name,
+                    )
+                    lag_hours = 0.0
+                lags.append(lag_hours)
+
+    avg_lag_hours = round(sum(lags) / len(lags), 1) if lags else None
+
+    result = {
+        "raw_total": raw_total,
+        "processed_count": processed_count,
+        "backlog_count": backlog_count,
+        "ingest_ratio": ingest_ratio,
+        "avg_lag_hours": avg_lag_hours,
+        "matched_pairs": matched_pairs,
+        "raw_counts": raw_counts,
+    }
+
+    logger.info(
+        "_calculate_pipeline_metrics: completed, raw_total=%d processed=%d ratio=%.1f lag=%s matched=%d",
+        raw_total, processed_count, ingest_ratio,
+        avg_lag_hours if avg_lag_hours is not None else "N/A",
+        matched_pairs,
+    )
+    return result
