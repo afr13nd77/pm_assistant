@@ -147,6 +147,32 @@ def main():
     status_parser = subparsers.add_parser("status", help="Show vault status summary")
     status_parser.add_argument("--vault", default=None, help="Vault root path")
 
+    move_parser = subparsers.add_parser(
+        "move-artifact",
+        help="Move a single artifact file to a different domain"
+    )
+    move_parser.add_argument("filepath", help="Path to .md file (relative to vault root)")
+    move_parser.add_argument("target_domain", help="Target domain slug")
+    move_parser.add_argument("--vault", default=None, help="Vault root path")
+
+    batch_parser = subparsers.add_parser(
+        "batch-reclassify",
+        help="Reclassify files from one domain based on keyword/tag detection"
+    )
+    batch_parser.add_argument("--source", required=True, help="Source domain slug")
+    batch_parser.add_argument("--artifact-type", default=None, dest="artifact_type",
+                              help="Limit to specific artifact type")
+    batch_parser.add_argument("--dry-run", action="store_true", help="Show plan without moving")
+    batch_parser.add_argument("--vault", default=None, help="Vault root path")
+
+    audit_parser = subparsers.add_parser(
+        "audit-domain",
+        help="Audit how many files from source domain match target domain"
+    )
+    audit_parser.add_argument("domain", help="Domain to audit")
+    audit_parser.add_argument("--source", default="general", help="Source domain (default: general)")
+    audit_parser.add_argument("--vault", default=None, help="Vault root path")
+
     args = parser.parse_args()
     vault_path = args.vault or os.getenv("VAULT_PATH", "/vault")
 
@@ -559,6 +585,39 @@ def main():
                     len(domains), total_artifacts, lint_result["summary"]["total_issues"])
         _output_json(result)
         sys.exit(0)
+
+    elif args.command == "move-artifact":
+        from . import vault_paths as _vp
+        _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
+        from .domain_mover import move_artifact
+        logger.info("move-artifact: filepath=%s, target_domain=%s, vault=%s",
+                    args.filepath, args.target_domain, vault_path)
+        result = move_artifact(args.filepath, args.target_domain)
+        logger.info("move-artifact: completed, status=%s", result.get("status"))
+        _output_json(result)
+        sys.exit(0 if result["status"] == "ok" else 1)
+
+    elif args.command == "batch-reclassify":
+        from . import vault_paths as _vp
+        _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
+        from .domain_mover import batch_reclassify
+        logger.info("batch-reclassify: source=%s, artifact_type=%s, dry_run=%s, vault=%s",
+                    args.source, args.artifact_type, args.dry_run, vault_path)
+        result = batch_reclassify(args.source, artifact_type=args.artifact_type, dry_run=args.dry_run)
+        logger.info("batch-reclassify: completed, status=%s", result.get("status"))
+        _output_json(result)
+        sys.exit(0 if result["status"] == "ok" else 1)
+
+    elif args.command == "audit-domain":
+        from . import vault_paths as _vp
+        _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
+        from .domain_mover import audit_domain
+        logger.info("audit-domain: domain=%s, source=%s, vault=%s",
+                    args.domain, args.source, vault_path)
+        result = audit_domain(args.domain, source_domain=args.source)
+        logger.info("audit-domain: completed, status=%s", result.get("status"))
+        _output_json(result)
+        sys.exit(0 if result["status"] == "ok" else 1)
 
 
 def _output_json(data):
