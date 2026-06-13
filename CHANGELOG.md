@@ -7,6 +7,14 @@
 
 ## 13.06.2026 — pm-bot 1.8.1, knowledge-engine 1.7.1, idea-pipeline 1.1.1
 
+### BL-124: Ревизия домена general (closed)
+- `domain_mover.py` — модуль переноса файлов между доменами (432 строки, 6 функций)
+- CLI: `move-artifact`, `batch-reclassify`, `audit-domain` — 3 команды в cli.py
+- 14 unit-тестов (477 строк), все проходят
+- Batch execution выполнен: 156 файлов → 1 перенесён (AN-13348.md → search-engine/bugs), 7 дубликатов удалены из general, 148 unmatched (корректно в general)
+- Удалённые дубликаты: GO-263, GO-273, VUECLIENT-3350, VUECLIENT-3427 (search-engine), GO-315, GO-58, PLATFORM-10475 (suggester)
+- Итог general: 148 файлов (tasks 113, bugs 27, ideas 3, knowledge 2, epics 1, userstories 2)
+
 ### BL-119: Единый источник domain-правил
 - domain-config.yaml расширен: `tags`, `keywords`, `prompt_hint` для всех 5 доменов
 - `build_keyword_map()`, `build_prompt_section()`, `get_valid_domains()` — новые функции в domain_config.py (pm-bot + KE)

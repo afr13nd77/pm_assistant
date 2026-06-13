@@ -27,6 +27,7 @@ pm_assistant/
 │   ├── refresh-mode/               # requirements.md, design.md, tasks.md
 │   ├── ollama-hybrid/              # requirements.md, design.md, tasks.md
 │   ├── unified-domain-rules/        # BL-119: requirements.md, design.md, tasks.md
+│   ├── domain-general-revision/     # BL-124 DONE: requirements.md, design.md, tasks.md
 │   └── architecture/adr/           # 4 ADR (решения по архитектуре)
 │
 ├── pm-bot/                         # Telegram-бот (capture)
@@ -309,7 +310,7 @@ pm_assistant/
 | daily-jira-sync/ | APPROVED, IMPLEMENTED | Извлечение Jira-ключей из daily-протоколов, авто-импорт недостающих, Obsidian wiki-links (requirements, design, tasks) |
 | daily-progress-report/ | APPROVED, IMPLEMENTED | Команда /progress — отправка ежедневного отчёта о ходе проекта в Telegram (requirements, design, tasks) |
 | domain-config/ | APPROVED, IMPLEMENTED | Настройка доменов (requirements, design, tasks) |
-| domain-general-revision/ | APPROVED | BL-124: Ревизия домена general — переразметка 506+ файлов по доменам, CLI move-artifact, batch-reclassify, аудит partner-search-engine (requirements, design, tasks) |
+| domain-general-revision/ | APPROVED, DONE | BL-124: Ревизия домена general — domain_mover.py + 3 CLI + 14 тестов. Batch выполнен: 1 moved, 7 дубликатов удалены, 148 unmatched (requirements, design, tasks) |
 | ds v4/ | — | Дизайн-система v4: HTML-макеты matrix theme (matrix-ds-v4, pmassistant-design-system-v2) |
 | guided-enrichment/ | APPROVED, IMPLEMENTED | Telegram-напоминания о незаполненных секциях идей (enrichment_reminder.py + enrichment_db.py, daily cron, SQLite cooldown) |
 | health-scoring/ | APPROVED, IMPLEMENTED | Vault health score (0-100) + wikilink resolver. 7 категорий штрафов, endpoint /vault/health, overview виджет, ke-cron 04:00, .health-history.json 90д (requirements, design, tasks — 14 задач, BL-114, BL-115) |
