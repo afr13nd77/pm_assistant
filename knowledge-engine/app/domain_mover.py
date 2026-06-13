@@ -9,10 +9,10 @@ import shutil
 from collections import defaultdict
 from pathlib import Path
 
-from . import domain_config
-from . import vault_paths
+from shared import domain_config
+from shared import vault_paths
 from .domain_manager import update_domain_index, append_domain_log, _ARTIFACT_TYPES
-from .frontmatter_utils import read_frontmatter, update_frontmatter
+from shared.frontmatter_utils import read_frontmatter, update_frontmatter
 
 logger = logging.getLogger(__name__)
 

@@ -4,8 +4,8 @@ import logging
 from datetime import date
 from pathlib import Path
 
-from . import vault_paths
-from .frontmatter_utils import read_frontmatter, update_frontmatter
+from shared import vault_paths
+from shared.frontmatter_utils import read_frontmatter, update_frontmatter
 
 logger = logging.getLogger(__name__)
 

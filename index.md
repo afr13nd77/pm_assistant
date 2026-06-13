@@ -10,9 +10,21 @@ pm_assistant/
 ├── pyproject.toml                  # ruff + mypy конфигурация
 ├── requirements-dev.txt            # dev-зависимости (pytest, ruff, mypy)
 ├── .github/workflows/ci.yml       # GitHub Actions CI (lint + typecheck + test)
-├── docker-compose.yml              # оркестрация: pm-bot (shm_size 512m) + knowledge-engine + ke-cron + idea-pipeline
+├── docker-compose.yml              # оркестрация: pm-bot + knowledge-engine (:8001 API) + ke-cron + idea-pipeline
+├── settings.yaml                   # централизованная runtime-конфигурация (timeouts, cooldowns, rate_limits)
 ├── CHANGELOG.md                    # журнал изменений по всем компонентам (от новых к старым)
 ├── BACKLOG.md                      # бэклог: реализованные фичи (54), баги (18), идеи (27)
+│
+├── shared/                         # общий модуль — единый источник для pm-bot, KE, idea-pipeline
+│   ├── __init__.py                 # __version__ = "0.1.0"
+│   ├── file_writer.py              # file_lock, atomic_write, locked_append, append_section
+│   ├── llm_client.py               # _load_llm_prefs, get_client, call_with_fallback
+│   ├── vault_paths.py              # superset путей vault (25 функций)
+│   ├── domain_config.py            # загрузка/сохранение domain-config.yaml (13 функций)
+│   ├── frontmatter_utils.py        # read_frontmatter, update_frontmatter
+│   ├── settings.py                 # загрузка settings.yaml, dot-notation доступ, singleton
+│   └── tests/                      # unit-тесты для shared/
+│       └── test_settings.py        # 14 тестов
 │
 ├── docs/                           # спеки и дизайн-документы (корень монорепо)
 │   ├── jira-polling/               # requirements.md, design.md, tasks.md
@@ -28,10 +40,11 @@ pm_assistant/
 │   ├── ollama-hybrid/              # requirements.md, design.md, tasks.md
 │   ├── unified-domain-rules/        # BL-119: requirements.md, design.md, tasks.md
 │   ├── domain-general-revision/     # BL-124 DONE: requirements.md, design.md, tasks.md
+│   ├── dedup-and-config/            # BL-126+BL-130 DONE: requirements.md, design.md, tasks.md (28 задач)
 │   └── architecture/adr/           # 4 ADR (решения по архитектуре)
 │
 ├── pm-bot/                         # Telegram-бот (capture)
-│   ├── Dockerfile                  # образ Python 3.12-slim + knowledge-engine
+│   ├── Dockerfile                  # образ Python 3.12-slim + shared/
 │   ├── requirements.txt            # 4 зависимости
 │   ├── CLAUDE.md                   # инструкции для Claude Code
 │   ├── CONTEXT.md                  # история проектных решений
@@ -40,7 +53,6 @@ pm_assistant/
 │       ├── main.py                 # точка входа: запуск бота + watcher
 │       ├── handlers.py             # Telegram: /start, /idea, /jira, /daily, /synthesize, /jira_sync, /jira_import, /jira_create, /pipeline, /domain, /lint, /status, /test_enrichment, текст, голос
 │       ├── claude_client.py        # Claude/Ollama: process_idea (→dict/JSON), process_meeting, process_jira_ticket, process_daily (через llm_client)
-│       ├── llm_client.py           # фабрика LLM-клиентов: Claude API / Ollama / Hybrid, fallback
 │       ├── obsidian_writer.py      # запись .md: write_idea (template-based), write_meeting, write_jira_draft, write_daily, write_report
 │       ├── pipeline_client.py      # HTTP-клиент к idea-pipeline API
 │       ├── reporter.py             # генерация еженедельных отчётов через Claude
@@ -48,9 +60,8 @@ pm_assistant/
 │       ├── stt.py                  # Speech-to-Text (faster-whisper, lazy import, env STT_ENABLED)
 │       ├── transcript_watcher.py   # watchdog: транскрипты .txt → Meetings/
 │       ├── vault_api.py            # FastAPI REST сервер: vault API + user-prefs API + capture + test-ollama + in-memory TTL cache
-│       ├── vault_paths.py          # централизованная логика путей vault (+ user_prefs_path)
-│       ├── domain_config.py        # загрузка/сохранение domain-config.yaml
-│       ├── file_writer.py          # atomic file write
+│       ├── ke_client.py            # HTTP-клиент к KE API (18 функций, заменяет subprocess)
+│       ├── rate_limiter.py         # TelegramRateLimiter (token bucket, params из settings)
 │       ├── enrichment_reminder.py  # ЖЦ идей: скан по доменам, readiness %, Telegram-напоминания
 │       ├── enrichment_db.py        # SQLite: дедупликация напоминаний (cooldown 24ч, cleanup 90д)
 │       ├── daily_alert.py          # Alert при отсутствии Daily-протокола (cron 18:00 МСК, пн-пт, weekend skip)
@@ -83,23 +94,19 @@ pm_assistant/
 │       ├── __init__.py
 │       ├── __main__.py             # точка входа: python -m app
 │       ├── cli.py                  # CLI: jira-sync, jira-import, jira-create, jira-projects, jira-epics, jira-issue-types, enrich, synthesize, watch, index, lint, status
+│       ├── api.py                  # FastAPI HTTP API (18 эндпоинтов, порт 8001)
 │       ├── enricher.py             # обогащение идеи связями из vault
 │       ├── synthesizer.py          # синтез: кластеризация + сводка
 │       ├── vault_index.py          # сканирование vault, in-memory индекс
-│       ├── vault_paths.py          # централизованная логика путей vault
 │       ├── domain_manager.py       # управление доменами: scaffold, index, log
 │       ├── matcher.py              # keyword + tag matching
 │       ├── claude_client.py        # Claude API для enrichment/synthesis
-│       ├── llm_client.py           # фабрика LLM-клиентов: Claude API / Ollama / Hybrid, fallback
-│       ├── frontmatter_utils.py    # чтение/запись YAML frontmatter
-│       ├── file_writer.py          # atomic write (tmp + os.replace)
 │       ├── notifier.py             # Telegram уведомления через Bot API
 │       ├── watcher.py              # watchdog: Inbox/ → auto-enrichment
 │       ├── artifact_extractor.py   # извлечение артефактов
 │       ├── linter.py               # линтер vault-файлов
 │       ├── status_migrator.py          # миграция статусов идей: STATUS_MAP + VALID_STATUSES + migrate_statuses()
 │       ├── process_one.py          # обработка одного файла
-│       ├── domain_config.py        # загрузка/сохранение domain-config.yaml
 │       ├── jira_fetcher/           # модуль синхронизации с Jira
 │       │   ├── __init__.py
 │       │   ├── client.py           # Jira REST API v2 client (Bearer PAT auth): get_projects, get_project_issue_types, get_project_epics, create_issue, search
@@ -144,11 +151,12 @@ pm_assistant/
 
 | Компонент | Версия | Последнее изменение | Описание |
 |---|---|---|---|
-| **pm-bot** | 1.8.1 | 2026-06-13 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. Единый источник domain-правил: динамический промпт LLM из domain-config.yaml, _get_valid_domains с fallback, partner-search-engine (BL-119). file_lock + locked_append для vault write coordination (BL-125) |
-| **knowledge-engine** | 1.7.1 | 2026-06-13 | Enrichment, synthesis, Jira sync, meeting fetch. Единый источник domain-правил: build_keyword_map, build_prompt_section, get_valid_domains, _merged_keyword_map в artifact_extractor и ingest (BL-119). file_lock + locked_append для vault write coordination (BL-125) |
-| **idea-pipeline** | 1.1.1 | 2026-06-13 | Orchestrator: Analyst → PM → Decomposer. atomic_write для state.py и vault_writer.py (BL-125) |
+| **pm-bot** | 1.9.0 | 2026-06-14 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. |
+| **knowledge-engine** | 1.8.0 | 2026-06-14 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (18 эндпоинтов). Импорты из shared/. |
+| **idea-pipeline** | 1.1.2 | 2026-06-14 | Orchestrator: Analyst → PM → Decomposer. Импорты vault_paths и file_writer из shared/. |
 | **web-ui** | 1.15.6 | 2026-06-12 | Dual-theme SPA дашборд. Health popup light-тема: .theme-light CSS specificity, theme-aware JS colors (BUG-016). Pipeline metrics секция в health breakdown (BL-123) |
 | **инфраструктура** | 1.0.0 | 2026-06-11 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120) |
+| **shared** | 0.1.0 | 2026-06-14 | Общий модуль: llm_client, file_writer, vault_paths, domain_config, frontmatter_utils, settings. Единый источник для всех компонентов |
 
 Схема: semver `MAJOR.MINOR.PATCH`. MAJOR — ломающие изменения API/контрактов. MINOR — новый функционал. PATCH — багофиксы.
 
@@ -163,8 +171,8 @@ pm_assistant/
 | python-dotenv | 1.0.1 (pm-bot), 1.2.2 (KE) | pm-bot, knowledge-engine |
 | python-frontmatter | >=1.1.0 | knowledge-engine, idea-pipeline |
 | requests | >=2.31.0 | knowledge-engine |
-| FastAPI | >=0.111.0 (pm-bot), >=0.115.0 (pipeline) | pm-bot, idea-pipeline |
-| uvicorn | >=0.30.0 (pm-bot), >=0.32.0 (pipeline) | pm-bot, idea-pipeline |
+| FastAPI | >=0.111.0 (pm-bot), >=0.115.0 (pipeline, KE) | pm-bot, idea-pipeline, knowledge-engine |
+| uvicorn | >=0.30.0 (pm-bot), >=0.32.0 (pipeline, KE) | pm-bot, idea-pipeline, knowledge-engine |
 | python-slugify | >=8.0.0 | idea-pipeline |
 | Claude модель | claude-sonnet-4-6 | pm-bot, knowledge-engine, idea-pipeline |
 | marked.js | 15.x (CDN) | pm-bot (web) |
@@ -190,7 +198,7 @@ pm_assistant/
 | Контейнер | Роль | Команда |
 |---|---|---|
 | pm-bot | Telegram polling + capture + vault API (8000) + web UI (8080) | python -m http.server 8080 --directory /web & python -m app.main |
-| knowledge-engine | Watchdog на Inbox/ для auto-enrichment | python -m app watch |
+| knowledge-engine | HTTP API (:8001) + Watchdog на Inbox/ | sh -c "python -m knowledge_engine serve & python -m knowledge_engine watch" |
 | idea-pipeline | Orchestrator: Analyst → PM → Decomposer | python -m idea_pipeline serve |
 | ke-cron | Синтез (09:00) + Jira sync (каждые 3ч) | crond |
 
@@ -276,6 +284,8 @@ pm_assistant/
 | OLLAMA_MODEL | нет | pm-bot, knowledge-engine | Модель Ollama (default: qwen3.5:latest, настраивается через Web UI) |
 | DAILY_ALERT_HOUR | нет | pm-bot | Час ежедневной проверки наличия Daily-протокола (default: 18) |
 | DAILY_ALERT_MINUTE | нет | pm-bot | Минута проверки наличия Daily-протокола (default: 0) |
+| KE_API_URL | нет | pm-bot | URL KE HTTP API (default: http://knowledge-engine:8001) |
+| DB_PATH | нет | pm-bot | Путь к SQLite БД (default: /data) |
 
 ## Performance (vault_api.py)
 
@@ -309,6 +319,7 @@ pm_assistant/
 | daily-alert/ | APPROVED, IMPLEMENTED | Alert в Telegram при отсутствии Daily-протокола за текущий день, cron 18:00 МСК (requirements, design, tasks) |
 | daily-jira-sync/ | APPROVED, IMPLEMENTED | Извлечение Jira-ключей из daily-протоколов, авто-импорт недостающих, Obsidian wiki-links (requirements, design, tasks) |
 | daily-progress-report/ | APPROVED, IMPLEMENTED | Команда /progress — отправка ежедневного отчёта о ходе проекта в Telegram (requirements, design, tasks) |
+| dedup-and-config/ | APPROVED, DONE | BL-126+BL-130: Дедупликация + декаплинг — shared/ модуль, KE HTTP API, ke_client, settings.yaml (requirements, design, tasks — 28 задач) |
 | domain-config/ | APPROVED, IMPLEMENTED | Настройка доменов (requirements, design, tasks) |
 | domain-general-revision/ | APPROVED, DONE | BL-124: Ревизия домена general — domain_mover.py + 3 CLI + 14 тестов. Batch выполнен: 1 moved, 7 дубликатов удалены, 148 unmatched (requirements, design, tasks) |
 | ds v4/ | — | Дизайн-система v4: HTML-макеты matrix theme (matrix-ds-v4, pmassistant-design-system-v2) |

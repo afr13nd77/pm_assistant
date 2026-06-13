@@ -3,7 +3,11 @@ import os
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
+from .rate_limiter import TelegramRateLimiter
+
 logger = logging.getLogger(__name__)
+
+_rate_limiter = TelegramRateLimiter()
 
 scheduler = None
 
@@ -78,6 +82,7 @@ async def _run_weekly_report_async(bot, chat_id: int):
         filepath = write_report(report_md)
         logger.info("Weekly report saved to %s", filepath)
 
+        await _rate_limiter.acquire()
         await bot.send_message(
             chat_id=chat_id,
             text=f"Еженедельный отчёт готов:\n`{filepath.name}`\n\nОткрой: http://localhost:8080/report.html",
@@ -87,6 +92,7 @@ async def _run_weekly_report_async(bot, chat_id: int):
     except Exception as e:
         logger.error("Weekly report generation failed: %s", e, exc_info=True)
         try:
+            await _rate_limiter.acquire()
             await bot.send_message(
                 chat_id=chat_id,
                 text=f"Ошибка генерации отчёта: {e}",

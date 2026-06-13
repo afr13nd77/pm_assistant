@@ -1,11 +1,16 @@
 import json
 import logging
+import os
 import sqlite3
 from pathlib import Path
+
+from shared.settings import get as get_setting
 
 logger = logging.getLogger(__name__)
 
 DB_FILENAME = "enrichment_reminders.db"
+_db_dir = Path(os.getenv("DB_PATH", get_setting("paths.db_dir", "/data")))
+DB_PATH = _db_dir / DB_FILENAME
 
 _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS enrichment_reminders (
@@ -26,6 +31,7 @@ CREATE INDEX IF NOT EXISTS idx_reminders_idea_sent
 
 def init_db(db_path: Path) -> None:
     logger.info("init_db: initializing schema at %s", db_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with sqlite3.connect(str(db_path)) as conn:
             conn.execute(_CREATE_TABLE)

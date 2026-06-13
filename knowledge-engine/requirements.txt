@@ -4,3 +4,5 @@ watchdog==6.0.0
 python-dotenv==1.2.2
 requests>=2.31.0
 pyyaml>=6.0
+fastapi>=0.115.0
+uvicorn>=0.32.0

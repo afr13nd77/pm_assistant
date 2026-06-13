@@ -19,21 +19,22 @@ import json
 import logging
 import os
 import re
-import subprocess
 import threading
 import time as _time
 import urllib.parse
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import requests
 import yaml
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from . import domain_config
-from .vault_paths import (
+from shared import domain_config
+from . import ke_client
+from shared.vault_paths import (
     VAULT_PATH,
     all_domains,
     wiki_domain_dir,
@@ -1238,36 +1239,13 @@ def jira_import(req: JiraImportRequest):
         raise HTTPException(status_code=400, detail=f"Invalid Jira key format: {req.key}. Expected: PROJECT-123")
 
     try:
-        result = subprocess.run(
-            ["python", "-m", "knowledge_engine", "jira-import", req.key],
-            capture_output=True, text=True, timeout=60,
-        )
-        logger.info("POST /api/v1/jira/import — subprocess exit code: %d", result.returncode)
-
-        if result.returncode == 0:
-            _cache.invalidate()
-            import json as _json
-            try:
-                data = _json.loads(result.stdout)
-                logger.info("POST /api/v1/jira/import — success: %s", data.get("message"))
-                return JiraImportResponse(**data)
-            except (ValueError, TypeError) as exc:
-                logger.error("POST /api/v1/jira/import — failed to parse output: %s", exc)
-                return JiraImportResponse(status="ok", key=req.key, message="Import completed")
-        else:
-            error_msg = result.stderr[:300]
-            try:
-                import json as _json
-                data = _json.loads(result.stdout)
-                error_msg = data.get("message", error_msg)
-            except Exception:
-                pass
-            logger.error("POST /api/v1/jira/import — failed: %s", error_msg)
-            raise HTTPException(status_code=502, detail=error_msg)
-
-    except subprocess.TimeoutExpired:
-        logger.error("POST /api/v1/jira/import — timeout for key=%s", req.key)
-        raise HTTPException(status_code=504, detail="Import timed out after 60 seconds")
+        data = ke_client.jira_import(req.key)
+        _cache.invalidate()
+        logger.info("POST /api/v1/jira/import — success: %s", data.get("message"))
+        return JiraImportResponse(**data)
+    except requests.RequestException as exc:
+        logger.error("POST /api/v1/jira/import — ke_client.jira_import failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"KE API error: {exc}")
     except HTTPException:
         raise
     except Exception as exc:
@@ -1278,8 +1256,6 @@ def jira_import(req: JiraImportRequest):
 @app.post("/api/v1/jira/create", response_model=JiraCreateResponse)
 def jira_create(req: JiraCreateRequest):
     """Create a new Jira issue from a vault task file via knowledge-engine."""
-    import json as _json
-
     logger.info(
         "POST /api/v1/jira/create — start, filename=%s project_key=%s issue_type=%s summary_len=%d",
         req.filename, req.project_key, req.issue_type, len(req.summary),
@@ -1314,46 +1290,27 @@ def jira_create(req: JiraCreateRequest):
         logger.error("POST /api/v1/jira/create — rejected: invalid epic_key=%s", req.epic_key)
         raise HTTPException(status_code=400, detail="epic_key must match ^[A-Z][A-Z0-9]+-\\d+$")
 
-    # --- Subprocess call ---
-    cmd = [
-        "python", "-m", "knowledge_engine", "jira-create",
-        "--file", req.filename,
-        "--project", req.project_key,
-        "--type", req.issue_type,
-        "--summary", req.summary,
-    ]
-    if req.epic_key:
-        cmd.extend(["--epic", req.epic_key])
-
-    logger.info("POST /api/v1/jira/create — running subprocess: %s", cmd)
+    # --- KE API call ---
+    logger.info(
+        "POST /api/v1/jira/create — calling ke_client.jira_create(file=%s, project=%s, type=%s)",
+        req.filename, req.project_key, req.issue_type,
+    )
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        logger.info("POST /api/v1/jira/create — subprocess exit code: %d", result.returncode)
-
-        if result.returncode == 0:
-            _cache.invalidate()
-            try:
-                data = _json.loads(result.stdout)
-                logger.info(
-                    "POST /api/v1/jira/create — success: jira_key=%s", data.get("jira_key")
-                )
-                return JiraCreateResponse(**data)
-            except (ValueError, TypeError) as exc:
-                logger.error("POST /api/v1/jira/create — failed to parse output: %s", exc)
-                return JiraCreateResponse(status="ok", message="Issue created")
-        else:
-            error_msg = result.stderr[:300]
-            try:
-                data = _json.loads(result.stdout)
-                error_msg = data.get("message", error_msg)
-            except Exception:
-                pass
-            logger.error("POST /api/v1/jira/create — failed: %s", error_msg)
-            raise HTTPException(status_code=502, detail=error_msg)
-
-    except subprocess.TimeoutExpired:
-        logger.error("POST /api/v1/jira/create — timeout")
-        raise HTTPException(status_code=504, detail="jira-create timed out after 60 seconds")
+        data = ke_client.jira_create(
+            file=req.filename,
+            project=req.project_key,
+            type=req.issue_type,
+            summary=req.summary,
+            epic=req.epic_key,
+        )
+        _cache.invalidate()
+        logger.info(
+            "POST /api/v1/jira/create — success: jira_key=%s", data.get("jira_key")
+        )
+        return JiraCreateResponse(**data)
+    except requests.RequestException as exc:
+        logger.error("POST /api/v1/jira/create — ke_client.jira_create failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"KE API error: {exc}")
     except HTTPException:
         raise
     except Exception as exc:
@@ -1364,38 +1321,15 @@ def jira_create(req: JiraCreateRequest):
 @app.get("/api/v1/jira/projects")
 def jira_projects():
     """List available Jira projects via knowledge-engine."""
-    import json as _json
-
     logger.info("GET /api/v1/jira/projects — start")
     try:
-        result = subprocess.run(
-            ["python", "-m", "knowledge_engine", "jira-projects"],
-            capture_output=True, text=True, timeout=30,
-        )
-        logger.info("GET /api/v1/jira/projects — subprocess exit code: %d", result.returncode)
-
-        if result.returncode == 0:
-            try:
-                data = _json.loads(result.stdout)
-                projects = data.get("projects", data) if isinstance(data, dict) else data
-                logger.info("GET /api/v1/jira/projects — success, count=%d", len(projects))
-                return projects
-            except (ValueError, TypeError) as exc:
-                logger.error("GET /api/v1/jira/projects — failed to parse output: %s", exc)
-                raise HTTPException(status_code=502, detail="Failed to parse projects response")
-        else:
-            error_msg = result.stderr[:300]
-            try:
-                data = _json.loads(result.stdout)
-                error_msg = data.get("message", error_msg)
-            except Exception:
-                pass
-            logger.error("GET /api/v1/jira/projects — failed: %s", error_msg)
-            raise HTTPException(status_code=502, detail=error_msg)
-
-    except subprocess.TimeoutExpired:
-        logger.error("GET /api/v1/jira/projects — timeout")
-        raise HTTPException(status_code=504, detail="jira-projects timed out after 30 seconds")
+        data = ke_client.jira_projects()
+        projects = data.get("projects", data) if isinstance(data, dict) else data
+        logger.info("GET /api/v1/jira/projects — success, count=%d", len(projects))
+        return projects
+    except requests.RequestException as exc:
+        logger.error("GET /api/v1/jira/projects — ke_client.jira_projects failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"KE API error: {exc}")
     except HTTPException:
         raise
     except Exception as exc:
@@ -1406,8 +1340,6 @@ def jira_projects():
 @app.get("/api/v1/jira/projects/{project_key}/epics")
 def jira_project_epics(project_key: str):
     """List epics for a given Jira project via knowledge-engine."""
-    import json as _json
-
     logger.info("GET /api/v1/jira/projects/%s/epics — start", project_key)
 
     if not re.match(r'^[A-Z][A-Z0-9]+$', project_key):
@@ -1417,45 +1349,19 @@ def jira_project_epics(project_key: str):
         raise HTTPException(status_code=400, detail="project_key must match ^[A-Z][A-Z0-9]+$")
 
     try:
-        result = subprocess.run(
-            ["python", "-m", "knowledge_engine", "jira-epics", "--project", project_key],
-            capture_output=True, text=True, timeout=30,
-        )
+        data = ke_client.jira_epics(project=project_key)
+        epics = data.get("epics", data) if isinstance(data, dict) else data
         logger.info(
-            "GET /api/v1/jira/projects/%s/epics — subprocess exit code: %d",
-            project_key, result.returncode,
+            "GET /api/v1/jira/projects/%s/epics — success, count=%d",
+            project_key, len(epics),
         )
-
-        if result.returncode == 0:
-            try:
-                data = _json.loads(result.stdout)
-                epics = data.get("epics", data) if isinstance(data, dict) else data
-                logger.info(
-                    "GET /api/v1/jira/projects/%s/epics — success, count=%d",
-                    project_key, len(epics),
-                )
-                return epics
-            except (ValueError, TypeError) as exc:
-                logger.error(
-                    "GET /api/v1/jira/projects/%s/epics — failed to parse output: %s",
-                    project_key, exc,
-                )
-                raise HTTPException(status_code=502, detail="Failed to parse epics response")
-        else:
-            error_msg = result.stderr[:300]
-            try:
-                data = _json.loads(result.stdout)
-                error_msg = data.get("message", error_msg)
-            except Exception:
-                pass
-            logger.error(
-                "GET /api/v1/jira/projects/%s/epics — failed: %s", project_key, error_msg
-            )
-            raise HTTPException(status_code=502, detail=error_msg)
-
-    except subprocess.TimeoutExpired:
-        logger.error("GET /api/v1/jira/projects/%s/epics — timeout", project_key)
-        raise HTTPException(status_code=504, detail="jira-epics timed out after 30 seconds")
+        return epics
+    except requests.RequestException as exc:
+        logger.error(
+            "GET /api/v1/jira/projects/%s/epics — ke_client.jira_epics failed: %s",
+            project_key, exc,
+        )
+        raise HTTPException(status_code=502, detail=f"KE API error: {exc}")
     except HTTPException:
         raise
     except Exception as exc:
@@ -1468,8 +1374,6 @@ def jira_project_epics(project_key: str):
 @app.get("/api/v1/jira/projects/{projectKey}/issue-types")
 def get_jira_issue_types(projectKey: str):
     """Fetch available issue types for a Jira project."""
-    import json as _json
-
     logger.info("GET /api/v1/jira/projects/%s/issue-types — start", projectKey)
 
     if not re.match(r'^[A-Z][A-Z0-9]+$', projectKey):
@@ -1479,45 +1383,19 @@ def get_jira_issue_types(projectKey: str):
         raise HTTPException(status_code=400, detail="Invalid project key format")
 
     try:
-        result = subprocess.run(
-            ["python", "-m", "knowledge_engine", "jira-issue-types", "--project", projectKey],
-            capture_output=True, text=True, timeout=30,
-        )
+        data = ke_client.jira_issue_types(project=projectKey)
+        issue_types = data.get("issue_types", data) if isinstance(data, dict) else data
         logger.info(
-            "GET /api/v1/jira/projects/%s/issue-types — subprocess exit code: %d",
-            projectKey, result.returncode,
+            "GET /api/v1/jira/projects/%s/issue-types — success, count=%d",
+            projectKey, len(issue_types),
         )
-
-        if result.returncode == 0:
-            try:
-                data = _json.loads(result.stdout)
-                issue_types = data.get("issue_types", data) if isinstance(data, dict) else data
-                logger.info(
-                    "GET /api/v1/jira/projects/%s/issue-types — success, count=%d",
-                    projectKey, len(issue_types),
-                )
-                return issue_types
-            except (ValueError, TypeError) as exc:
-                logger.error(
-                    "GET /api/v1/jira/projects/%s/issue-types — failed to parse output: %s",
-                    projectKey, exc,
-                )
-                raise HTTPException(status_code=502, detail="Failed to parse issue-types response")
-        else:
-            error_msg = result.stderr[:300]
-            try:
-                data = _json.loads(result.stdout)
-                error_msg = data.get("message", error_msg)
-            except Exception:
-                pass
-            logger.error(
-                "GET /api/v1/jira/projects/%s/issue-types — failed: %s", projectKey, error_msg
-            )
-            raise HTTPException(status_code=502, detail=error_msg)
-
-    except subprocess.TimeoutExpired:
-        logger.error("GET /api/v1/jira/projects/%s/issue-types — timeout", projectKey)
-        raise HTTPException(status_code=504, detail="jira-issue-types timed out after 30 seconds")
+        return issue_types
+    except requests.RequestException as exc:
+        logger.error(
+            "GET /api/v1/jira/projects/%s/issue-types — ke_client.jira_issue_types failed: %s",
+            projectKey, exc,
+        )
+        raise HTTPException(status_code=502, detail=f"KE API error: {exc}")
     except HTTPException:
         raise
     except Exception as exc:
@@ -1533,7 +1411,7 @@ def get_jira_issue_types(projectKey: str):
 
 @app.post("/api/v1/jira/sync")
 def jira_sync():
-    """Trigger forced Jira sync via knowledge-engine subprocess."""
+    """Trigger forced Jira sync via knowledge-engine ke_client."""
     import json as _json
 
     logger.info("POST /api/v1/jira/sync — start")
@@ -1545,72 +1423,55 @@ def jira_sync():
     try:
         prefs = _read_user_prefs()
         should_notify = prefs.get("jira_sync_notify", True)
-        cmd = ["python", "-m", "knowledge_engine", "jira-sync"]
-        if should_notify:
-            cmd.append("--notify")
         logger.info("POST /api/v1/jira/sync — should_notify=%s", should_notify)
-        result = subprocess.run(
-            cmd,
-            capture_output=True, text=True, timeout=180,
-        )
-        logger.info("POST /api/v1/jira/sync — subprocess exit code: %d", result.returncode)
 
-        if result.returncode == 0:
-            try:
-                last_line = result.stdout.strip().split('\n')[-1]
-                data = _json.loads(last_line)
-            except (ValueError, TypeError, IndexError) as exc:
-                logger.error("POST /api/v1/jira/sync — failed to parse output: %s", exc)
-                data = {}
+        data = ke_client.jira_sync(notify=should_notify)
+        logger.info("POST /api/v1/jira/sync — ke_client.jira_sync returned")
 
-            sync_result = {
-                "status": data.get("status", "ok"),
-                "new": data.get("new", 0),
-                "updated": data.get("updated", 0),
-                "closed": data.get("closed", 0),
-                "errors": data.get("errors", 0),
-                "logged": data.get("logged", 0),
-                "message": data.get("message", "Sync completed"),
+        sync_result = {
+            "status": data.get("status", "ok"),
+            "new": data.get("new", 0),
+            "updated": data.get("updated", 0),
+            "closed": data.get("closed", 0),
+            "errors": data.get("errors", 0),
+            "logged": data.get("logged", 0),
+            "message": data.get("message", "Sync completed"),
+        }
+
+        # Write last_run_result back into state file atomically
+        state_file = VAULT_PATH / ".jira-sync-state.json"
+        try:
+            if state_file.exists():
+                state = _json.loads(state_file.read_text(encoding="utf-8"))
+            else:
+                state = {}
+            state["last_run_result"] = {
+                "new": sync_result["new"],
+                "updated": sync_result["updated"],
+                "closed": sync_result["closed"],
+                "errors": sync_result["errors"],
             }
-
-            # Write last_run_result back into state file atomically
-            state_file = VAULT_PATH / ".jira-sync-state.json"
-            try:
-                if state_file.exists():
-                    state = _json.loads(state_file.read_text(encoding="utf-8"))
-                else:
-                    state = {}
-                state["last_run_result"] = {
-                    "new": sync_result["new"],
-                    "updated": sync_result["updated"],
-                    "closed": sync_result["closed"],
-                    "errors": sync_result["errors"],
-                }
-                tmp_file = VAULT_PATH / ".jira-sync-state.json.tmp"
-                tmp_file.write_text(
-                    _json.dumps(state, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-                os.replace(str(tmp_file), str(state_file))
-                logger.info("POST /api/v1/jira/sync — state file updated")
-            except Exception as exc:
-                logger.error("POST /api/v1/jira/sync — failed to update state file: %s", exc)
-
-            _cache.invalidate()
-            logger.info(
-                "POST /api/v1/jira/sync — success: new=%d updated=%d closed=%d errors=%d",
-                sync_result["new"], sync_result["updated"],
-                sync_result["closed"], sync_result["errors"],
+            tmp_file = VAULT_PATH / ".jira-sync-state.json.tmp"
+            tmp_file.write_text(
+                _json.dumps(state, ensure_ascii=False, indent=2),
+                encoding="utf-8",
             )
-            return sync_result
-        else:
-            error_msg = result.stderr[:300]
-            logger.error("POST /api/v1/jira/sync — failed: %s", error_msg)
-            raise HTTPException(status_code=502, detail=error_msg)
+            os.replace(str(tmp_file), str(state_file))
+            logger.info("POST /api/v1/jira/sync — state file updated")
+        except Exception as exc:
+            logger.error("POST /api/v1/jira/sync — failed to update state file: %s", exc)
 
-    except subprocess.TimeoutExpired:
-        logger.error("POST /api/v1/jira/sync — timeout after 180 seconds")
-        raise HTTPException(status_code=504, detail="Jira sync timed out after 180 seconds")
+        _cache.invalidate()
+        logger.info(
+            "POST /api/v1/jira/sync — success: new=%d updated=%d closed=%d errors=%d",
+            sync_result["new"], sync_result["updated"],
+            sync_result["closed"], sync_result["errors"],
+        )
+        return sync_result
+
+    except requests.RequestException as exc:
+        logger.error("POST /api/v1/jira/sync — ke_client.jira_sync failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"KE API error: {exc}")
     except HTTPException:
         raise
     except Exception as exc:
@@ -1778,33 +1639,16 @@ def get_timeline(ticket_id: str):
 
 @app.post("/api/v1/synthesize")
 def synthesize_inbox():
-    """Run knowledge-engine synthesize via subprocess."""
-    import subprocess
-
+    """Run knowledge-engine synthesize via ke_client."""
     logger.info("POST /api/v1/synthesize — start")
     try:
-        result = subprocess.run(
-            ["python", "-m", "knowledge_engine", "synthesize"],
-            capture_output=True, text=True, timeout=120,
-        )
-        logger.info("POST /api/v1/synthesize — exit code: %d", result.returncode)
-
-        if result.returncode == 0:
-            _cache.invalidate()
-            import json as _json
-            try:
-                data = _json.loads(result.stdout)
-                logger.info("POST /api/v1/synthesize — success: %s", data.get("status"))
-                return data
-            except ValueError:
-                logger.info("POST /api/v1/synthesize — completed (non-JSON output)")
-                return {"status": "ok", "message": "Synthesis completed"}
-        else:
-            logger.error("POST /api/v1/synthesize — failed: %s", result.stderr[:300])
-            raise HTTPException(status_code=500, detail=result.stderr[:300])
-    except subprocess.TimeoutExpired:
-        logger.error("POST /api/v1/synthesize — timeout after 120s")
-        raise HTTPException(status_code=504, detail="Synthesis timed out after 120 seconds")
+        data = ke_client.synthesize()
+        _cache.invalidate()
+        logger.info("POST /api/v1/synthesize — success: %s", data.get("status"))
+        return data
+    except requests.RequestException as exc:
+        logger.error("POST /api/v1/synthesize — ke_client.synthesize failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"KE API error: {exc}")
     except HTTPException:
         raise
     except Exception as exc:
@@ -1839,7 +1683,7 @@ def get_pipeline():
 def get_domain_config():
     """Return the full domain configuration."""
     logger.info("GET /api/v1/domain-config — start")
-    from . import domain_config
+    from shared import domain_config
 
     try:
         config = domain_config.load()
@@ -1869,7 +1713,7 @@ def get_domain_config():
 def put_domain_config(domain_slug: str, entry: DomainConfigEntry):
     """Create or update a domain config entry."""
     logger.info("PUT /api/v1/domain-config/%s — start", domain_slug)
-    from . import domain_config as _domain_config
+    from shared import domain_config as _domain_config
 
     # Check if domain exists before update
     try:
@@ -1961,7 +1805,7 @@ def put_domain_config(domain_slug: str, entry: DomainConfigEntry):
 def seed_domain_config():
     """Seed config from hardcoded defaults + filesystem domains. Idempotent."""
     logger.info("POST /api/v1/domain-config/seed — start")
-    from . import domain_config as _domain_config
+    from shared import domain_config as _domain_config
 
     # Hardcoded label→domain map (mirrors knowledge-engine mapper defaults)
     LABEL_TO_DOMAIN = {
@@ -2130,7 +1974,7 @@ class UserPrefs(BaseModel):
 
 
 def _read_user_prefs() -> dict:
-    from .vault_paths import user_prefs_path
+    from shared.vault_paths import user_prefs_path
     path = user_prefs_path()
     if not path.exists():
         logger.info("_read_user_prefs: file not found at %s, returning defaults", path)
@@ -2151,8 +1995,8 @@ def _read_user_prefs() -> dict:
 def _write_user_prefs(prefs: dict) -> None:
     import json as _json
 
-    from .file_writer import atomic_write
-    from .vault_paths import user_prefs_path
+    from shared.file_writer import atomic_write
+    from shared.vault_paths import user_prefs_path
     path = user_prefs_path()
     content = _json.dumps(prefs, indent=2, ensure_ascii=False) + "\n"
     logger.info("_write_user_prefs: writing to %s", path)
@@ -2209,7 +2053,7 @@ def put_user_prefs(body: UserPrefs):
         raise HTTPException(status_code=500, detail=str(exc))
     _cache.invalidate()
     try:
-        from .llm_client import invalidate_cache as _invalidate_llm_cache
+        from shared.llm_client import invalidate_cache as _invalidate_llm_cache
         _invalidate_llm_cache()
     except ImportError:
         pass
@@ -2369,30 +2213,16 @@ def vault_health():
         logger.info("vault_health: returning cached result")
         return cached
 
-    logger.info("vault_health: cache miss, running health calculation via subprocess")
+    logger.info("vault_health: cache miss, running health calculation via ke_client")
 
     try:
-        result = subprocess.run(
-            ["python", "-m", "knowledge_engine", "health", "--save", "--json"],
-            capture_output=True, text=True, timeout=60,
-        )
-    except subprocess.TimeoutExpired:
-        logger.error("vault_health: subprocess timed out after 60s")
-        raise HTTPException(status_code=504, detail="Health calculation timed out after 60 seconds")
+        data = ke_client.health()
+    except requests.RequestException as exc:
+        logger.error("vault_health: ke_client.health failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"KE API error: {exc}")
     except Exception as exc:
-        logger.error("vault_health: subprocess failed: %s", exc)
+        logger.error("vault_health: health calculation failed: %s", exc)
         raise HTTPException(status_code=500, detail=f"Health calculation failed: {exc}")
-
-    if result.returncode != 0:
-        stderr_snippet = (result.stderr or "")[:300]
-        logger.error("vault_health: subprocess returned %d, stderr=%s", result.returncode, stderr_snippet)
-        raise HTTPException(status_code=502, detail=f"Health calculation failed: {stderr_snippet}")
-
-    try:
-        data = json.loads(result.stdout)
-    except (json.JSONDecodeError, ValueError) as exc:
-        logger.error("vault_health: cannot parse subprocess output: %s", exc)
-        raise HTTPException(status_code=502, detail="Health calculation returned invalid JSON")
 
     _cache.set(cache_key, data)
     logger.info("vault_health: completed, score=%s grade=%s", data.get("score"), data.get("grade"))

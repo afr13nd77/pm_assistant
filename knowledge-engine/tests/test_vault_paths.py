@@ -11,7 +11,7 @@ def _import_vault_paths(vault_path_str="/test/vault"):
     with patch.dict(os.environ, {"VAULT_PATH": vault_path_str}):
         # Reload module to pick up new env var
         import importlib
-        from app import vault_paths
+        from shared import vault_paths
         importlib.reload(vault_paths)
         return vault_paths
 

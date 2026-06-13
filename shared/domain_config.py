@@ -11,8 +11,8 @@ from pathlib import Path
 
 import yaml
 
-from . import vault_paths
-from .file_writer import atomic_write
+from shared import vault_paths
+from shared.file_writer import atomic_write
 
 logger = logging.getLogger(__name__)
 
@@ -253,7 +253,7 @@ def validate_domain_entry(slug: str, entry: dict) -> list[str]:
                         i, slug, label,
                     )
 
-    # tags: optional list of non-empty strings
+    # tags: optional list of non-empty strings (for clipping tag-to-domain matching)
     tags = entry.get("tags", [])
     if tags is not None:
         if not isinstance(tags, list):
@@ -418,6 +418,32 @@ def build_label_map() -> dict[str, str]:
     return label_map
 
 
+def build_tag_map() -> dict[str, str]:
+    """Build {tag_lower: domain_slug} map from config.
+
+    Uses the 'tags' field from each domain entry. If not present,
+    falls back to 'jira_labels' for backward compatibility.
+    """
+    config = load()
+    tag_map: dict[str, str] = {}
+    domains = config.get("domains", {})
+    for slug, entry in domains.items():
+        if not isinstance(entry, dict):
+            continue
+        for tag in entry.get("tags", []):
+            if isinstance(tag, str) and tag:
+                key = tag.lower()
+                if key not in tag_map:
+                    tag_map[key] = slug
+        for label in entry.get("jira_labels", []):
+            if isinstance(label, str) and label:
+                key = label.lower()
+                if key not in tag_map:
+                    tag_map[key] = slug
+    logger.info("build_tag_map: built map with %d entries", len(tag_map))
+    return tag_map
+
+
 def build_keyword_map() -> dict[str, str]:
     """Build {keyword_lower: domain_slug} map from config."""
     logger.info("build_keyword_map: building keyword map from config")
@@ -451,7 +477,11 @@ def build_keyword_map() -> dict[str, str]:
 
 
 def build_prompt_section() -> str:
-    """Generate the domain list section for LLM prompt."""
+    """Generate the domain list section for LLM prompt.
+
+    For each domain, uses prompt_hint if present, otherwise falls back
+    to description.
+    """
     logger.info("build_prompt_section: generating prompt section from config")
     config = load()
     domains = config.get("domains", {})
@@ -487,6 +517,78 @@ def get_valid_domains() -> tuple[str, ...]:
     slugs = tuple(domains.keys())
     logger.info("get_valid_domains: found %d domain(s): %s", len(slugs), slugs)
     return slugs
+
+
+_SEED_DOMAIN_DATA: dict[str, dict] = {
+    "search-engine": {
+        "display_name": "Поисковый движок",
+        "description": "Поиск отелей и квартир: фильтры, сортировка, выдача",
+        "color": "#2196F3",
+        "tags": ["search", "search-engine", "ranking", "indexing"],
+        "keywords": [
+            "поиск", "релевантность", "индексация", "fulltext",
+            "фильтрация", "ранжирование", "выдача", "getresults", "searchoffers",
+        ],
+        "prompt_hint": (
+            "поиск, релевантность, индексация, полнотекстовый поиск, "
+            "фильтрация, ранжирование, выдача"
+        ),
+    },
+    "static-metadata": {
+        "display_name": "Справочники",
+        "description": "Справочники, классификаторы, атрибуты, метаданные объектов",
+        "color": "#FF9800",
+        "tags": [
+            "static", "dictionary", "catalog", "reference",
+            "metadata", "property", "amenities", "rules", "beds", "types",
+        ],
+        "keywords": [
+            "справочник", "классификатор", "атрибут", "enum", "словарь",
+            "статика", "карточка объекта", "amenities", "property type",
+            "метаданн", "каталог", "контент",
+        ],
+        "prompt_hint": (
+            "справочники, классификаторы, атрибуты, метаобъекты, каталоги, "
+            "перечисления, справочная информация, статические данные объектов размещения"
+        ),
+    },
+    "suggester": {
+        "display_name": "Подсказчик",
+        "description": "Автокомплит, подсказки, поиск по префиксу",
+        "color": "#4CAF50",
+        "tags": ["suggester", "typeahead", "autocomplete"],
+        "keywords": [
+            "подсказчик", "автокомплит", "подсказка", "подсказк",
+            "typeahead", "префикс", "по мере ввода", "suggest",
+        ],
+        "prompt_hint": (
+            "автокомплит, подсказки, typeahead, выпадающие списки, "
+            "поиск по префиксу, подбор"
+        ),
+    },
+    "partner-search-engine": {
+        "display_name": "Поиск партнёров",
+        "description": "Работа с продавцами: поиск, фильтрация, профили",
+        "color": "#9C27B0",
+        "tags": ["partner", "partner_search", "b2b", "supplier", "affiliate"],
+        "keywords": [
+            "партнёр", "поставщик", "b2b", "supplier",
+            "подключение партнёра", "аффилиат",
+        ],
+        "prompt_hint": (
+            "партнёрский поиск, B2B, поставщики, аффилиаты, "
+            "подключение партнёров"
+        ),
+    },
+    "general": {
+        "display_name": "Общее",
+        "description": "Задачи, не привязанные к конкретному домену",
+        "color": "#607D8B",
+        "tags": ["general"],
+        "keywords": [],
+        "prompt_hint": "если идея не относится к конкретному домену",
+    },
+}
 
 
 def seed_from_defaults(hardcoded_map: dict[str, str], existing_domains: list[str]) -> dict:
@@ -529,13 +631,21 @@ def seed_from_defaults(hardcoded_map: dict[str, str], existing_domains: list[str
                 "seed_from_defaults: skipping invalid slug %r from hardcoded_map", slug
             )
             continue
+        seed = _SEED_DOMAIN_DATA.get(slug, {})
         domains[slug] = {
-            "display_name": slug,
-            "description": "",
-            "color": _DEFAULT_COLOR,
+            "display_name": seed.get("display_name", slug),
+            "description": seed.get("description", ""),
+            "color": seed.get("color", _DEFAULT_COLOR),
             "jira_labels": labels,
+            "tags": seed.get("tags", []),
+            "keywords": seed.get("keywords", []),
+            "prompt_hint": seed.get("prompt_hint", ""),
         }
-        logger.debug("seed_from_defaults: added domain %r with labels %r", slug, labels)
+        logger.debug(
+            "seed_from_defaults: added domain %r with labels %r, "
+            "%d tags, %d keywords",
+            slug, labels, len(domains[slug]["tags"]), len(domains[slug]["keywords"]),
+        )
 
     # Add filesystem domains not already present
     for slug in existing_domains:
@@ -549,11 +659,15 @@ def seed_from_defaults(hardcoded_map: dict[str, str], existing_domains: list[str
                 "seed_from_defaults: skipping invalid filesystem domain slug %r", slug
             )
             continue
+        seed = _SEED_DOMAIN_DATA.get(slug, {})
         domains[slug] = {
-            "display_name": slug,
-            "description": "",
-            "color": _DEFAULT_COLOR,
+            "display_name": seed.get("display_name", slug),
+            "description": seed.get("description", ""),
+            "color": seed.get("color", _DEFAULT_COLOR),
             "jira_labels": [],
+            "tags": seed.get("tags", []),
+            "keywords": seed.get("keywords", []),
+            "prompt_hint": seed.get("prompt_hint", ""),
         }
         logger.debug("seed_from_defaults: added filesystem-only domain %r", slug)
 

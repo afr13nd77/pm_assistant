@@ -2,7 +2,11 @@ import asyncio
 import logging
 from datetime import date
 
+from .rate_limiter import TelegramRateLimiter
+
 logger = logging.getLogger(__name__)
+
+_rate_limiter = TelegramRateLimiter()
 
 
 async def run_daily_alert(bot, chat_id: int) -> None:
@@ -13,7 +17,7 @@ async def run_daily_alert(bot, chat_id: int) -> None:
             logger.info("daily_alert: skipping weekend (%s)", today.strftime("%A"))
             return
 
-        from .vault_paths import wiki_daily_logs
+        from shared.vault_paths import wiki_daily_logs
 
         daily_dir = wiki_daily_logs()
         today_str = date.today().strftime("%Y.%m.%d")
@@ -27,6 +31,7 @@ async def run_daily_alert(bot, chat_id: int) -> None:
         display_date = date.today().strftime("%d.%m.%Y")
         msg = f"⚠️ Daily-протокол за {display_date} не получен"
         logger.info("daily_alert: no daily found for %s, sending alert", today_str)
+        await _rate_limiter.acquire()
         await bot.send_message(chat_id=chat_id, text=msg)
         logger.info("daily_alert: alert sent to chat_id=%s", chat_id)
     except Exception as e:

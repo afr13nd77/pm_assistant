@@ -16,7 +16,7 @@ import requests
 
 from .. import claude_client
 from ..enricher import enrich
-from ..file_writer import atomic_write
+from shared.file_writer import atomic_write
 from .classifier import extract_type, make_daily_filename, make_filename, route_protocol
 from .imap_client import EmailAttachment, IMAPError, fetch_emails
 from .state import State

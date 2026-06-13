@@ -3,8 +3,8 @@ import re
 import time
 from pathlib import Path
 
-from . import vault_paths
-from .frontmatter_utils import read_frontmatter
+from shared import vault_paths
+from shared.frontmatter_utils import read_frontmatter
 from .status_migrator import VALID_STATUSES
 
 logger = logging.getLogger(__name__)

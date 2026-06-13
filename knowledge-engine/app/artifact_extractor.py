@@ -11,8 +11,8 @@ import re
 from datetime import date
 from pathlib import Path
 
-from . import vault_paths
-from .file_writer import atomic_write
+from shared import vault_paths
+from shared.file_writer import atomic_write
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ def _merged_keyword_map() -> dict[str, list[str]]:
 
     # Overlay config keywords
     try:
-        from . import domain_config
+        from shared import domain_config
         config = domain_config.load()
         domains = config.get("domains", {})
         config_count = 0

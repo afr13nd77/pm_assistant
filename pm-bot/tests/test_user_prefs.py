@@ -28,7 +28,7 @@ def prefs_file(vault_dir):
 def client(vault_dir):
     """Create a FastAPI test client with VAULT_PATH pointed at tmp dir."""
     with patch("app.vault_api.VAULT_PATH", vault_dir), \
-         patch("app.vault_paths.VAULT_PATH", vault_dir):
+         patch("shared.vault_paths.VAULT_PATH", vault_dir):
         from fastapi.testclient import TestClient
         from app.vault_api import app
         yield TestClient(app)

@@ -9,10 +9,10 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import vault_paths
+from shared import vault_paths
 from .domain_manager import append_domain_log, update_domain_index
-from .file_writer import atomic_write, locked_append
-from .frontmatter_utils import read_frontmatter
+from shared.file_writer import atomic_write, locked_append
+from shared.frontmatter_utils import read_frontmatter
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +160,7 @@ def _merged_tag_map() -> dict[str, str]:
     result = dict(TAG_TO_DOMAIN)
 
     try:
-        from .domain_config import build_tag_map
+        from shared.domain_config import build_tag_map
         config_tags = build_tag_map()
         if config_tags:
             result.update(config_tags)
@@ -195,7 +195,7 @@ def _merged_keyword_map() -> dict[str, str]:
     result = dict(KEYWORD_TO_DOMAIN)
 
     try:
-        from .domain_config import build_keyword_map
+        from shared.domain_config import build_keyword_map
         config_keywords = build_keyword_map()
         if config_keywords:
             result.update(config_keywords)

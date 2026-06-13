@@ -6,9 +6,9 @@ from pathlib import Path
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers.polling import PollingObserver
 
-from . import vault_paths
+from shared import vault_paths
 from .enricher import enrich
-from .frontmatter_utils import read_frontmatter
+from shared.frontmatter_utils import read_frontmatter
 from .status_migrator import VALID_STATUSES
 
 logger = logging.getLogger(__name__)

@@ -4,19 +4,10 @@ from datetime import date, datetime
 from pathlib import Path
 
 import frontmatter
-from idea_pipeline import vault_paths
+from shared import vault_paths
 from slugify import slugify
 
-try:
-    from knowledge_engine.file_writer import atomic_write
-except ImportError:
-    def atomic_write(filepath, content):
-        import os
-        filepath = Path(filepath)
-        tmp_path = filepath.with_suffix(".tmp")
-        filepath.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path.write_text(content, encoding="utf-8")
-        os.replace(str(tmp_path), str(filepath))
+from shared.file_writer import atomic_write
 
 logger = logging.getLogger(__name__)
 

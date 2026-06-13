@@ -19,6 +19,8 @@ services:
       - ${VAULT_PATH}:/vault
       - ${TRANSCRIPTS_INBOX}:/transcripts/inbox
       - ./pm-bot/web:/web
+      - ./settings.yaml:/app/settings.yaml:ro
+      - pm-bot-data:/data
     command: >
       sh -c "python -m http.server 8080 --directory /web &
              python -m app.main"
@@ -31,6 +33,7 @@ services:
       - JIRA_TOKEN=${JIRA_TOKEN}
       - STT_ENABLED=1
       - CT2_FORCE_CPU_ISA=GENERIC
+      - KE_API_URL=http://knowledge-engine:8001
     depends_on:
       - knowledge-engine
       - idea-pipeline
@@ -46,13 +49,16 @@ services:
       - .env
     volumes:
       - ${VAULT_PATH}:/vault
+      - ./settings.yaml:/app/settings.yaml:ro
     environment:
       - TZ=Europe/Moscow
       - PYTHONUNBUFFERED=1
       - VAULT_PATH=/vault
       - JIRA_URL=${JIRA_URL}
       - JIRA_TOKEN=${JIRA_TOKEN}
-    command: ["python", "-m", "knowledge_engine", "watch"]
+    command: >
+      sh -c "python -m knowledge_engine serve &
+             python -m knowledge_engine watch"
 
   ke-cron:
     build:
@@ -65,6 +71,7 @@ services:
       - .env
     volumes:
       - ${VAULT_PATH}:/vault
+      - ./settings.yaml:/app/settings.yaml:ro
     environment:
       - TZ=Europe/Moscow
       - PYTHONUNBUFFERED=1
@@ -97,6 +104,7 @@ services:
       - .env
     volumes:
       - ${VAULT_PATH}:/vault
+      - ./settings.yaml:/app/settings.yaml:ro
     ports:
       - "8100:8100"
     environment:
@@ -105,3 +113,6 @@ services:
       - VAULT_PATH=/vault
       - PIPELINE_HOST=0.0.0.0
       - PIPELINE_PORT=8100
+
+volumes:
+  pm-bot-data:

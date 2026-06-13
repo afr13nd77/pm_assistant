@@ -3,8 +3,8 @@ import re
 from datetime import date, datetime
 from pathlib import Path
 
-from .file_writer import atomic_write, file_lock, locked_append
-from .vault_paths import (
+from shared.file_writer import atomic_write, file_lock, locked_append
+from shared.vault_paths import (
     VAULT_PATH,
     next_daily_filename,
     raw_daily_logs,

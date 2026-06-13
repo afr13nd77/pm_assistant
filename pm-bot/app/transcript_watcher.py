@@ -7,9 +7,12 @@ from pathlib import Path
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-from . import vault_paths
+from shared import vault_paths
 from .claude_client import process_meeting
 from .obsidian_writer import write_meeting
+from .rate_limiter import TelegramRateLimiter
+
+_rate_limiter = TelegramRateLimiter()
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +56,7 @@ class TranscriptHandler(FileSystemEventHandler):
 
             # Уведомляем в Telegram если бот передан
             if self.bot and self.chat_id:
+                await _rate_limiter.acquire()
                 await self.bot.send_message(
                     chat_id=self.chat_id,
                     text=f"✅ Транскрипт обработан:\n`{filepath.name}`",

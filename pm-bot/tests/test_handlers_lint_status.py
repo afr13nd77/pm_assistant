@@ -1,9 +1,9 @@
 """Tests for /lint and /status Telegram command handlers."""
 
 import json
-import subprocess
 
 import pytest
+import requests
 from unittest.mock import AsyncMock, MagicMock, patch
 
 
@@ -90,9 +90,8 @@ class TestHandleLintClean:
         from app.handlers import handle_lint
 
         update, context = _make_update_context()
-        mock_proc = MagicMock(returncode=0, stdout=json.dumps(_clean_lint_result(0)), stderr="")
 
-        with patch("subprocess.run", return_value=mock_proc):
+        with patch("app.handlers.ke_client.lint", return_value=_clean_lint_result(0)):
             await handle_lint(update, context)
 
         reply_calls = update.message.reply_text.call_args_list
@@ -106,9 +105,8 @@ class TestHandleLintClean:
         from app.handlers import handle_lint
 
         update, context = _make_update_context()
-        mock_proc = MagicMock(returncode=0, stdout=json.dumps(_clean_lint_result(0)), stderr="")
 
-        with patch("subprocess.run", return_value=mock_proc):
+        with patch("app.handlers.ke_client.lint", return_value=_clean_lint_result(0)):
             await handle_lint(update, context)
 
         first_call_text = update.message.reply_text.call_args_list[0][0][0]
@@ -128,9 +126,8 @@ class TestHandleLintWithIssues:
         from app.handlers import handle_lint
 
         update, context = _make_update_context()
-        mock_proc = MagicMock(returncode=0, stdout=json.dumps(_lint_result_with_issues()), stderr="")
 
-        with patch("subprocess.run", return_value=mock_proc):
+        with patch("app.handlers.ke_client.lint", return_value=_lint_result_with_issues()):
             await handle_lint(update, context)
 
         report_text = update.message.reply_text.call_args_list[1][0][0]
@@ -142,9 +139,8 @@ class TestHandleLintWithIssues:
         from app.handlers import handle_lint
 
         update, context = _make_update_context()
-        mock_proc = MagicMock(returncode=0, stdout=json.dumps(_lint_result_with_issues()), stderr="")
 
-        with patch("subprocess.run", return_value=mock_proc):
+        with patch("app.handlers.ke_client.lint", return_value=_lint_result_with_issues()):
             await handle_lint(update, context)
 
         report_text = update.message.reply_text.call_args_list[1][0][0]
@@ -156,9 +152,8 @@ class TestHandleLintWithIssues:
         from app.handlers import handle_lint
 
         update, context = _make_update_context()
-        mock_proc = MagicMock(returncode=0, stdout=json.dumps(_lint_result_with_issues()), stderr="")
 
-        with patch("subprocess.run", return_value=mock_proc):
+        with patch("app.handlers.ke_client.lint", return_value=_lint_result_with_issues()):
             await handle_lint(update, context)
 
         report_text = update.message.reply_text.call_args_list[1][0][0]
@@ -170,9 +165,8 @@ class TestHandleLintWithIssues:
         from app.handlers import handle_lint
 
         update, context = _make_update_context()
-        mock_proc = MagicMock(returncode=0, stdout=json.dumps(_lint_result_with_issues()), stderr="")
 
-        with patch("subprocess.run", return_value=mock_proc):
+        with patch("app.handlers.ke_client.lint", return_value=_lint_result_with_issues()):
             await handle_lint(update, context)
 
         report_text = update.message.reply_text.call_args_list[1][0][0]
@@ -184,9 +178,8 @@ class TestHandleLintWithIssues:
         from app.handlers import handle_lint
 
         update, context = _make_update_context()
-        mock_proc = MagicMock(returncode=0, stdout=json.dumps(_lint_result_with_issues()), stderr="")
 
-        with patch("subprocess.run", return_value=mock_proc):
+        with patch("app.handlers.ke_client.lint", return_value=_lint_result_with_issues()):
             await handle_lint(update, context)
 
         report_text = update.message.reply_text.call_args_list[1][0][0]
@@ -201,33 +194,19 @@ class TestHandleLintWithIssues:
 class TestHandleLintErrors:
 
     @pytest.mark.asyncio
-    async def test_lint_subprocess_nonzero_exit(self, monkeypatch):
-        monkeypatch.setattr("app.handlers.ALLOWED_CHAT_ID", 12345)
-        from app.handlers import handle_lint
-
-        update, context = _make_update_context()
-        mock_proc = MagicMock(returncode=1, stdout="", stderr="some error")
-
-        with patch("subprocess.run", return_value=mock_proc):
-            await handle_lint(update, context)
-
-        reply_calls = update.message.reply_text.call_args_list
-        full_text = " ".join(str(c) for c in reply_calls)
-        assert "Ошибка" in full_text or "ошибка" in full_text
-
-    @pytest.mark.asyncio
-    async def test_lint_timeout_reply(self, monkeypatch):
+    async def test_lint_request_error(self, monkeypatch):
         monkeypatch.setattr("app.handlers.ALLOWED_CHAT_ID", 12345)
         from app.handlers import handle_lint
 
         update, context = _make_update_context()
 
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="test", timeout=60)):
+        with patch("app.handlers.ke_client.lint",
+                   side_effect=requests.RequestException("some error")):
             await handle_lint(update, context)
 
         reply_calls = update.message.reply_text.call_args_list
         full_text = " ".join(str(c) for c in reply_calls)
-        assert "Таймаут" in full_text
+        assert "Ошибка" in full_text or "ошибка" in full_text or "some error" in full_text
 
     @pytest.mark.asyncio
     async def test_lint_general_exception_handled(self, monkeypatch):
@@ -236,7 +215,8 @@ class TestHandleLintErrors:
 
         update, context = _make_update_context()
 
-        with patch("subprocess.run", side_effect=RuntimeError("unexpected")):
+        with patch("app.handlers.ke_client.lint",
+                   side_effect=RuntimeError("unexpected")):
             await handle_lint(update, context)
 
         reply_calls = update.message.reply_text.call_args_list
@@ -280,9 +260,9 @@ class TestHandleStatusSuccess:
             {"name": "alpha", "ideas": 2, "prds": 1, "epics": 0, "userstories": 0,
              "tasks": 0, "bugs": 0, "total": 3, "last_updated": "2026-01-01"},
         ]
-        mock_proc = MagicMock(returncode=0, stdout=json.dumps(_status_result(domains=domains)), stderr="")
+        mock_result = _status_result(domains=domains)
 
-        with patch("subprocess.run", return_value=mock_proc):
+        with patch("app.handlers.ke_client.status", return_value=mock_result):
             await handle_status(update, context)
 
         report_text = update.message.reply_text.call_args_list[1][0][0]
@@ -299,9 +279,9 @@ class TestHandleStatusSuccess:
             {"name": "alpha", "ideas": 5, "prds": 0, "epics": 0, "userstories": 0,
              "tasks": 0, "bugs": 0, "total": 5, "last_updated": "2026-01-01"},
         ]
-        mock_proc = MagicMock(returncode=0, stdout=json.dumps(_status_result(domains=domains)), stderr="")
+        mock_result = _status_result(domains=domains)
 
-        with patch("subprocess.run", return_value=mock_proc):
+        with patch("app.handlers.ke_client.status", return_value=mock_result):
             await handle_status(update, context)
 
         report_text = update.message.reply_text.call_args_list[1][0][0]
@@ -318,9 +298,9 @@ class TestHandleStatusSuccess:
             {"name": "my-domain", "ideas": 1, "prds": 0, "epics": 0, "userstories": 0,
              "tasks": 0, "bugs": 0, "total": 1, "last_updated": "2026-01-01"},
         ]
-        mock_proc = MagicMock(returncode=0, stdout=json.dumps(_status_result(domains=domains)), stderr="")
+        mock_result = _status_result(domains=domains)
 
-        with patch("subprocess.run", return_value=mock_proc):
+        with patch("app.handlers.ke_client.status", return_value=mock_result):
             await handle_status(update, context)
 
         report_text = update.message.reply_text.call_args_list[1][0][0]
@@ -332,9 +312,9 @@ class TestHandleStatusSuccess:
         from app.handlers import handle_status
 
         update, context = _make_update_context()
-        mock_proc = MagicMock(returncode=0, stdout=json.dumps(_status_result()), stderr="")
+        mock_result = _status_result()
 
-        with patch("subprocess.run", return_value=mock_proc):
+        with patch("app.handlers.ke_client.status", return_value=mock_result):
             await handle_status(update, context)
 
         report_text = update.message.reply_text.call_args_list[1][0][0]
@@ -346,13 +326,9 @@ class TestHandleStatusSuccess:
         from app.handlers import handle_status
 
         update, context = _make_update_context()
-        mock_proc = MagicMock(
-            returncode=0,
-            stdout=json.dumps(_status_result(total_issues=3)),
-            stderr=""
-        )
+        mock_result = _status_result(total_issues=3)
 
-        with patch("subprocess.run", return_value=mock_proc):
+        with patch("app.handlers.ke_client.status", return_value=mock_result):
             await handle_status(update, context)
 
         report_text = update.message.reply_text.call_args_list[1][0][0]
@@ -365,9 +341,9 @@ class TestHandleStatusSuccess:
         from app.handlers import handle_status
 
         update, context = _make_update_context()
-        mock_proc = MagicMock(returncode=0, stdout=json.dumps(_status_result()), stderr="")
+        mock_result = _status_result()
 
-        with patch("subprocess.run", return_value=mock_proc):
+        with patch("app.handlers.ke_client.status", return_value=mock_result):
             await handle_status(update, context)
 
         first_call_text = update.message.reply_text.call_args_list[0][0][0]
@@ -382,33 +358,19 @@ class TestHandleStatusSuccess:
 class TestHandleStatusErrors:
 
     @pytest.mark.asyncio
-    async def test_status_subprocess_error(self, monkeypatch):
-        monkeypatch.setattr("app.handlers.ALLOWED_CHAT_ID", 12345)
-        from app.handlers import handle_status
-
-        update, context = _make_update_context()
-        mock_proc = MagicMock(returncode=1, stdout="", stderr="connection failed")
-
-        with patch("subprocess.run", return_value=mock_proc):
-            await handle_status(update, context)
-
-        reply_calls = update.message.reply_text.call_args_list
-        full_text = " ".join(str(c) for c in reply_calls)
-        assert "Ошибка" in full_text or "ошибка" in full_text
-
-    @pytest.mark.asyncio
-    async def test_status_timeout_reply(self, monkeypatch):
+    async def test_status_request_error(self, monkeypatch):
         monkeypatch.setattr("app.handlers.ALLOWED_CHAT_ID", 12345)
         from app.handlers import handle_status
 
         update, context = _make_update_context()
 
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="test", timeout=60)):
+        with patch("app.handlers.ke_client.status",
+                   side_effect=requests.RequestException("connection failed")):
             await handle_status(update, context)
 
         reply_calls = update.message.reply_text.call_args_list
         full_text = " ".join(str(c) for c in reply_calls)
-        assert "Таймаут" in full_text
+        assert "Ошибка" in full_text or "ошибка" in full_text or "connection failed" in full_text
 
     @pytest.mark.asyncio
     async def test_status_general_exception_handled(self, monkeypatch):
@@ -417,7 +379,8 @@ class TestHandleStatusErrors:
 
         update, context = _make_update_context()
 
-        with patch("subprocess.run", side_effect=RuntimeError("boom")):
+        with patch("app.handlers.ke_client.status",
+                   side_effect=RuntimeError("boom")):
             await handle_status(update, context)
 
         reply_calls = update.message.reply_text.call_args_list

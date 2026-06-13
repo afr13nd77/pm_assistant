@@ -12,9 +12,9 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from .. import frontmatter_utils, vault_paths
+from shared import frontmatter_utils, vault_paths
 from ..domain_manager import append_domain_log, update_domain_index
-from ..file_writer import atomic_write
+from shared.file_writer import atomic_write
 from ..notifier import send_telegram
 from . import client as jira_client
 from . import state as sync_state

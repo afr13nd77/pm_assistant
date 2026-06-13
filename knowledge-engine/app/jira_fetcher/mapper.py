@@ -108,7 +108,7 @@ def _merged_label_map() -> dict[str, str]:
             )
 
     # Layer 3 (highest priority): domain-config.yaml
-    from .. import domain_config
+    from shared import domain_config
     config_map = domain_config.build_label_map()
     if config_map:
         for label, domain in config_map.items():
@@ -152,7 +152,7 @@ def detect_domain(issue: dict) -> str:
     # Build the set of labels that originate from domain-config.yaml for
     # source attribution in the log message.  build_label_map() is cheap
     # because load() uses mtime-based caching.
-    from .. import domain_config
+    from shared import domain_config
     config_label_set: set[str] = set(domain_config.build_label_map().keys())
 
     for label in labels:

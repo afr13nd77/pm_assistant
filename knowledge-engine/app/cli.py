@@ -173,6 +173,11 @@ def main():
     audit_parser.add_argument("--source", default="general", help="Source domain (default: general)")
     audit_parser.add_argument("--vault", default=None, help="Vault root path")
 
+    serve_parser = subparsers.add_parser("serve", help="Start HTTP API server")
+    serve_parser.add_argument("--vault", default=None, help="Vault root path")
+    serve_parser.add_argument("--host", default="0.0.0.0")
+    serve_parser.add_argument("--port", type=int, default=8001)
+
     args = parser.parse_args()
     vault_path = args.vault or os.getenv("VAULT_PATH", "/vault")
 
@@ -209,12 +214,12 @@ def main():
         sys.exit(0 if result["status"] in ("ok", "skip") else 1)
 
     elif args.command == "domain":
-        from . import vault_paths as _vp
+        from shared import vault_paths as _vp
         _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
         logger.info(f"domain subcommand: {args.domain_command}, vault: {vault_path}")
 
         if args.domain_command == "create":
-            from . import domain_config as _dc
+            from shared import domain_config as _dc
             from .domain_manager import create_domain
             try:
                 path = create_domain(args.name)
@@ -274,8 +279,8 @@ def main():
             sys.exit(0)
 
         elif args.domain_command == "seed":
-            from . import domain_config as _dc
-            from . import vault_paths as _vp_seed
+            from shared import domain_config as _dc
+            from shared import vault_paths as _vp_seed
             try:
                 from .jira_fetcher.mapper import LABEL_TO_DOMAIN
             except ImportError as imp_err:
@@ -304,7 +309,7 @@ def main():
                 sys.exit(1)
 
         elif args.domain_command == "config":
-            from . import domain_config as _dc
+            from shared import domain_config as _dc
             try:
                 import yaml as _yaml
             except ImportError as imp_err:
@@ -325,10 +330,10 @@ def main():
             sys.exit(0)
 
     elif args.command == "rebuild-index":
-        from . import vault_paths as _vp
+        from shared import vault_paths as _vp
         _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
         from .domain_manager import _ARTIFACT_TYPES, update_domain_index
-        from .vault_paths import all_domains
+        from shared.vault_paths import all_domains
 
         if args.domain:
             target_domains = [args.domain]
@@ -359,7 +364,7 @@ def main():
         sys.exit(0)
 
     elif args.command == "ingest-clippings":
-        from . import vault_paths as _vp
+        from shared import vault_paths as _vp
         _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
         from .ingest import ingest_batch
         logger.info("ingest-clippings: starting, vault=%s, dry_run=%s, notify=%s",
@@ -370,7 +375,7 @@ def main():
         sys.exit(0 if result["status"] in ("ok", "skip") else 1)
 
     elif args.command == "jira-sync":
-        from . import vault_paths as _vp
+        from shared import vault_paths as _vp
         _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
         from .jira_fetcher.fetcher import sync
         logger.info(f"jira-sync: starting sync, vault={vault_path}, notify={args.notify}, dry_run={args.dry_run}")
@@ -380,7 +385,7 @@ def main():
         sys.exit(0 if result["status"] in ("ok", "skip") else 1)
 
     elif args.command == "jira-import":
-        from . import vault_paths as _vp
+        from shared import vault_paths as _vp
         _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
         from .jira_fetcher.fetcher import import_single_issue
         logger.info("jira-import: importing key=%s, vault=%s", args.key, vault_path)
@@ -394,7 +399,7 @@ def main():
         if not vault:
             print(json.dumps({"status": "error", "message": "VAULT_PATH not set"}))
             sys.exit(1)
-        from . import vault_paths as _vp
+        from shared import vault_paths as _vp
         _vp.VAULT_PATH = __import__("pathlib").Path(vault)
         from .jira_fetcher.fetcher import create_and_sync
         logger.info(
@@ -459,7 +464,7 @@ def main():
             sys.exit(1)
 
     elif args.command == "migrate-statuses":
-        from . import vault_paths as _vp
+        from shared import vault_paths as _vp
         _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
         from .status_migrator import migrate_statuses
         logger.info("migrate-statuses: starting, vault=%s, dry_run=%s", vault_path, args.dry_run)
@@ -470,7 +475,7 @@ def main():
         sys.exit(0)
 
     elif args.command == "lint":
-        from . import vault_paths as _vp
+        from shared import vault_paths as _vp
         _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
         from .linter import lint
         logger.info("lint: starting vault health check, vault=%s", vault_path)
@@ -480,7 +485,7 @@ def main():
         sys.exit(0)
 
     elif args.command == "health":
-        from . import vault_paths as _vp
+        from shared import vault_paths as _vp
         _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
         from datetime import datetime, timezone
 
@@ -553,7 +558,7 @@ def main():
         sys.exit(0)
 
     elif args.command == "status":
-        from . import vault_paths as _vp
+        from shared import vault_paths as _vp
         _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
         from .domain_manager import list_domains
         from .linter import lint
@@ -587,7 +592,7 @@ def main():
         sys.exit(0)
 
     elif args.command == "move-artifact":
-        from . import vault_paths as _vp
+        from shared import vault_paths as _vp
         _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
         from .domain_mover import move_artifact
         logger.info("move-artifact: filepath=%s, target_domain=%s, vault=%s",
@@ -598,7 +603,7 @@ def main():
         sys.exit(0 if result["status"] == "ok" else 1)
 
     elif args.command == "batch-reclassify":
-        from . import vault_paths as _vp
+        from shared import vault_paths as _vp
         _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
         from .domain_mover import batch_reclassify
         logger.info("batch-reclassify: source=%s, artifact_type=%s, dry_run=%s, vault=%s",
@@ -609,7 +614,7 @@ def main():
         sys.exit(0 if result["status"] == "ok" else 1)
 
     elif args.command == "audit-domain":
-        from . import vault_paths as _vp
+        from shared import vault_paths as _vp
         _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
         from .domain_mover import audit_domain
         logger.info("audit-domain: domain=%s, source=%s, vault=%s",
@@ -618,6 +623,16 @@ def main():
         logger.info("audit-domain: completed, status=%s", result.get("status"))
         _output_json(result)
         sys.exit(0 if result["status"] == "ok" else 1)
+
+    elif args.command == "serve":
+        import pathlib
+        from shared import vault_paths as _vp
+        vault_path = getattr(args, "vault", None) or os.getenv("VAULT_PATH", "/vault")
+        _vp.VAULT_PATH = pathlib.Path(vault_path)
+        import uvicorn
+        from .api import app
+        logger.info("KE API server starting on %s:%s", args.host, args.port)
+        uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
 
 def _output_json(data):

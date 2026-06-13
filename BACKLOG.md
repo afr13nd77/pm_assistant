@@ -1,7 +1,7 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.8.1 / knowledge-engine 1.7.1 / idea-pipeline 1.1.1 / web-ui 1.15.6
-**Обновлён:** 13.06.2026
+**Версии:** pm-bot 1.9.0 / knowledge-engine 1.8.0 / idea-pipeline 1.1.2 / web-ui 1.15.6
+**Обновлён:** 14.06.2026
 
 ---
 
@@ -270,9 +270,9 @@
 | ~~BL-123~~ | ~~Метрики системы (self-measurement)~~ | ~~knowledge-engine, web-ui~~ | ✅ **Реализовано 12.06.2026.** _calculate_pipeline_metrics() в health_scorer.py: ingest_ratio, avg_lag_hours, raw_counts. CLI health --json с трендами. Pipeline секция в overview.html breakdown. 13 unit-тестов. Спека: docs/system-metrics/. Аудит: Б-3 |
 | ~~BL-124~~ | ~~Ревизия домена general~~ | ~~knowledge-engine~~ | ✅ **Закрыто 13.06.2026.** domain_mover.py: move_artifact(), batch_reclassify(), audit_domain(). CLI: 3 команды (move-artifact, batch-reclassify, audit-domain). 14 unit-тестов. Batch execution deferred — код готов, переразметка запускается вручную. Спека: docs/domain-general-revision/. knowledge-engine 1.7.1. |
 | ~~BL-125~~ | ~~Координация писателей в vault~~ | ~~knowledge-engine, pm-bot, idea-pipeline~~ | ✅ **Реализовано 13.06.2026.** file_lock() + locked_append() в file_writer.py (pm-bot + KE), atomic_write в idea-pipeline. 9 fix points: append_section, obsidian_writer (3), ingest (1), domain_manager (2), state.py (1), vault_writer.py (1). fcntl.flock + Windows no-op fallback. 17 unit-тестов. Спека: docs/vault-write-coordination/ |
-| BL-126 | Дедупликация кода + конфигурируемость | pm-bot, knowledge-engine, idea-pipeline | Унифицировать claude_client и writer-логику (obsidian_writer vs vault_writer); хардкоды (порты, TTL 30s, cooldown 24ч) → конфиг; volume для SQLite; rate limiting на Telegram/API. Аудит: Н-7 |
+| ~~BL-126~~ | ~~Дедупликация кода + конфигурируемость~~ | ~~pm-bot, knowledge-engine, idea-pipeline~~ | ✅ **Закрыто 14.06.2026.** shared/ модуль (6 файлов, 1283 строки): llm_client, file_writer, vault_paths, domain_config, frontmatter_utils, settings. settings.yaml централизованная конфигурация. KE HTTP API (18 эндпоинтов, api.py 618 строк). ke_client.py HTTP-клиент (233 строки). Rate limiter для Telegram. SQLite volume (pm-bot-data). Удалено 10 дубликатов (-2298 строк). Объединено с BL-130. Спека: docs/dedup-and-config/. |
 | BL-127 | Onboarding-док и бэкап-стратегия | инфраструктура | Bus factor = 1: описать систему целиком (vault + сервисы + интеграции), процедуру восстановления, бэкап vault'а (git). Аудит: Б-6 |
-| BL-130 | Декаплинг pm-bot и knowledge-engine | инфраструктура | pm-bot копирует код KE при сборке (COPY knowledge-engine/app/ в Dockerfile). Любое изменение KE требует пересборки pm-bot. Решение: KE экспонирует HTTP API (health, lint, etc.), pm-bot проксирует вместо subprocess. Связано с BL-126 |
+| ~~BL-130~~ | ~~Декаплинг pm-bot и knowledge-engine~~ | ~~инфраструктура~~ | ✅ **Закрыто 14.06.2026.** pm-bot больше не копирует код KE. COPY knowledge-engine удалён из Dockerfile. 21 subprocess.run → ke_client HTTP-вызовы. KE API на порту 8001 (serve + watch). Объединено с BL-126. |
 
 ---
 
@@ -280,9 +280,9 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 70 | BL-01..BL-08, BL-11..BL-18, BL-25..BL-29, BL-31..BL-34, BL-40..BL-57, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-109, BL-114..BL-120, BL-122..BL-125 |
+| ✅ Реализовано | 72 | BL-01..BL-08, BL-11..BL-18, BL-25..BL-29, BL-31..BL-34, BL-40..BL-57, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-109, BL-114..BL-120, BL-122..BL-126, BL-130 |
 | ✅ Баги исправлены | 24 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129 |
 | Идея | 29 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-24, BL-30, BL-35..BL-39, BL-58..BL-65, BL-70..BL-73, BL-81, BL-100, BL-110..BL-113 |
-| Аудит 10.06.2026 | 3 | BL-126..BL-127, BL-130 (P2) |
+| Аудит 10.06.2026 | 1 | BL-127 (P2) |
 | ❌ Удалено | 1 | BL-121 |
 | **Итого** | **129** | |

@@ -19,21 +19,21 @@ def _reload_modules(tmp_path: Path):
     """Reload vault_paths and domain_config so VAULT_PATH points to tmp_path."""
     with patch.dict(os.environ, {"VAULT_PATH": str(tmp_path)}):
         # Force module cache reset for vault_paths
-        if "app.vault_paths" in sys.modules:
-            importlib.reload(sys.modules["app.vault_paths"])
+        if "shared.vault_paths" in sys.modules:
+            importlib.reload(sys.modules["shared.vault_paths"])
         else:
-            import app.vault_paths  # noqa: F401
+            import shared.vault_paths  # noqa: F401
 
-    if "app.domain_config" in sys.modules:
-        mod = sys.modules["app.domain_config"]
+    if "shared.domain_config" in sys.modules:
+        mod = sys.modules["shared.domain_config"]
         importlib.reload(mod)
         # Reset module-level cache after reload
         mod._cache = None
         mod._cache_mtime = 0.0
     else:
-        import app.domain_config  # noqa: F401
+        import shared.domain_config  # noqa: F401
 
-    from app import domain_config as dc
+    from shared import domain_config as dc
     dc._cache = None
     dc._cache_mtime = 0.0
     return dc

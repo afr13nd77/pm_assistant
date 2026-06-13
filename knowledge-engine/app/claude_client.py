@@ -2,7 +2,7 @@ import logging
 import time
 from pathlib import Path
 
-from . import llm_client
+from shared import llm_client
 
 logger = logging.getLogger(__name__)
 

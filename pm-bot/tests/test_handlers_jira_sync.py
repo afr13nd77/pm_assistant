@@ -1,9 +1,9 @@
 """Tests for /jira_sync Telegram command handler."""
 
 import json
-import subprocess
 
 import pytest
+import requests
 from unittest.mock import AsyncMock, MagicMock, patch
 
 
@@ -27,19 +27,17 @@ class TestJiraSyncSuccess:
         monkeypatch.setattr("app.handlers.ALLOWED_CHAT_ID", 12345)
         from app.handlers import handle_jira_sync
 
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = json.dumps({
+        mock_result = {
+            "status": "ok",
             "new": 3,
             "updated": 5,
             "closed": 1,
             "errors": 0,
-        })
-        mock_result.stderr = ""
+        }
 
         update, context = _make_update_context()
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("app.handlers.ke_client.jira_sync", return_value=mock_result):
             await handle_jira_sync(update, context)
 
         calls = [str(c) for c in update.message.reply_text.call_args_list]
@@ -54,44 +52,22 @@ class TestJiraSyncSuccess:
         monkeypatch.setattr("app.handlers.ALLOWED_CHAT_ID", 12345)
         from app.handlers import handle_jira_sync
 
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = json.dumps({
+        mock_result = {
+            "status": "ok",
             "new": 1,
             "updated": 2,
             "closed": 0,
             "errors": 4,
-        })
-        mock_result.stderr = ""
+        }
 
         update, context = _make_update_context()
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("app.handlers.ke_client.jira_sync", return_value=mock_result):
             await handle_jira_sync(update, context)
 
         calls = [str(c) for c in update.message.reply_text.call_args_list]
         full_text = " ".join(calls)
         assert "4 errors" in full_text
-
-    @pytest.mark.asyncio
-    async def test_jira_sync_success_invalid_json(self, monkeypatch):
-        """When subprocess succeeds but stdout is not valid JSON, fallback message."""
-        monkeypatch.setattr("app.handlers.ALLOWED_CHAT_ID", 12345)
-        from app.handlers import handle_jira_sync
-
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "not json"
-        mock_result.stderr = ""
-
-        update, context = _make_update_context()
-
-        with patch("subprocess.run", return_value=mock_result):
-            await handle_jira_sync(update, context)
-
-        calls = [str(c) for c in update.message.reply_text.call_args_list]
-        full_text = " ".join(calls)
-        assert "завершена" in full_text
 
 
 # ---------------------------------------------------------------------------
@@ -101,18 +77,15 @@ class TestJiraSyncSuccess:
 class TestJiraSyncError:
 
     @pytest.mark.asyncio
-    async def test_jira_sync_error_stderr(self, monkeypatch):
+    async def test_jira_sync_request_error(self, monkeypatch):
+        """When ke_client.jira_sync raises RequestException, error is shown."""
         monkeypatch.setattr("app.handlers.ALLOWED_CHAT_ID", 12345)
         from app.handlers import handle_jira_sync
 
-        mock_result = MagicMock()
-        mock_result.returncode = 1
-        mock_result.stdout = ""
-        mock_result.stderr = "Connection refused"
-
         update, context = _make_update_context()
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("app.handlers.ke_client.jira_sync",
+                   side_effect=requests.RequestException("Connection refused")):
             await handle_jira_sync(update, context)
 
         calls = [str(c) for c in update.message.reply_text.call_args_list]
@@ -120,45 +93,20 @@ class TestJiraSyncError:
         assert "Connection refused" in full_text
 
     @pytest.mark.asyncio
-    async def test_jira_sync_error_json_message(self, monkeypatch):
-        """When subprocess fails but stdout has JSON with message field."""
+    async def test_jira_sync_generic_exception(self, monkeypatch):
+        """When ke_client.jira_sync raises a generic exception, error is shown."""
         monkeypatch.setattr("app.handlers.ALLOWED_CHAT_ID", 12345)
         from app.handlers import handle_jira_sync
 
-        mock_result = MagicMock()
-        mock_result.returncode = 1
-        mock_result.stdout = json.dumps({"message": "Jira API token expired"})
-        mock_result.stderr = "some stderr"
-
         update, context = _make_update_context()
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("app.handlers.ke_client.jira_sync",
+                   side_effect=RuntimeError("Jira API token expired")):
             await handle_jira_sync(update, context)
 
         calls = [str(c) for c in update.message.reply_text.call_args_list]
         full_text = " ".join(calls)
         assert "Jira API token expired" in full_text
-
-
-# ---------------------------------------------------------------------------
-# handle_jira_sync — timeout
-# ---------------------------------------------------------------------------
-
-class TestJiraSyncTimeout:
-
-    @pytest.mark.asyncio
-    async def test_jira_sync_timeout(self, monkeypatch):
-        monkeypatch.setattr("app.handlers.ALLOWED_CHAT_ID", 12345)
-        from app.handlers import handle_jira_sync
-
-        update, context = _make_update_context()
-
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="test", timeout=120)):
-            await handle_jira_sync(update, context)
-
-        calls = [str(c) for c in update.message.reply_text.call_args_list]
-        full_text = " ".join(calls)
-        assert "2 минуты" in full_text
 
 
 # ---------------------------------------------------------------------------

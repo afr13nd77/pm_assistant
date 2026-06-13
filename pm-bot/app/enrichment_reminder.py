@@ -10,7 +10,11 @@ import logging
 import os
 import re
 
+from .rate_limiter import TelegramRateLimiter
+
 logger = logging.getLogger(__name__)
+
+_rate_limiter = TelegramRateLimiter()
 
 ACTIVE_STATUSES = frozenset({"Новая", "Проверка гипотезы"})
 
@@ -138,7 +142,7 @@ def _scan_all_ideas() -> list[dict]:
         readiness, empty_sections, domain.
     """
     from .vault_api import _calculate_readiness, parse_note
-    from .vault_paths import all_domains, wiki_domain_dir
+    from shared.vault_paths import all_domains, wiki_domain_dir
 
     results: list[dict] = []
     domains = all_domains()
@@ -195,7 +199,7 @@ async def run_enrichment_check(bot, chat_id: int) -> None:
     logger.info("run_enrichment_check: start")
     try:
         from .enrichment_db import get_reminded_today, init_db, record_reminder
-        from .vault_paths import VAULT_PATH
+        from shared.vault_paths import VAULT_PATH
 
         db_path = VAULT_PATH / ".enrichment-reminders.db"
         init_db(db_path)
@@ -229,9 +233,22 @@ async def run_enrichment_check(bot, chat_id: int) -> None:
 
             try:
                 message = _build_reminder_message(idea, host_url)
-                await bot.send_message(
-                    chat_id=chat_id, text=message, parse_mode="Markdown",
-                )
+                await _rate_limiter.acquire()
+                try:
+                    await bot.send_message(
+                        chat_id=chat_id, text=message, parse_mode="Markdown",
+                    )
+                except Exception as send_err:
+                    # Handle Telegram 429 RetryAfter
+                    from telegram.error import RetryAfter
+                    if isinstance(send_err, RetryAfter):
+                        _rate_limiter.on_retry_after(send_err.retry_after)
+                        await asyncio.sleep(send_err.retry_after)
+                        await bot.send_message(
+                            chat_id=chat_id, text=message, parse_mode="Markdown",
+                        )
+                    else:
+                        raise
                 logger.info(
                     "run_enrichment_check: sent reminder for %s to chat_id=%s",
                     idea_id, chat_id,
@@ -242,9 +259,6 @@ async def run_enrichment_check(bot, chat_id: int) -> None:
                     idea["readiness"], idea["empty_sections"],
                 )
                 sent_count += 1
-
-                if sent_count > 5:
-                    await asyncio.sleep(1)
             except Exception as send_err:
                 logger.error(
                     "run_enrichment_check: failed to send reminder for %s: %s",

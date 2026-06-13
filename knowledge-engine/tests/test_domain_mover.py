@@ -97,10 +97,10 @@ def _build_vault(tmp_path: Path):
 def _reload_domain_mover(tmp_path: Path):
     """Reload vault_paths and domain_mover so VAULT_PATH points to tmp_path."""
     with patch.dict(os.environ, {"VAULT_PATH": str(tmp_path)}):
-        if "app.vault_paths" in sys.modules:
-            importlib.reload(sys.modules["app.vault_paths"])
+        if "shared.vault_paths" in sys.modules:
+            importlib.reload(sys.modules["shared.vault_paths"])
         else:
-            import app.vault_paths  # noqa: F401
+            import shared.vault_paths  # noqa: F401
 
     if "app.domain_mover" in sys.modules:
         importlib.reload(sys.modules["app.domain_mover"])

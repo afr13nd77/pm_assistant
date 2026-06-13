@@ -16,7 +16,7 @@ import pytest
 def _setup_vault(tmp_path):
     """Reload vault_paths with VAULT_PATH pointing to tmp_path."""
     with patch.dict(os.environ, {"VAULT_PATH": str(tmp_path)}):
-        from app import vault_paths
+        from shared import vault_paths
         importlib.reload(vault_paths)
     return tmp_path
 
@@ -677,7 +677,7 @@ class TestMergedKeywordMap:
             },
         }
 
-        with patch("app.domain_config.load", return_value=fake_config):
+        with patch("shared.domain_config.load", return_value=fake_config):
             result = ext._merged_keyword_map()
 
         # Hardcoded domains are present
@@ -695,7 +695,7 @@ class TestMergedKeywordMap:
         ext = _import_extractor(tmp_path)
 
         with patch(
-            "app.domain_config.load", side_effect=Exception("config unavailable"),
+            "shared.domain_config.load", side_effect=Exception("config unavailable"),
         ):
             result = ext._merged_keyword_map()
 
@@ -731,7 +731,7 @@ class TestDetectDomainWithConfig:
             },
         }
 
-        with patch("app.domain_config.load", return_value=fake_config):
+        with patch("shared.domain_config.load", return_value=fake_config):
             result = ext._detect_domain("настроить B2B-интеграцию")
 
         assert result == "partner-search-engine"
@@ -742,7 +742,7 @@ class TestDetectDomainWithConfig:
 
         # No config keywords either — use empty config
         fake_config = {"domains": {}}
-        with patch("app.domain_config.load", return_value=fake_config):
+        with patch("shared.domain_config.load", return_value=fake_config):
             result = ext._detect_domain("провести ретроспективу по спринту")
 
         assert result == "general"

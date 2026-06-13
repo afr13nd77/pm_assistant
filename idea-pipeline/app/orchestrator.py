@@ -5,7 +5,8 @@ import time
 from datetime import date
 from pathlib import Path
 
-from idea_pipeline import vault_paths, vault_writer
+from idea_pipeline import vault_writer
+from shared import vault_paths
 from idea_pipeline.agents.analyst import AnalystAgent
 from idea_pipeline.agents.decomposer import DecomposerAgent
 from idea_pipeline.agents.pm_agent import PMAgent

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import frontmatter
 
-from ..vault_paths import next_daily_filename
+from shared.vault_paths import next_daily_filename
 
 logger = logging.getLogger(__name__)
 

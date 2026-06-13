@@ -1133,8 +1133,7 @@ class TestJiraSyncEndpoint:
 
     def test_sync_success(self, client, vault_dir):
         """Should trigger sync and return parsed result on success."""
-        import json
-        sync_output = json.dumps({
+        ke_result = {
             "status": "ok",
             "new": 3,
             "updated": 2,
@@ -1142,13 +1141,9 @@ class TestJiraSyncEndpoint:
             "errors": 0,
             "logged": 6,
             "message": "Sync completed successfully",
-        })
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = f"Starting sync...\n{sync_output}\n"
-        mock_result.stderr = ""
+        }
 
-        with patch("app.vault_api.subprocess.run", return_value=mock_result):
+        with patch("app.vault_api.ke_client.jira_sync", return_value=ke_result):
             resp = client.post("/api/v1/jira/sync")
 
         assert resp.status_code == 200
@@ -1168,16 +1163,12 @@ class TestJiraSyncEndpoint:
         state_file = vault_dir / ".jira-sync-state.json"
         state_file.write_text(json.dumps({"issues": {"X-1": {}}}), encoding="utf-8")
 
-        sync_output = json.dumps({
+        ke_result = {
             "status": "ok", "new": 1, "updated": 0,
             "closed": 0, "errors": 0, "logged": 1, "message": "done",
-        })
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = sync_output
-        mock_result.stderr = ""
+        }
 
-        with patch("app.vault_api.subprocess.run", return_value=mock_result):
+        with patch("app.vault_api.ke_client.jira_sync", return_value=ke_result):
             resp = client.post("/api/v1/jira/sync")
 
         assert resp.status_code == 200
@@ -1189,28 +1180,16 @@ class TestJiraSyncEndpoint:
         # Original data preserved
         assert "issues" in updated_state
 
-    def test_sync_subprocess_failure(self, client, vault_dir):
-        """Should return 502 when subprocess exits with non-zero code."""
-        mock_result = MagicMock()
-        mock_result.returncode = 1
-        mock_result.stdout = ""
-        mock_result.stderr = "Connection refused"
+    def test_sync_request_failure(self, client, vault_dir):
+        """Should return 502 when ke_client raises RequestException."""
+        import requests as req
 
-        with patch("app.vault_api.subprocess.run", return_value=mock_result):
+        with patch("app.vault_api.ke_client.jira_sync",
+                   side_effect=req.RequestException("Connection refused")):
             resp = client.post("/api/v1/jira/sync")
 
         assert resp.status_code == 502
         assert "Connection refused" in resp.json()["detail"]
-
-    def test_sync_timeout(self, client, vault_dir):
-        """Should return 504 when subprocess times out."""
-        import subprocess as sp
-
-        with patch("app.vault_api.subprocess.run", side_effect=sp.TimeoutExpired(cmd="test", timeout=180)):
-            resp = client.post("/api/v1/jira/sync")
-
-        assert resp.status_code == 504
-        assert "180 seconds" in resp.json()["detail"]
 
     def test_sync_concurrency_guard(self, client, vault_dir):
         """Should return 409 when sync is already running."""
@@ -1225,27 +1204,27 @@ class TestJiraSyncEndpoint:
         finally:
             _jira_sync_lock.release()
 
-    def test_sync_unparseable_output(self, client, vault_dir):
-        """Should handle unparseable subprocess output gracefully."""
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "Not JSON output at all\n"
-        mock_result.stderr = ""
-
-        with patch("app.vault_api.subprocess.run", return_value=mock_result):
-            resp = client.post("/api/v1/jira/sync")
-
-        assert resp.status_code == 200
-        data = resp.json()
-        # Should return defaults
-        assert data["status"] == "ok"
-        assert data["new"] == 0
-        assert data["message"] == "Sync completed"
-
     def test_sync_generic_exception(self, client, vault_dir):
         """Should return 500 on unexpected exceptions."""
-        with patch("app.vault_api.subprocess.run", side_effect=OSError("disk error")):
+        with patch("app.vault_api.ke_client.jira_sync",
+                   side_effect=OSError("disk error")):
             resp = client.post("/api/v1/jira/sync")
 
         assert resp.status_code == 500
         assert "disk error" in resp.json()["detail"]
+
+    def test_sync_returns_defaults_on_empty_fields(self, client, vault_dir):
+        """Should return default values when ke_client returns minimal dict."""
+        ke_result = {"status": "ok"}
+
+        with patch("app.vault_api.ke_client.jira_sync", return_value=ke_result):
+            resp = client.post("/api/v1/jira/sync")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["new"] == 0
+        assert data["updated"] == 0
+        assert data["closed"] == 0
+        assert data["errors"] == 0
+        assert data["message"] == "Sync completed"

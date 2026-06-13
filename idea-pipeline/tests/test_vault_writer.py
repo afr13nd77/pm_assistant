@@ -23,7 +23,7 @@ def vault_tmp(tmp_path):
     """Provide a temporary vault directory and patch vault_paths.VAULT_PATH."""
     with patch.dict(os.environ, {"VAULT_PATH": str(tmp_path)}):
         # Reimport vault_paths so VAULT_PATH is recalculated
-        import idea_pipeline.vault_paths as vp
+        import shared.vault_paths as vp
         vp.VAULT_PATH = tmp_path
         yield tmp_path
 

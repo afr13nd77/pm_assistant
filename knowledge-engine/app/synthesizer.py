@@ -2,9 +2,10 @@ import logging
 from datetime import date
 from pathlib import Path
 
-from . import claude_client, vault_paths
-from .file_writer import atomic_write
-from .frontmatter_utils import read_frontmatter, update_frontmatter
+from . import claude_client
+from shared import vault_paths
+from shared.file_writer import atomic_write
+from shared.frontmatter_utils import read_frontmatter, update_frontmatter
 from .notifier import send_telegram
 
 logger = logging.getLogger(__name__)

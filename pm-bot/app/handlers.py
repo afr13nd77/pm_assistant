@@ -2,19 +2,23 @@ import json
 import logging
 import os
 import re
-import subprocess
 import tempfile
 from datetime import date
 from pathlib import Path
 
+import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
-from . import vault_paths
+from . import ke_client
+from shared import vault_paths
 from .claude_client import process_daily, process_idea, process_jira_ticket
 from .obsidian_writer import write_daily, write_idea, write_jira_draft
+from .rate_limiter import TelegramRateLimiter
 from .stt import transcribe
-from .vault_paths import VAULT_PATH
+from shared.vault_paths import VAULT_PATH
+
+_rate_limiter = TelegramRateLimiter()
 
 logger = logging.getLogger(__name__)
 
@@ -63,21 +67,16 @@ def _is_allowed(update: Update) -> bool:
     return update.effective_chat.id == ALLOWED_CHAT_ID
 
 def _run_enrichment(filepath):
-    logger.info(f"Calling knowledge-engine enrich: {filepath}")
+    logger.info("Calling knowledge-engine enrich: %s", filepath)
     try:
-        result = subprocess.run(
-            ["python", "-m", "knowledge_engine", "enrich", str(filepath)],
-            capture_output=True, text=True, timeout=30
-        )
-        logger.info(f"Enrichment exit code: {result.returncode}")
-        if result.returncode != 0:
-            logger.warning(f"Enrichment stderr: {result.stderr}")
-        return result
-    except subprocess.TimeoutExpired:
-        logger.error("Enrichment timed out")
+        data = ke_client.enrich(str(filepath))
+        logger.info("Enrichment completed: status=%s", data.get("status", "ok"))
+        return data
+    except requests.RequestException as e:
+        logger.error("Enrichment failed: %s", e)
         return None
     except Exception as e:
-        logger.error(f"Enrichment failed: {e}")
+        logger.error("Enrichment failed: %s", e)
         return None
 
 
@@ -235,10 +234,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             jira_msg = ""
             try:
-                from knowledge_engine.jira_key_sync import patch_daily_links, sync_daily_jira_keys
-                sync_result = sync_daily_jira_keys(result, str(vault_paths.VAULT_PATH))
+                sync_result = ke_client.jira_key_sync_sync(result)
                 jira_msg = _format_jira_sync_message(sync_result)
-                patch_daily_links(str(filepath), sync_result.get("keys_map", {}))
+                ke_client.jira_key_sync_patch(str(filepath), sync_result.get("keys_map", {}))
             except Exception as e:
                 logger.warning("handle_text: daily jira sync failed (non-fatal): %s", e)
 
@@ -257,13 +255,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             enrich_result = _run_enrichment(filepath)
             enrich_info = None
-            if enrich_result and enrich_result.returncode == 0:
-                try:
-                    data = json.loads(enrich_result.stdout)
-                    links = data.get("links_found", 0)
-                    enrich_info = f"Обогащено: {links} связей"
-                except json.JSONDecodeError:
-                    enrich_info = "(обогащение выполнено)"
+            if enrich_result:
+                links = enrich_result.get("links_found", 0)
+                enrich_info = f"Обогащено: {links} связей"
 
             await _send_idea_with_prompt(update.message, context, filepath, enrich_info)
     except Exception as e:
@@ -277,34 +271,23 @@ async def handle_synthesize(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Starting synthesis via knowledge-engine")
 
     try:
-        result = subprocess.run(
-            ["python", "-m", "knowledge_engine", "synthesize"],
-            capture_output=True, text=True, timeout=120
-        )
-        logger.info(f"Synthesis exit code: {result.returncode}")
+        data = ke_client.synthesize()
+        logger.info("Synthesis completed: status=%s", data.get("status", "ok"))
 
-        if result.returncode == 0:
-            try:
-                data = json.loads(result.stdout)
-                if data["status"] == "ok":
-                    header = f"✅ Синтез завершён: {data['file']}\nИдей обработано: {data.get('count', '?')}"
-                    await update.message.reply_text(header)
-                    summary = data['summary'][:500]
-                    if summary:
-                        await update.message.reply_text(summary)
-                else:
-                    await update.message.reply_text(data.get("message", "Нет новых идей для синтеза"))
-            except json.JSONDecodeError:
-                await update.message.reply_text("✅ Синтез завершён")
+        if data.get("status") == "ok":
+            header = f"✅ Синтез завершён: {data['file']}\nИдей обработано: {data.get('count', '?')}"
+            await update.message.reply_text(header)
+            summary = data.get('summary', '')[:500]
+            if summary:
+                await update.message.reply_text(summary)
         else:
-            logger.error(f"Synthesis failed: {result.stderr}")
-            await update.message.reply_text(f"❌ Ошибка синтеза: {result.stderr[:200]}")
+            await update.message.reply_text(data.get("message", "Нет новых идей для синтеза"))
 
-    except subprocess.TimeoutExpired:
-        logger.error("Synthesis timed out")
-        await update.message.reply_text("❌ Синтез не завершился за 2 минуты")
+    except requests.RequestException as e:
+        logger.error("Synthesis request failed: %s", e)
+        await update.message.reply_text(f"❌ Ошибка синтеза: {e}")
     except Exception as e:
-        logger.error(f"Synthesis error: {e}")
+        logger.error("Synthesis error: %s", e)
         await update.message.reply_text(f"❌ Ошибка: {e}")
 
 
@@ -315,40 +298,27 @@ async def handle_fetch_meetings(update: Update, context: ContextTypes.DEFAULT_TY
     logger.info("Manual fetch_meetings triggered via Telegram")
 
     try:
-        result = subprocess.run(
-            ["python", "-m", "knowledge_engine", "fetch-meetings", "--notify"],
-            capture_output=True, text=True, timeout=180
-        )
-        logger.info(f"fetch-meetings exit code: {result.returncode}")
+        data = ke_client.fetch_meetings(notify=True)
+        logger.info("fetch-meetings completed: newly_processed=%s", data.get("newly_processed", 0))
 
-        if result.returncode == 0:
-            try:
-                data = json.loads(result.stdout)
-                if data["newly_processed"] > 0:
-                    details = "\n".join(
-                        f"  {d['file']} ({d['type']})"
-                        for d in data.get("details", [])
-                    )
-                    await update.message.reply_text(
-                        f"Обработано протоколов: {data['newly_processed']}\n{details}"
-                    )
-                else:
-                    await update.message.reply_text(
-                        "Новых транскрибаций не найдено"
-                    )
-            except json.JSONDecodeError:
-                await update.message.reply_text("Проверка завершена")
-        else:
-            logger.error(f"fetch-meetings failed: {result.stderr}")
+        if data.get("newly_processed", 0) > 0:
+            details = "\n".join(
+                f"  {d['file']} ({d['type']})"
+                for d in data.get("details", [])
+            )
             await update.message.reply_text(
-                f"Ошибка: {result.stderr[:200]}"
+                f"Обработано протоколов: {data['newly_processed']}\n{details}"
+            )
+        else:
+            await update.message.reply_text(
+                "Новых транскрибаций не найдено"
             )
 
-    except subprocess.TimeoutExpired:
-        logger.error("fetch-meetings timed out")
-        await update.message.reply_text("Не завершилось за 3 минуты")
+    except requests.RequestException as e:
+        logger.error("fetch-meetings request failed: %s", e)
+        await update.message.reply_text(f"Ошибка: {e}")
     except Exception as e:
-        logger.error(f"fetch-meetings error: {e}")
+        logger.error("fetch-meetings error: %s", e)
         await update.message.reply_text(f"Ошибка: {e}")
 
 
@@ -359,42 +329,23 @@ async def handle_jira_sync(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Manual jira_sync triggered via Telegram: chat_id=%s", update.effective_chat.id)
 
     try:
-        result = subprocess.run(
-            ["python", "-m", "knowledge_engine", "jira-sync"],
-            capture_output=True, text=True, timeout=120
-        )
-        logger.info("jira-sync exit code: %s", result.returncode)
+        data = ke_client.jira_sync()
+        logger.info("jira-sync completed: status=%s", data.get("status", "ok"))
 
-        if result.returncode == 0:
-            try:
-                data = json.loads(result.stdout)
-                new = data.get("new", 0)
-                updated = data.get("updated", 0)
-                closed = data.get("closed", 0)
-                errors = data.get("errors", 0)
+        new = data.get("new", 0)
+        updated = data.get("updated", 0)
+        closed = data.get("closed", 0)
+        errors = data.get("errors", 0)
 
-                msg = f"✅ Jira sync: {new} new, {updated} updated, {closed} closed"
-                if errors > 0:
-                    msg += f", {errors} errors"
-                await update.message.reply_text(msg)
-                logger.info("jira_sync completed: new=%d, updated=%d, closed=%d, errors=%d", new, updated, closed, errors)
-            except json.JSONDecodeError:
-                logger.error("jira_sync: failed to parse JSON from stdout")
-                await update.message.reply_text("✅ Синхронизация завершена")
-        else:
-            # Try to parse error from JSON output
-            error_msg = result.stderr[:200]
-            try:
-                data = json.loads(result.stdout)
-                error_msg = data.get("message", error_msg)
-            except (json.JSONDecodeError, Exception):
-                pass
-            logger.error("jira_sync failed: %s", error_msg)
-            await update.message.reply_text(f"❌ Ошибка: {error_msg}")
+        msg = f"✅ Jira sync: {new} new, {updated} updated, {closed} closed"
+        if errors > 0:
+            msg += f", {errors} errors"
+        await update.message.reply_text(msg)
+        logger.info("jira_sync completed: new=%d, updated=%d, closed=%d, errors=%d", new, updated, closed, errors)
 
-    except subprocess.TimeoutExpired:
-        logger.error("jira_sync timed out")
-        await update.message.reply_text("❌ Синхронизация не завершилась за 2 минуты")
+    except requests.RequestException as e:
+        logger.error("jira_sync request failed: %s", e)
+        await update.message.reply_text(f"❌ Ошибка: {e}")
     except Exception as e:
         logger.error("jira_sync error: %s", e)
         await update.message.reply_text(f"❌ Ошибка: {e}")
@@ -418,41 +369,23 @@ async def handle_jira_import(update: Update, context: ContextTypes.DEFAULT_TYPE)
     logger.info("jira_import: key=%s, chat_id=%s", key, update.effective_chat.id)
 
     try:
-        result = subprocess.run(
-            ["python", "-m", "knowledge_engine", "jira-import", key],
-            capture_output=True, text=True, timeout=60
-        )
-        logger.info("jira_import exit code: %s", result.returncode)
+        data = ke_client.jira_import(key)
+        logger.info("jira_import completed: status=%s", data.get("status", "ok"))
 
-        if result.returncode == 0:
-            try:
-                data = json.loads(result.stdout)
-                domain = data.get("domain", "?")
-                status = data.get("task_status", "?")
-                action = data.get("action", "imported")
-                title = data.get("title", "")
-                title_short = title[:60] + "..." if len(title) > 60 else title
-                msg = f"✅ {key} ({action})\n📁 {domain}\n📋 {status}"
-                if title_short:
-                    msg += f"\n📝 {title_short}"
-                await update.message.reply_text(msg)
-                logger.info("jira_import completed: key=%s domain=%s status=%s action=%s", key, domain, status, action)
-            except json.JSONDecodeError:
-                logger.error("jira_import: failed to parse JSON from stdout")
-                await update.message.reply_text("✅ Импорт завершён")
-        else:
-            error_msg = result.stderr[:200]
-            try:
-                data = json.loads(result.stdout)
-                error_msg = data.get("message", error_msg)
-            except (json.JSONDecodeError, Exception):
-                pass
-            logger.error("jira_import failed: %s", error_msg)
-            await update.message.reply_text(f"❌ {error_msg}")
+        domain = data.get("domain", "?")
+        task_status = data.get("task_status", "?")
+        action = data.get("action", "imported")
+        title = data.get("title", "")
+        title_short = title[:60] + "..." if len(title) > 60 else title
+        msg = f"✅ {key} ({action})\n📁 {domain}\n📋 {task_status}"
+        if title_short:
+            msg += f"\n📝 {title_short}"
+        await update.message.reply_text(msg)
+        logger.info("jira_import completed: key=%s domain=%s status=%s action=%s", key, domain, task_status, action)
 
-    except subprocess.TimeoutExpired:
-        logger.error("jira_import timed out: key=%s", key)
-        await update.message.reply_text("❌ Импорт не завершился за 60 секунд")
+    except requests.RequestException as e:
+        logger.error("jira_import request failed: key=%s, error=%s", key, e)
+        await update.message.reply_text(f"❌ {e}")
     except Exception as e:
         logger.error("jira_import error: %s", e)
         await update.message.reply_text(f"❌ Ошибка: {e}")
@@ -490,43 +423,32 @@ async def handle_jira_create(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text("⏳ Creating task in Jira...")
 
     try:
-        result = subprocess.run(
-            ["python", "-m", "knowledge_engine", "jira-create",
-             "--file", filename, "--project", project_key],
-            capture_output=True, text=True, timeout=120
-        )
-        logger.info("jira_create exit code: %s", result.returncode)
+        data = ke_client.jira_create(file=filename, project=project_key)
+        logger.info("jira_create completed: status=%s", data.get("status", "ok"))
 
-        try:
-            data = json.loads(result.stdout)
-            status = data.get("status", "error")
-            jira_key = data.get("jira_key", "")
-            jira_url = data.get("jira_url", "")
-            message = data.get("message", "")
+        resp_status = data.get("status", "error")
+        jira_key = data.get("jira_key", "")
+        jira_url = data.get("jira_url", "")
+        message = data.get("message", "")
 
-            if status == "ok":
-                msg = f"✅ Created {jira_key}: {message}\n🔗 {jira_url}"
-                logger.info("jira_create completed: filename=%s project=%s jira_key=%s", filename, project_key, jira_key)
-            elif status == "already_exists":
-                msg = f"ℹ️ Already in Jira: {jira_key}\n🔗 {jira_url}"
-                logger.info("jira_create already_exists: filename=%s jira_key=%s", filename, jira_key)
-            elif status == "partial":
-                msg = f"⚠️ {message}\n🔗 {jira_url}"
-                logger.warning("jira_create partial: filename=%s message=%s", filename, message)
-            else:
-                msg = f"❌ Failed: {message}"
-                logger.error("jira_create failed: filename=%s message=%s", filename, message)
+        if resp_status == "ok":
+            msg = f"✅ Created {jira_key}: {message}\n🔗 {jira_url}"
+            logger.info("jira_create completed: filename=%s project=%s jira_key=%s", filename, project_key, jira_key)
+        elif resp_status == "already_exists":
+            msg = f"ℹ️ Already in Jira: {jira_key}\n🔗 {jira_url}"
+            logger.info("jira_create already_exists: filename=%s jira_key=%s", filename, jira_key)
+        elif resp_status == "partial":
+            msg = f"⚠️ {message}\n🔗 {jira_url}"
+            logger.warning("jira_create partial: filename=%s message=%s", filename, message)
+        else:
+            msg = f"❌ Failed: {message}"
+            logger.error("jira_create failed: filename=%s message=%s", filename, message)
 
-            await update.message.reply_text(msg)
+        await update.message.reply_text(msg)
 
-        except json.JSONDecodeError:
-            error_output = result.stderr or result.stdout[:200]
-            logger.error("jira_create: failed to parse JSON. output=%s", error_output)
-            await update.message.reply_text(f"❌ Unexpected error: {error_output}")
-
-    except subprocess.TimeoutExpired:
-        logger.error("jira_create timed out: filename=%s project_key=%s", filename, project_key)
-        await update.message.reply_text("❌ Operation timed out (120s)")
+    except requests.RequestException as e:
+        logger.error("jira_create request failed: filename=%s project_key=%s error=%s", filename, project_key, e)
+        await update.message.reply_text(f"❌ Error: {e}")
     except Exception as e:
         logger.error("jira_create error: %s", e)
         await update.message.reply_text(f"❌ Error: {e}")
@@ -605,10 +527,9 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             jira_msg = ""
             try:
-                from knowledge_engine.jira_key_sync import patch_daily_links, sync_daily_jira_keys
-                sync_result = sync_daily_jira_keys(result, str(vault_paths.VAULT_PATH))
+                sync_result = ke_client.jira_key_sync_sync(result)
                 jira_msg = _format_jira_sync_message(sync_result)
-                patch_daily_links(str(filepath), sync_result.get("keys_map", {}))
+                ke_client.jira_key_sync_patch(str(filepath), sync_result.get("keys_map", {}))
             except Exception as e:
                 logger.warning("handle_voice: daily jira sync failed (non-fatal): %s", e)
 
@@ -627,13 +548,9 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             enrich_result = _run_enrichment(filepath)
             enrich_info = None
-            if enrich_result and enrich_result.returncode == 0:
-                try:
-                    data = json.loads(enrich_result.stdout)
-                    links = data.get("links_found", 0)
-                    enrich_info = f"Обогащено: {links} связей"
-                except json.JSONDecodeError:
-                    enrich_info = "(обогащение выполнено)"
+            if enrich_result:
+                links = enrich_result.get("links_found", 0)
+                enrich_info = f"Обогащено: {links} связей"
 
             await _send_idea_with_prompt(update.message, context, filepath, enrich_info)
     except Exception as e:
@@ -805,35 +722,25 @@ async def handle_domain(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⏳ Получаю список доменов...")
         logger.info("Domain list requested: chat_id=%s", update.effective_chat.id)
         try:
-            result = subprocess.run(
-                ["python", "-m", "knowledge_engine", "domain", "list", "--format", "json"],
-                capture_output=True, text=True, timeout=60
-            )
-            logger.info("Domain list exit code: %s", result.returncode)
-            if result.returncode == 0:
-                try:
-                    data = json.loads(result.stdout)
-                    domains = data.get("domains", [])
-                    count = data.get("count", len(domains))
-                    if count == 0:
-                        await update.message.reply_text("📂 Доменов нет")
-                    else:
-                        lines = ["📂 Домены:\n"]
-                        for d in domains:
-                            total = d.get("total", 0)
-                            lines.append(f"{d['name']} — {total} {_pluralize_artifact(total)}")
-                        lines.append(f"\nВсего: {count} {'домен' if count == 1 else 'домена' if 2 <= count <= 4 else 'доменов'}")
-                        await update.message.reply_text("\n".join(lines))
-                        logger.info("Domain list returned %d domains", count)
-                except json.JSONDecodeError:
-                    logger.error("Domain list: failed to parse JSON from stdout")
-                    await update.message.reply_text("❌ Не удалось разобрать ответ knowledge-engine")
+            data = ke_client.domain_list()
+            logger.info("Domain list completed: status=%s", data.get("status", "ok"))
+
+            domains = data.get("domains", [])
+            count = data.get("count", len(domains))
+            if count == 0:
+                await update.message.reply_text("📂 Доменов нет")
             else:
-                logger.error("Domain list failed: %s", result.stderr)
-                await update.message.reply_text(f"❌ Ошибка: {result.stderr[:200]}")
-        except subprocess.TimeoutExpired:
-            logger.error("Domain list timed out")
-            await update.message.reply_text("❌ Команда не завершилась за 60 секунд")
+                lines = ["📂 Домены:\n"]
+                for d in domains:
+                    total = d.get("total", 0)
+                    lines.append(f"{d['name']} — {total} {_pluralize_artifact(total)}")
+                lines.append(f"\nВсего: {count} {'домен' if count == 1 else 'домена' if 2 <= count <= 4 else 'доменов'}")
+                await update.message.reply_text("\n".join(lines))
+                logger.info("Domain list returned %d domains", count)
+
+        except requests.RequestException as e:
+            logger.error("Domain list request failed: %s", e)
+            await update.message.reply_text(f"❌ Ошибка: {e}")
         except Exception as e:
             logger.error("Domain list error: %s", e)
             await update.message.reply_text(f"❌ Ошибка: {e}")
@@ -846,36 +753,20 @@ async def handle_domain(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⏳ Создаю домен...")
         logger.info("Domain create requested: name=%s, chat_id=%s", name, update.effective_chat.id)
         try:
-            result = subprocess.run(
-                ["python", "-m", "knowledge_engine", "domain", "create", name],
-                capture_output=True, text=True, timeout=60
-            )
-            logger.info("Domain create exit code: %s", result.returncode)
-            if result.returncode == 0:
-                try:
-                    data = json.loads(result.stdout)
-                    if data.get("status") == "ok":
-                        logger.info("Domain created successfully: name=%s", name)
-                        await update.message.reply_text(f'✅ Домен "{name}" создан')
-                    else:
-                        error_msg = data.get("message", data.get("error", "неизвестная ошибка"))
-                        logger.error("Domain create returned error: %s", error_msg)
-                        await update.message.reply_text(f"❌ {error_msg}")
-                except json.JSONDecodeError:
-                    logger.error("Domain create: failed to parse JSON from stdout")
-                    await update.message.reply_text("❌ Не удалось разобрать ответ knowledge-engine")
+            data = ke_client.domain_create(name)
+            logger.info("Domain create completed: status=%s", data.get("status", "ok"))
+
+            if data.get("status") == "ok":
+                logger.info("Domain created successfully: name=%s", name)
+                await update.message.reply_text(f'✅ Домен "{name}" создан')
             else:
-                try:
-                    data = json.loads(result.stdout)
-                    error_msg = data.get("message", data.get("error", result.stderr[:200]))
-                    logger.error("Domain create failed: %s", error_msg)
-                    await update.message.reply_text(f"❌ {error_msg}")
-                except (json.JSONDecodeError, Exception):
-                    logger.error("Domain create failed: %s", result.stderr)
-                    await update.message.reply_text(f"❌ {result.stderr[:200]}")
-        except subprocess.TimeoutExpired:
-            logger.error("Domain create timed out: name=%s", name)
-            await update.message.reply_text("❌ Команда не завершилась за 60 секунд")
+                error_msg = data.get("message", data.get("error", "неизвестная ошибка"))
+                logger.error("Domain create returned error: %s", error_msg)
+                await update.message.reply_text(f"❌ {error_msg}")
+
+        except requests.RequestException as e:
+            logger.error("Domain create request failed: name=%s, error=%s", name, e)
+            await update.message.reply_text(f"❌ Ошибка: {e}")
         except Exception as e:
             logger.error("Domain create error: %s", e)
             await update.message.reply_text(f"❌ Ошибка: {e}")
@@ -896,18 +787,9 @@ async def handle_lint(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔍 Запускаю проверку vault...")
 
     try:
-        proc = subprocess.run(
-            ["python", "-m", "knowledge_engine", "lint"],
-            capture_output=True, text=True, timeout=60
-        )
-        logger.info("handle_lint: process returned code=%d", proc.returncode)
+        result = ke_client.lint()
+        logger.info("handle_lint: lint completed, status=%s", result.get("status", "ok"))
 
-        if proc.returncode != 0:
-            logger.error("handle_lint: stderr=%s", proc.stderr)
-            await update.message.reply_text(f"❌ Ошибка линтера:\n{proc.stderr[:500]}")
-            return
-
-        result = json.loads(proc.stdout)
         summary = result["summary"]
 
         lines = ["📋 *Vault Health Report*\n"]
@@ -941,16 +823,20 @@ async def handle_lint(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if summary["unsorted_misc_count"] > 0:
                 lines.append(f"\n📁 Несортированные в misc/ (>7 дней): {summary['unsorted_misc_count']}")
                 for item in result["unsorted_misc"][:5]:
-                    lines.append(f"  • `{item['file']}` — {item['days_old']}д")
+                    lines.append(f"  • `{item['file']}` ({item.get('name', '')})")
                 if summary["unsorted_misc_count"] > 5:
                     lines.append(f"  _...и ещё {summary['unsorted_misc_count'] - 5}_")
 
-        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+        text = "\n".join(lines)
+        try:
+            await update.message.reply_text(text, parse_mode="Markdown")
+        except Exception:
+            await update.message.reply_text(text)
         logger.info("handle_lint: report sent, total_issues=%d", summary["total_issues"])
 
-    except subprocess.TimeoutExpired:
-        logger.error("handle_lint: timeout")
-        await update.message.reply_text("❌ Таймаут проверки vault (60с)")
+    except requests.RequestException as e:
+        logger.error("handle_lint: request failed: %s", e)
+        await update.message.reply_text(f"❌ Ошибка линтера: {e}")
     except Exception as e:
         logger.error("handle_lint: error=%s", e)
         await update.message.reply_text(f"❌ Ошибка: {e}")
@@ -963,18 +849,8 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📊 Собираю статус vault...")
 
     try:
-        proc = subprocess.run(
-            ["python", "-m", "knowledge_engine", "status"],
-            capture_output=True, text=True, timeout=60
-        )
-        logger.info("handle_status: process returned code=%d", proc.returncode)
-
-        if proc.returncode != 0:
-            logger.error("handle_status: stderr=%s", proc.stderr)
-            await update.message.reply_text(f"❌ Ошибка:\n{proc.stderr[:500]}")
-            return
-
-        result = json.loads(proc.stdout)
+        result = ke_client.status()
+        logger.info("handle_status: status completed, status=%s", result.get("status", "ok"))
 
         lines = ["📊 *Vault Status*\n"]
         lines.append(f"🏷️ Доменов: *{result['domains_count']}*")
@@ -1014,9 +890,9 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info("handle_status: report sent, domains=%d, artifacts=%d",
                     result["domains_count"], result["total_artifacts"])
 
-    except subprocess.TimeoutExpired:
-        logger.error("handle_status: timeout")
-        await update.message.reply_text("❌ Таймаут сбора статуса (60с)")
+    except requests.RequestException as e:
+        logger.error("handle_status: request failed: %s", e)
+        await update.message.reply_text(f"❌ Ошибка: {e}")
     except Exception as e:
         logger.error("handle_status: error=%s", e)
         await update.message.reply_text(f"❌ Ошибка: {e}")
@@ -1032,41 +908,29 @@ async def handle_rebuild_index(update: Update, context: ContextTypes.DEFAULT_TYP
     if domain:
         await update.message.reply_text("⏳ Обновляю индексы домена...")
         logger.info("Rebuild index requested for domain=%s, chat_id=%s", domain, update.effective_chat.id)
-        cmd = ["python", "-m", "knowledge_engine", "rebuild-index", domain]
     else:
         await update.message.reply_text("⏳ Обновляю индексы всех доменов...")
         logger.info("Rebuild index requested for all domains: chat_id=%s", update.effective_chat.id)
-        cmd = ["python", "-m", "knowledge_engine", "rebuild-index"]
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True, text=True, timeout=60
-        )
-        logger.info("Rebuild index exit code: %s", result.returncode)
-        if result.returncode == 0:
-            try:
-                data = json.loads(result.stdout)
-                total = data.get("total_indices", 0)
-                if domain:
-                    logger.info("Rebuild index done for domain=%s, total=%s", domain, total)
-                    await update.message.reply_text(
-                        f'✅ Индексы домена "{domain}" обновлены: {total} индексов'
-                    )
-                else:
-                    logger.info("Rebuild index done for all domains, total=%s", total)
-                    await update.message.reply_text(
-                        f"✅ Индексы обновлены: {total} индексов"
-                    )
-            except json.JSONDecodeError:
-                logger.error("Rebuild index: failed to parse JSON from stdout")
-                await update.message.reply_text("✅ Индексы обновлены")
+        data = ke_client.rebuild_index(domain=domain)
+        logger.info("Rebuild index completed: status=%s", data.get("status", "ok"))
+
+        total = data.get("total_indices", 0)
+        if domain:
+            logger.info("Rebuild index done for domain=%s, total=%s", domain, total)
+            await update.message.reply_text(
+                f'✅ Индексы домена "{domain}" обновлены: {total} индексов'
+            )
         else:
-            logger.error("Rebuild index failed: %s", result.stderr)
-            await update.message.reply_text(f"❌ Ошибка: {result.stderr[:200]}")
-    except subprocess.TimeoutExpired:
-        logger.error("Rebuild index timed out: domain=%s", domain)
-        await update.message.reply_text("❌ Команда не завершилась за 60 секунд")
+            logger.info("Rebuild index done for all domains, total=%s", total)
+            await update.message.reply_text(
+                f"✅ Индексы обновлены: {total} индексов"
+            )
+
+    except requests.RequestException as e:
+        logger.error("Rebuild index request failed: domain=%s, error=%s", domain, e)
+        await update.message.reply_text(f"❌ Ошибка: {e}")
     except Exception as e:
         logger.error("Rebuild index error: %s", e)
         await update.message.reply_text(f"❌ Ошибка: {e}")
@@ -1254,37 +1118,19 @@ async def handle_ingest(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("handle_ingest: triggered, chat_id=%s", update.effective_chat.id)
 
     try:
-        result = subprocess.run(
-            ["python", "-m", "knowledge_engine", "ingest-clippings", "--notify"],
-            capture_output=True, text=True, timeout=120
-        )
-        logger.info("handle_ingest: exit code=%s", result.returncode)
+        data = ke_client.ingest_clippings(notify=True)
+        logger.info("handle_ingest: completed, status=%s", data.get("status", "ok"))
 
-        if result.returncode == 0:
-            try:
-                data = json.loads(result.stdout)
-                processed = data.get("processed", 0)
-                skipped = data.get("skipped", 0)
-                errors = data.get("errors", 0)
-                msg = f"Ingest: {processed} обработано, {skipped} пропущено, {errors} ошибок"
-                logger.info("handle_ingest: success — %s", msg)
-                await update.message.reply_text(msg)
-            except json.JSONDecodeError:
-                logger.warning("handle_ingest: could not parse JSON output")
-                await update.message.reply_text("Ingest завершен")
-        else:
-            error_msg = result.stderr[:200] if result.stderr else "unknown error"
-            try:
-                data = json.loads(result.stdout)
-                error_msg = data.get("message", error_msg)
-            except (json.JSONDecodeError, Exception):
-                pass
-            logger.error("handle_ingest: failed — %s", error_msg)
-            await update.message.reply_text(f"Ошибка: {error_msg}")
+        processed = data.get("processed", 0)
+        skipped = data.get("skipped", 0)
+        errors = data.get("errors", 0)
+        msg = f"Ingest: {processed} обработано, {skipped} пропущено, {errors} ошибок"
+        logger.info("handle_ingest: success — %s", msg)
+        await update.message.reply_text(msg)
 
-    except subprocess.TimeoutExpired:
-        logger.error("handle_ingest: timeout after 120s")
-        await update.message.reply_text("Ingest не завершился за 2 минуты")
+    except requests.RequestException as e:
+        logger.error("handle_ingest: request failed: %s", e)
+        await update.message.reply_text(f"Ошибка: {e}")
     except Exception as e:
         logger.error("handle_ingest: unhandled error: %s", e)
         await update.message.reply_text(f"Ошибка: {e}")

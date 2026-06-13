@@ -9,9 +9,9 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import vault_paths
-from .file_writer import atomic_write, file_lock, locked_append
-from .frontmatter_utils import read_frontmatter
+from shared import vault_paths
+from shared.file_writer import atomic_write, file_lock, locked_append
+from shared.frontmatter_utils import read_frontmatter
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +143,7 @@ def create_domain(name: str) -> Path:
 
     # After scaffold creation, write entry to domain-config.yaml
     try:
-        from . import domain_config
+        from shared import domain_config
         domain_config.set_domain(name, {
             "display_name": name,
             "description": "",

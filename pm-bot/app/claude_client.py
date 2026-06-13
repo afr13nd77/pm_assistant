@@ -3,7 +3,7 @@ import logging
 import re
 from pathlib import Path
 
-from . import llm_client
+from shared import llm_client
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ _FALLBACK_DOMAINS = ("static-metadata", "suggester", "search-engine", "general")
 def _get_valid_domains() -> tuple[str, ...]:
     """Return valid domain slugs from domain-config.yaml with fallback."""
     try:
-        from . import domain_config
+        from shared import domain_config
         domains = domain_config.get_valid_domains()
         if domains:
             logger.info(
@@ -147,7 +147,7 @@ def _inject_domains_section(template: str, domains_section: str) -> str:
 def _build_idea_prompt(raw_text: str) -> str:
     """Build the full idea prompt with dynamic domain section."""
     try:
-        from . import domain_config
+        from shared import domain_config
         domains_section = domain_config.build_prompt_section()
         if domains_section:
             prompt_template = _load_prompt("idea")

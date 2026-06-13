@@ -19,7 +19,7 @@ import pytest
 def _reload_modules(tmp_path: Path):
     """Reload vault_paths and domain_manager so VAULT_PATH points to tmp_path."""
     with patch.dict(os.environ, {"VAULT_PATH": str(tmp_path)}):
-        from app import vault_paths
+        from shared import vault_paths
         importlib.reload(vault_paths)
     from app import domain_manager
     importlib.reload(domain_manager)

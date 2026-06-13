@@ -5,6 +5,26 @@
 
 ---
 
+## 14.06.2026 — pm-bot 1.9.0, knowledge-engine 1.8.0, idea-pipeline 1.1.2
+
+### BL-126 + BL-130: Дедупликация + декаплинг (closed)
+- **shared/** модуль (6 файлов, 1283 строки): `llm_client.py`, `file_writer.py`, `vault_paths.py`, `domain_config.py`, `frontmatter_utils.py`, `settings.py`
+- `settings.yaml` — централизованная конфигурация runtime-параметров (timeouts, cooldowns, cache_ttl, rate_limits, paths, ports)
+- `shared/settings.py` — загрузка YAML с deep merge, dot-notation доступ, singleton, 14 unit-тестов
+- **KE HTTP API** (`knowledge-engine/app/api.py`, 618 строк) — 18 эндпоинтов (FastAPI), CLI `serve` команда
+- `docker-compose.yml`: KE запускает `serve` + `watch` параллельно
+- **Декаплинг pm-bot**: `ke_client.py` (233 строки, 18 HTTP-функций) заменяет 21 subprocess.run вызов
+- pm-bot Dockerfile: удалены COPY knowledge-engine, pip install KE requirements, PYTHONPATH для KE
+- `KE_API_URL=http://knowledge-engine:8001` в environment pm-bot
+- **Rate limiter**: `rate_limiter.py` (TelegramRateLimiter, token bucket, params из settings)
+- Интегрирован в `enrichment_reminder.py`, `scheduler.py`, `daily_alert.py`, `transcript_watcher.py`
+- **SQLite volume**: `pm-bot-data:/data`, DB_PATH из settings, `mkdir` в `init_db()`
+- Импорты переключены: 9 файлов pm-bot (22 замены), 15 файлов KE (53 замены), 3 файла idea-pipeline (4 замены)
+- Удалено 10 дубликатов: 4 из pm-bot, 5 из KE, 1 из idea-pipeline (-2298 строк)
+- Баланс: +1283 shared, +618 api.py, +233 ke_client, +114 settings.py, +80 rate_limiter, -2298 дубликатов = нетто ~+30 строк
+
+---
+
 ## 13.06.2026 — pm-bot 1.8.1, knowledge-engine 1.7.1, idea-pipeline 1.1.1
 
 ### BL-124: Ревизия домена general (closed)

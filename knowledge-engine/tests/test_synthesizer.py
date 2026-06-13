@@ -9,7 +9,7 @@ from unittest.mock import patch, MagicMock
 def _setup_vault(tmp_path):
     """Set up vault_paths module to use tmp_path."""
     with patch.dict(os.environ, {"VAULT_PATH": str(tmp_path)}):
-        from app import vault_paths
+        from shared import vault_paths
         importlib.reload(vault_paths)
     return tmp_path
 

@@ -133,7 +133,7 @@ class TestGetValidDomains:
 
     def test_get_valid_domains_from_config(self):
         """domain_config.get_valid_domains() returns domains -> same result."""
-        with patch("app.domain_config.get_valid_domains", return_value=("a", "b", "c")):
+        with patch("shared.domain_config.get_valid_domains", return_value=("a", "b", "c")):
             result = _pmbot_cc._get_valid_domains()
         assert result == ("a", "b", "c")
 
@@ -141,7 +141,7 @@ class TestGetValidDomains:
         """domain_config.get_valid_domains() raises Exception -> fallback."""
         mock_dc = MagicMock()
         mock_dc.get_valid_domains.side_effect = Exception("config broken")
-        with patch.dict(sys.modules, {"app.domain_config": mock_dc}):
+        with patch.dict(sys.modules, {"shared.domain_config": mock_dc}):
             result = _pmbot_cc._get_valid_domains()
         assert result == _pmbot_cc._FALLBACK_DOMAINS
 
@@ -156,7 +156,7 @@ class TestBuildIdeaPrompt:
             "{domains_section}\n\n"
             "Верни ТОЛЬКО JSON внутри блока"
         )
-        with patch("app.domain_config.build_prompt_section", return_value="- dom1\n- dom2"):
+        with patch("shared.domain_config.build_prompt_section", return_value="- dom1\n- dom2"):
             with patch.object(_pmbot_cc, "_load_prompt", return_value=static_template):
                 result = _pmbot_cc._build_idea_prompt("test")
 
@@ -170,7 +170,7 @@ class TestBuildIdeaPrompt:
         mock_dc = MagicMock()
         mock_dc.build_prompt_section.side_effect = Exception("config broken")
         static_prompt = "Static idea prompt from file"
-        with patch.dict(sys.modules, {"app.domain_config": mock_dc}):
+        with patch.dict(sys.modules, {"shared.domain_config": mock_dc}):
             with patch.object(_pmbot_cc, "_load_prompt", return_value=static_prompt):
                 result = _pmbot_cc._build_idea_prompt("test")
 

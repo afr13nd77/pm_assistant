@@ -6,7 +6,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.file_writer import (
+from shared.file_writer import (
     atomic_write,
     append_section,
     file_lock,
@@ -17,12 +17,12 @@ from app.file_writer import (
 
 # Module-level helpers for multiprocessing (must be picklable)
 def _worker_locked_append(filepath_str, text):
-    from app.file_writer import locked_append
+    from shared.file_writer import locked_append
     locked_append(filepath_str, text)
 
 
 def _worker_append_section(filepath_str, section_text):
-    from app.file_writer import append_section
+    from shared.file_writer import append_section
     append_section(filepath_str, section_text)
 
 

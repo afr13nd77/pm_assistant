@@ -2,9 +2,10 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from . import claude_client, vault_paths
-from .file_writer import append_section
-from .frontmatter_utils import read_frontmatter, update_frontmatter
+from . import claude_client
+from shared import vault_paths
+from shared.file_writer import append_section
+from shared.frontmatter_utils import read_frontmatter, update_frontmatter
 from .matcher import find_links
 from .vault_index import build_index
 

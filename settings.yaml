@@ -1,0 +1,41 @@
+# pm_assistant — runtime configuration
+# All values have defaults in shared/settings.py. This file is optional.
+# Mounted read-only into containers: ./settings.yaml:/app/settings.yaml:ro
+
+timeouts:
+  enrich: 30
+  synthesize: 120
+  fetch_meetings: 180
+  jira_sync: 120
+  jira_import: 60
+  jira_create: 120
+  jira_projects: 30
+  jira_epics: 30
+  jira_issue_types: 30
+  lint: 60
+  status: 60
+  rebuild_index: 60
+  ingest_clippings: 120
+  health: 60
+  default: 60
+
+cooldowns:
+  enrichment_reminder_hours: 24
+  health_history_days: 90
+  enrichment_cleanup_days: 90
+
+cache_ttl:
+  vault_api_seconds: 30
+  jira_cache_seconds: 300
+  domains_cache_seconds: 60
+
+rate_limits:
+  telegram_messages_per_second: 1
+  telegram_retry_after_default: 5
+  telegram_max_queue_size: 50
+
+paths:
+  db_dir: /data
+
+ports:
+  ke_api: 8001

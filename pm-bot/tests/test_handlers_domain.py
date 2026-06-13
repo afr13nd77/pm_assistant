@@ -4,6 +4,8 @@ import pytest
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import requests
+
 
 def _make_update_context(args=None):
     update = MagicMock()
@@ -31,14 +33,11 @@ class TestDomainList:
             {"name": "suggester", "total": 1, "ideas": 1, "prds": 0,
              "epics": 0, "userstories": 0, "tasks": 0, "bugs": 0, "last_updated": "2026-01-01"},
         ]
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = json.dumps({"status": "ok", "domains": domains, "count": 2})
-        mock_result.stderr = ""
+        mock_result = {"status": "ok", "domains": domains, "count": 2}
 
         update, context = _make_update_context(args=["list"])
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("app.handlers.ke_client.domain_list", return_value=mock_result):
             await handle_domain(update, context)
 
         calls = [str(c) for c in update.message.reply_text.call_args_list]
@@ -51,14 +50,11 @@ class TestDomainList:
         monkeypatch.setattr("app.handlers.ALLOWED_CHAT_ID", 12345)
         from app.handlers import handle_domain
 
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = json.dumps({"status": "ok", "domains": [], "count": 0})
-        mock_result.stderr = ""
+        mock_result = {"status": "ok", "domains": [], "count": 0}
 
         update, context = _make_update_context(args=["list"])
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("app.handlers.ke_client.domain_list", return_value=mock_result):
             await handle_domain(update, context)
 
         calls = [str(c) for c in update.message.reply_text.call_args_list]
@@ -77,14 +73,11 @@ class TestDomainCreate:
         monkeypatch.setattr("app.handlers.ALLOWED_CHAT_ID", 12345)
         from app.handlers import handle_domain
 
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = json.dumps({"status": "ok", "domain": "my-domain", "path": "/vault/wiki/domains/my-domain"})
-        mock_result.stderr = ""
+        mock_result = {"status": "ok", "domain": "my-domain", "path": "/vault/wiki/domains/my-domain"}
 
         update, context = _make_update_context(args=["create", "my-domain"])
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("app.handlers.ke_client.domain_create", return_value=mock_result):
             await handle_domain(update, context)
 
         calls = [str(c) for c in update.message.reply_text.call_args_list]
@@ -96,19 +89,16 @@ class TestDomainCreate:
         monkeypatch.setattr("app.handlers.ALLOWED_CHAT_ID", 12345)
         from app.handlers import handle_domain
 
-        mock_result = MagicMock()
-        mock_result.returncode = 1
-        mock_result.stdout = json.dumps({"status": "error", "message": "Domain already exists"})
-        mock_result.stderr = "Domain already exists"
+        mock_result = {"status": "error", "message": "Domain already exists"}
 
         update, context = _make_update_context(args=["create", "existing-domain"])
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("app.handlers.ke_client.domain_create", return_value=mock_result):
             await handle_domain(update, context)
 
         calls = [str(c) for c in update.message.reply_text.call_args_list]
         full_text = " ".join(calls)
-        assert "❌" in full_text or "already exists" in full_text or "Ошибка" in full_text
+        assert "already exists" in full_text or "Domain already exists" in full_text
 
 
 # ---------------------------------------------------------------------------
@@ -143,18 +133,15 @@ class TestRebuildIndex:
         monkeypatch.setattr("app.handlers.ALLOWED_CHAT_ID", 12345)
         from app.handlers import handle_rebuild_index
 
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = json.dumps({
+        mock_result = {
             "status": "ok",
             "rebuilt": ["static-metadata", "suggester"],
             "total_indices": 2
-        })
-        mock_result.stderr = ""
+        }
 
         update, context = _make_update_context(args=[])
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("app.handlers.ke_client.rebuild_index", return_value=mock_result):
             await handle_rebuild_index(update, context)
 
         calls = [str(c) for c in update.message.reply_text.call_args_list]
@@ -166,18 +153,15 @@ class TestRebuildIndex:
         monkeypatch.setattr("app.handlers.ALLOWED_CHAT_ID", 12345)
         from app.handlers import handle_rebuild_index
 
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = json.dumps({
+        mock_result = {
             "status": "ok",
             "rebuilt": ["static-metadata"],
             "total_indices": 1
-        })
-        mock_result.stderr = ""
+        }
 
         update, context = _make_update_context(args=["static-metadata"])
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("app.handlers.ke_client.rebuild_index", return_value=mock_result):
             await handle_rebuild_index(update, context)
 
         calls = [str(c) for c in update.message.reply_text.call_args_list]
@@ -190,19 +174,15 @@ class TestRebuildIndex:
         monkeypatch.setattr("app.handlers.ALLOWED_CHAT_ID", 12345)
         from app.handlers import handle_rebuild_index
 
-        mock_result = MagicMock()
-        mock_result.returncode = 1
-        mock_result.stdout = ""
-        mock_result.stderr = "Index rebuild failed: domain not found"
-
         update, context = _make_update_context(args=[])
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("app.handlers.ke_client.rebuild_index",
+                   side_effect=requests.RequestException("Index rebuild failed: domain not found")):
             await handle_rebuild_index(update, context)
 
         calls = [str(c) for c in update.message.reply_text.call_args_list]
         full_text = " ".join(calls)
-        assert "Ошибка" in full_text or "❌" in full_text
+        assert "Ошибка" in full_text or "Index rebuild failed" in full_text
 
 
 # ---------------------------------------------------------------------------

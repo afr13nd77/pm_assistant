@@ -22,7 +22,7 @@ import pytest
 def _setup_vault(tmp_path: Path):
     """Reload vault_paths so VAULT_PATH points to tmp_path."""
     with patch.dict(os.environ, {"VAULT_PATH": str(tmp_path)}):
-        from app import vault_paths
+        from shared import vault_paths
         importlib.reload(vault_paths)
     return tmp_path
 
@@ -328,7 +328,7 @@ class TestIngestOne:
         # For this test, we need to monkeypatch read_frontmatter to raise.
         filepath.write_text("Just plain text, no frontmatter", encoding="utf-8")
 
-        from app.frontmatter_utils import read_frontmatter as real_rf
+        from shared.frontmatter_utils import read_frontmatter as real_rf
 
         def _raise_on_read(fp):
             raise ValueError("no frontmatter detected")
@@ -545,7 +545,7 @@ class TestMergedKeywordMap:
 
         with patch("app.ingest.build_keyword_map", create=True):
             with patch(
-                "app.domain_config.build_keyword_map",
+                "shared.domain_config.build_keyword_map",
                 return_value=config_keywords,
             ):
                 result = ing._merged_keyword_map()
@@ -562,7 +562,7 @@ class TestMergedKeywordMap:
         override_keywords = {"поиск": "partner-search-engine"}
         with patch("app.ingest.build_keyword_map", create=True):
             with patch(
-                "app.domain_config.build_keyword_map",
+                "shared.domain_config.build_keyword_map",
                 return_value=override_keywords,
             ):
                 result2 = ing._merged_keyword_map()
@@ -573,7 +573,7 @@ class TestMergedKeywordMap:
         ing = _import_ingest(vault)
 
         with patch(
-            "app.domain_config.build_keyword_map",
+            "shared.domain_config.build_keyword_map",
             side_effect=ImportError("no module"),
         ):
             result = ing._merged_keyword_map()
@@ -615,7 +615,7 @@ class TestDetectDomainConfigKeyword:
 
         with patch.object(ing, "_merged_tag_map", return_value=dict(ing.TAG_TO_DOMAIN)):
             with patch(
-                "app.domain_config.build_keyword_map",
+                "shared.domain_config.build_keyword_map",
                 side_effect=ImportError("no module"),
             ):
                 domain, method = ing.detect_domain(

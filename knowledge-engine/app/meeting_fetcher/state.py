@@ -9,7 +9,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from ..file_writer import atomic_write
+from shared.file_writer import atomic_write
 
 logger = logging.getLogger(__name__)
 

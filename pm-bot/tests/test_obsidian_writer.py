@@ -426,7 +426,7 @@ class TestWriteDaily:
         from app.obsidian_writer import write_daily
 
         with _multi_patch_vault(tmp_path):
-            with patch("app.vault_paths.date") as mock_date:
+            with patch("shared.vault_paths.date") as mock_date:
                 mock_date.today.return_value = date(2026, 5, 1)
                 mock_date.side_effect = lambda *a, **kw: date(*a, **kw)
 
@@ -438,7 +438,7 @@ class TestWriteDaily:
         from app.obsidian_writer import write_daily
 
         with _multi_patch_vault(tmp_path):
-            with patch("app.vault_paths.date") as mock_date:
+            with patch("shared.vault_paths.date") as mock_date:
                 mock_date.today.return_value = date(2026, 5, 1)
                 mock_date.side_effect = lambda *a, **kw: date(*a, **kw)
 
@@ -452,7 +452,7 @@ class TestWriteDaily:
         from app.obsidian_writer import write_daily
 
         with _multi_patch_vault(tmp_path):
-            with patch("app.vault_paths.date") as mock_date:
+            with patch("shared.vault_paths.date") as mock_date:
                 mock_date.today.return_value = date(2026, 5, 1)
                 mock_date.side_effect = lambda *a, **kw: date(*a, **kw)
 
@@ -495,7 +495,7 @@ class TestDailyFilename:
     def test_returns_001_when_no_file_exists(self, tmp_path):
         from app.obsidian_writer import _daily_filename
 
-        with patch("app.vault_paths.date") as mock_date:
+        with patch("shared.vault_paths.date") as mock_date:
             mock_date.today.return_value = date(2026, 5, 1)
             mock_date.side_effect = lambda *a, **kw: date(*a, **kw)
             result = _daily_filename(tmp_path)
@@ -505,7 +505,7 @@ class TestDailyFilename:
         from app.obsidian_writer import _daily_filename
 
         (tmp_path / "2026.05.01-001-Daily-summary.md").write_text("existing")
-        with patch("app.vault_paths.date") as mock_date:
+        with patch("shared.vault_paths.date") as mock_date:
             mock_date.today.return_value = date(2026, 5, 1)
             mock_date.side_effect = lambda *a, **kw: date(*a, **kw)
             result = _daily_filename(tmp_path)
@@ -516,7 +516,7 @@ class TestDailyFilename:
 
         (tmp_path / "2026.05.01-001-Daily-summary.md").write_text("existing")
         (tmp_path / "2026.05.01-002-Daily-summary.md").write_text("existing")
-        with patch("app.vault_paths.date") as mock_date:
+        with patch("shared.vault_paths.date") as mock_date:
             mock_date.today.return_value = date(2026, 5, 1)
             mock_date.side_effect = lambda *a, **kw: date(*a, **kw)
             result = _daily_filename(tmp_path)
@@ -834,5 +834,5 @@ from contextlib import contextmanager
 def _multi_patch_vault(tmp_path):
     """Patch VAULT_PATH in both obsidian_writer and vault_paths modules."""
     with patch("app.obsidian_writer.VAULT_PATH", tmp_path), \
-         patch("app.vault_paths.VAULT_PATH", tmp_path):
+         patch("shared.vault_paths.VAULT_PATH", tmp_path):
         yield
