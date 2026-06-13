@@ -11,7 +11,7 @@ from pathlib import Path
 
 from . import vault_paths
 from .domain_manager import append_domain_log, update_domain_index
-from .file_writer import atomic_write
+from .file_writer import atomic_write, locked_append
 from .frontmatter_utils import read_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -599,8 +599,7 @@ def _append_root_log(entry: str) -> None:
         atomic_write(log_path, "# Wiki Log\n\n")
 
     try:
-        existing = log_path.read_text(encoding="utf-8")
-        atomic_write(log_path, existing + entry + "\n")
+        locked_append(log_path, entry)
         logger.info("_append_root_log: entry appended successfully")
     except Exception as exc:
         logger.error("_append_root_log: failed to append entry: %s", exc)

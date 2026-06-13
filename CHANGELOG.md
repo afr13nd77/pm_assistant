@@ -5,7 +5,7 @@
 
 ---
 
-## 13.06.2026 — pm-bot 1.8.0, knowledge-engine 1.7.0
+## 13.06.2026 — pm-bot 1.8.1, knowledge-engine 1.7.1, idea-pipeline 1.1.1
 
 ### BL-119: Единый источник domain-правил
 - domain-config.yaml расширен: `tags`, `keywords`, `prompt_hint` для всех 5 доменов
@@ -19,6 +19,19 @@
 - idea.txt: убраны хардкоженные домены из JSON-шаблона и правил
 - partner-search-engine теперь доступен во всех 6 точках детекции
 - 30+ новых unit-тестов, 1036 passed, 0 new failures
+
+### BL-125: Координация писателей в vault
+- `file_lock()` context manager на основе `fcntl.flock()` (LOCK_EX + timeout loop)
+- Windows fallback (no-op с warning для локальной разработки)
+- `locked_append()` — append строки под file lock для LOG.md/log.md
+- `append_section()` обёрнута в `file_lock()` (pm-bot + knowledge-engine)
+- `obsidian_writer.py`: 3 fix points — `_update_artifact_index`, `_append_artifact_log` (create + append), `_append_wiki_root_log`
+- `ingest.py`: `_append_root_log()` → `locked_append()` (вместо read-then-rewrite)
+- `domain_manager.py`: `update_domain_index()` под `file_lock`, `append_domain_log()` → `locked_append()`
+- `idea-pipeline/state.py`: `save_state_file()` → `atomic_write()` (защита от partial write)
+- `idea-pipeline/vault_writer.py`: `save_state()` → `atomic_write()` (уже имел inline версию)
+- `.gitignore`: `*.lock` для исключения lock-файлов
+- 17 unit-тестов (14 pass + 3 skip на Windows: timeout, concurrent append, concurrent section)
 
 ---
 

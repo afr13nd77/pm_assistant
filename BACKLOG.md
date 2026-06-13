@@ -1,7 +1,7 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.7.6 / knowledge-engine 1.6.3 / idea-pipeline 1.1.0 / web-ui 1.15.6
-**Обновлён:** 12.06.2026
+**Версии:** pm-bot 1.8.1 / knowledge-engine 1.7.1 / idea-pipeline 1.1.1 / web-ui 1.15.6
+**Обновлён:** 13.06.2026
 
 ---
 
@@ -269,7 +269,7 @@
 | ~~BL-122~~ | ~~Унификация статусов идей~~ | ~~pm-bot, knowledge-engine~~ | ✅ **Реализовано 12.06.2026.** Единый словарь 4 статусов (C-0003), STATUS_MAP миграция legacy→канонич., check_invalid_idea_statuses() в linter, fallback "inbox"→"Новая", watcher skip-statuses. Спека: docs/idea-status-unification/. Связано с BL-34, BL-38. |
 | ~~BL-123~~ | ~~Метрики системы (self-measurement)~~ | ~~knowledge-engine, web-ui~~ | ✅ **Реализовано 12.06.2026.** _calculate_pipeline_metrics() в health_scorer.py: ingest_ratio, avg_lag_hours, raw_counts. CLI health --json с трендами. Pipeline секция в overview.html breakdown. 13 unit-тестов. Спека: docs/system-metrics/. Аудит: Б-3 |
 | BL-124 | Ревизия домена general | knowledge-engine | 506+ файлов, многие вне index.md — переразметить по доменам, доиндексировать; решить судьбу пустого partner-search-engine. Аудит: Н-5 |
-| BL-125 | Координация писателей в vault | knowledge-engine, pm-bot | KE-watchdog и интерактивные Claude-сессии пишут в одни файлы без локов; нарушения always_log не детектируются. Валидационный проход / file lock / очередь записи. Аудит: Б-4 |
+| ~~BL-125~~ | ~~Координация писателей в vault~~ | ~~knowledge-engine, pm-bot, idea-pipeline~~ | ✅ **Реализовано 13.06.2026.** file_lock() + locked_append() в file_writer.py (pm-bot + KE), atomic_write в idea-pipeline. 9 fix points: append_section, obsidian_writer (3), ingest (1), domain_manager (2), state.py (1), vault_writer.py (1). fcntl.flock + Windows no-op fallback. 17 unit-тестов. Спека: docs/vault-write-coordination/ |
 | BL-126 | Дедупликация кода + конфигурируемость | pm-bot, knowledge-engine, idea-pipeline | Унифицировать claude_client и writer-логику (obsidian_writer vs vault_writer); хардкоды (порты, TTL 30s, cooldown 24ч) → конфиг; volume для SQLite; rate limiting на Telegram/API. Аудит: Н-7 |
 | BL-127 | Onboarding-док и бэкап-стратегия | инфраструктура | Bus factor = 1: описать систему целиком (vault + сервисы + интеграции), процедуру восстановления, бэкап vault'а (git). Аудит: Б-6 |
 | BL-130 | Декаплинг pm-bot и knowledge-engine | инфраструктура | pm-bot копирует код KE при сборке (COPY knowledge-engine/app/ в Dockerfile). Любое изменение KE требует пересборки pm-bot. Решение: KE экспонирует HTTP API (health, lint, etc.), pm-bot проксирует вместо subprocess. Связано с BL-126 |

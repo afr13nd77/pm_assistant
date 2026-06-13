@@ -26,6 +26,9 @@ test-results/
 # Jobs logs
 jobs/*/logs/
 
+# File locks
+*.lock
+
 # OS
 Thumbs.db
 Desktop.ini

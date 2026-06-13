@@ -242,7 +242,7 @@ def save_state(state_dict: dict, slug: str, domain: str) -> Path:
     state_dir = vault_paths.wiki_domain_dir(domain, "ideas")
     filepath = state_dir / f"{clean_slug}_state.json"
     content = json.dumps(state_dict, indent=2, ensure_ascii=False)
-    filepath.write_text(content, encoding="utf-8")
+    atomic_write(filepath, content)
     size = len(content.encode("utf-8"))
     logger.info("Written state: %s, size=%d bytes", filepath, size)
     return filepath

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import vault_paths
-from .file_writer import atomic_write
+from .file_writer import atomic_write, file_lock, locked_append
 from .frontmatter_utils import read_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -240,90 +240,91 @@ def update_domain_index(domain: str, artifact_type: str) -> Path:
     artifact_dir = vault_paths.wiki_domain_dir(domain, artifact_type)
     index_path = artifact_dir / "index.md"
 
-    # Collect artifact files
-    artifact_files = sorted(
-        f for f in artifact_dir.glob("*.md") if not _is_service_file(f.name)
-    )
-    logger.info(
-        "update_domain_index: found %d artifact files in %s",
-        len(artifact_files),
-        artifact_dir,
-    )
-
-    # Build table rows
-    rows: list[str] = []
-    for md_file in artifact_files:
-        try:
-            metadata, body = read_frontmatter(md_file)
-        except Exception as exc:
-            logger.error(
-                "update_domain_index: failed to read frontmatter from %s: %s",
-                md_file.name,
-                exc,
-            )
-            metadata, body = {}, ""
-
-        # Extract title: first # heading in body, fall back to filename stem
-        title = md_file.stem
-        for line in body.splitlines():
-            stripped = line.strip()
-            if stripped.startswith("# "):
-                title = stripped[2:].strip()
-                break
-
-        status = str(metadata.get("status", ""))
-        created = str(
-            metadata.get("created_at", metadata.get("date", metadata.get("created", "")))
+    with file_lock(index_path):
+        # Collect artifact files
+        artifact_files = sorted(
+            f for f in artifact_dir.glob("*.md") if not _is_service_file(f.name)
+        )
+        logger.info(
+            "update_domain_index: found %d artifact files in %s",
+            len(artifact_files),
+            artifact_dir,
         )
 
-        rows.append(
-            f"| [[{md_file.name}]] | {title} | {status} | {created} |"
-        )
+        # Build table rows
+        rows: list[str] = []
+        for md_file in artifact_files:
+            try:
+                metadata, body = read_frontmatter(md_file)
+            except Exception as exc:
+                logger.error(
+                    "update_domain_index: failed to read frontmatter from %s: %s",
+                    md_file.name,
+                    exc,
+                )
+                metadata, body = {}, ""
 
-    # Preserve or bootstrap the frontmatter of index.md
-    if index_path.exists():
-        try:
-            existing_meta, _ = read_frontmatter(index_path)
-        except Exception as exc:
-            logger.error(
-                "update_domain_index: failed to read existing index.md frontmatter: %s",
-                exc,
+            # Extract title: first # heading in body, fall back to filename stem
+            title = md_file.stem
+            for line in body.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("# "):
+                    title = stripped[2:].strip()
+                    break
+
+            status = str(metadata.get("status", ""))
+            created = str(
+                metadata.get("created_at", metadata.get("date", metadata.get("created", "")))
             )
+
+            rows.append(
+                f"| [[{md_file.name}]] | {title} | {status} | {created} |"
+            )
+
+        # Preserve or bootstrap the frontmatter of index.md
+        if index_path.exists():
+            try:
+                existing_meta, _ = read_frontmatter(index_path)
+            except Exception as exc:
+                logger.error(
+                    "update_domain_index: failed to read existing index.md frontmatter: %s",
+                    exc,
+                )
+                existing_meta = {"type": "index", "domain": domain, "artifact_type": artifact_type}
+        else:
             existing_meta = {"type": "index", "domain": domain, "artifact_type": artifact_type}
-    else:
-        existing_meta = {"type": "index", "domain": domain, "artifact_type": artifact_type}
 
-    # Rebuild frontmatter block
-    fm_lines = ["---"]
-    for key, value in existing_meta.items():
-        fm_lines.append(f"{key}: {value}")
-    fm_lines.append("---")
-    frontmatter_block = "\n".join(fm_lines)
+        # Rebuild frontmatter block
+        fm_lines = ["---"]
+        for key, value in existing_meta.items():
+            fm_lines.append(f"{key}: {value}")
+        fm_lines.append("---")
+        frontmatter_block = "\n".join(fm_lines)
 
-    title_line = domain.replace("-", " ").title()
-    atype_title = artifact_type.replace("-", " ").title()
-    table_header = (
-        "| File | Title | Status | Created |\n"
-        "|------|-------|--------|---------|"
-    )
-    table_body = "\n".join(rows)
-    if table_body:
-        table_section = table_header + "\n" + table_body + "\n"
-    else:
-        table_section = table_header + "\n"
+        title_line = domain.replace("-", " ").title()
+        atype_title = artifact_type.replace("-", " ").title()
+        table_header = (
+            "| File | Title | Status | Created |\n"
+            "|------|-------|--------|---------|"
+        )
+        table_body = "\n".join(rows)
+        if table_body:
+            table_section = table_header + "\n" + table_body + "\n"
+        else:
+            table_section = table_header + "\n"
 
-    new_content = (
-        f"{frontmatter_block}\n"
-        f"\n"
-        f"# {title_line} — {atype_title}\n"
-        f"\n"
-        f"{table_section}"
-    )
+        new_content = (
+            f"{frontmatter_block}\n"
+            f"\n"
+            f"# {title_line} — {atype_title}\n"
+            f"\n"
+            f"{table_section}"
+        )
 
-    atomic_write(index_path, new_content)
-    logger.info(
-        "update_domain_index: indexed %d entries into %s", len(rows), index_path
-    )
+        atomic_write(index_path, new_content)
+        logger.info(
+            "update_domain_index: indexed %d entries into %s", len(rows), index_path
+        )
     return index_path
 
 
@@ -367,8 +368,7 @@ def append_domain_log(
     entry = f"[{timestamp}] {action} {target} → {result}\n"
 
     try:
-        existing = log_path.read_text(encoding="utf-8")
-        atomic_write(log_path, existing + entry)
+        locked_append(log_path, entry)
         logger.info(
             "append_domain_log: appended entry to %s", log_path
         )

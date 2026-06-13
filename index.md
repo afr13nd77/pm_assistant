@@ -143,9 +143,9 @@ pm_assistant/
 
 | Компонент | Версия | Последнее изменение | Описание |
 |---|---|---|---|
-| **pm-bot** | 1.8.0 | 2026-06-13 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. Единый источник domain-правил: динамический промпт LLM из domain-config.yaml, _get_valid_domains с fallback, partner-search-engine (BL-119) |
-| **knowledge-engine** | 1.7.0 | 2026-06-13 | Enrichment, synthesis, Jira sync, meeting fetch. Единый источник domain-правил: build_keyword_map, build_prompt_section, get_valid_domains, _merged_keyword_map в artifact_extractor и ingest (BL-119) |
-| **idea-pipeline** | 1.1.0 | 2026-05-08 | Orchestrator: Analyst → PM → Decomposer |
+| **pm-bot** | 1.8.1 | 2026-06-13 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. Единый источник domain-правил: динамический промпт LLM из domain-config.yaml, _get_valid_domains с fallback, partner-search-engine (BL-119). file_lock + locked_append для vault write coordination (BL-125) |
+| **knowledge-engine** | 1.7.1 | 2026-06-13 | Enrichment, synthesis, Jira sync, meeting fetch. Единый источник domain-правил: build_keyword_map, build_prompt_section, get_valid_domains, _merged_keyword_map в artifact_extractor и ingest (BL-119). file_lock + locked_append для vault write coordination (BL-125) |
+| **idea-pipeline** | 1.1.1 | 2026-06-13 | Orchestrator: Analyst → PM → Decomposer. atomic_write для state.py и vault_writer.py (BL-125) |
 | **web-ui** | 1.15.6 | 2026-06-12 | Dual-theme SPA дашборд. Health popup light-тема: .theme-light CSS specificity, theme-aware JS colors (BUG-016). Pipeline metrics секция в health breakdown (BL-123) |
 | **инфраструктура** | 1.0.0 | 2026-06-11 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120) |
 
@@ -309,6 +309,7 @@ pm_assistant/
 | daily-jira-sync/ | APPROVED, IMPLEMENTED | Извлечение Jira-ключей из daily-протоколов, авто-импорт недостающих, Obsidian wiki-links (requirements, design, tasks) |
 | daily-progress-report/ | APPROVED, IMPLEMENTED | Команда /progress — отправка ежедневного отчёта о ходе проекта в Telegram (requirements, design, tasks) |
 | domain-config/ | APPROVED, IMPLEMENTED | Настройка доменов (requirements, design, tasks) |
+| domain-general-revision/ | APPROVED | BL-124: Ревизия домена general — переразметка 506+ файлов по доменам, CLI move-artifact, batch-reclassify, аудит partner-search-engine (requirements, design, tasks) |
 | ds v4/ | — | Дизайн-система v4: HTML-макеты matrix theme (matrix-ds-v4, pmassistant-design-system-v2) |
 | guided-enrichment/ | APPROVED, IMPLEMENTED | Telegram-напоминания о незаполненных секциях идей (enrichment_reminder.py + enrichment_db.py, daily cron, SQLite cooldown) |
 | health-scoring/ | APPROVED, IMPLEMENTED | Vault health score (0-100) + wikilink resolver. 7 категорий штрафов, endpoint /vault/health, overview виджет, ke-cron 04:00, .health-history.json 90д (requirements, design, tasks — 14 задач, BL-114, BL-115) |
@@ -344,4 +345,5 @@ pm_assistant/
 | theme-light/ | APPROVED, IMPLEMENTED | Светлая тема LIGHT cream (requirements, design, tasks) |
 | ui-audit/ | DONE | UI/UX аудит Web Dashboard: 10 страниц, 3 темы (report, screenshots) |
 | v2/ | — | Прототипы дизайн-системы v2/v3: CSS + HTML макеты matrix theme |
+| vault-write-coordination/ | APPROVED, IMPLEMENTED | BL-125: Координация писателей в vault — file locks, atomic write, устранение race conditions в LOG.md, index.md, append_section (requirements, design, tasks) |
 | voice-messages/ | APPROVED, IMPLEMENTED | Голосовые сообщения в Telegram (requirements, design, tasks) |

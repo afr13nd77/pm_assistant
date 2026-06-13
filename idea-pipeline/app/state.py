@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -7,6 +8,14 @@ from enum import Enum
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+def _atomic_write(filepath: str | Path, content: str) -> None:
+    filepath = Path(filepath)
+    tmp_path = filepath.with_suffix(".tmp")
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path.write_text(content, encoding="utf-8")
+    os.replace(str(tmp_path), str(filepath))
 
 
 class PipelineStage(str, Enum):
@@ -163,9 +172,9 @@ class PipelineStore:
     def save_state_file(self, pipeline_id: str, vault_dir: Path) -> None:
         run = self._runs[pipeline_id]
         state_path = vault_dir / "_state.json"
-        state_path.write_text(
+        _atomic_write(
+            state_path,
             json.dumps(run.to_dict(), ensure_ascii=False, indent=2),
-            encoding="utf-8",
         )
         logger.info(
             "Pipeline %s: state saved to %s",

@@ -3,6 +3,7 @@ import re
 from datetime import date, datetime
 from pathlib import Path
 
+from .file_writer import atomic_write, file_lock, locked_append
 from .vault_paths import (
     VAULT_PATH,
     next_daily_filename,
@@ -193,7 +194,8 @@ def _update_artifact_index(domain: str, artifact_type: str) -> None:
         content = "\n".join(header_lines + rows) + "\n"
 
         index_path = artifact_dir / "index.md"
-        index_path.write_text(content, encoding="utf-8")
+        with file_lock(index_path):
+            atomic_write(index_path, content)
         logger.info(
             "_update_artifact_index: wrote index.md for %s/%s (%d entries)",
             domain,
@@ -235,13 +237,13 @@ def _append_artifact_log(
                 "---\n\n"
                 "# Change Log\n\n"
             )
-            log_path.write_text(header + entry, encoding="utf-8")
+            with file_lock(log_path):
+                atomic_write(log_path, header + entry)
             logger.info(
                 "_append_artifact_log: created log.md for %s/%s", domain, artifact_type
             )
         else:
-            with log_path.open("a", encoding="utf-8") as fh:
-                fh.write(entry)
+            locked_append(log_path, entry)
             logger.info(
                 "_append_artifact_log: appended %s entry for %s to %s/%s log",
                 action,
@@ -798,8 +800,7 @@ def _append_wiki_root_log(entry: str) -> None:
             )
             return
 
-        with log_path.open("a", encoding="utf-8") as fh:
-            fh.write(entry + "\n")
+        locked_append(log_path, entry)
         logger.info("_append_wiki_root_log: appended entry to %s", log_path)
     except Exception as e:
         logger.error("_append_wiki_root_log: failed to write to %s: %s", log_path, e)
