@@ -166,6 +166,15 @@ class JiraCreateResponse(BaseModel):
     vault_updated: bool = True
 
 
+class DecayTouchRequest(BaseModel):
+    filepath: str
+
+
+class DecaySetTierRequest(BaseModel):
+    filepath: str
+    tier: str
+
+
 class IdeaStatusUpdateRequest(BaseModel):
     status: str
 
@@ -695,6 +704,8 @@ def get_ideas(domain: str | None = Query(default=None)):
                     "domain": _domain_from_path(f),
                     "id": note.get("id", ""),
                     "readiness": _calculate_readiness(note["body"]),
+                    "tier": note.get("tier", "active"),
+                    "relevance": float(note.get("relevance", 1.0)),
                 }
             )
         except Exception as exc:
@@ -2236,6 +2247,42 @@ def vault_health():
 
 
 # ---------------------------------------------------------------------------
+# Decay proxy endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/decay/touch")
+def decay_touch(req: DecayTouchRequest):
+    """Reset decay timer for a vault artifact via knowledge-engine."""
+    logger.info("POST /api/v1/decay/touch — start, filepath=%s", req.filepath)
+    try:
+        result = ke_client.touch(req.filepath)
+        logger.info("POST /api/v1/decay/touch — success: %s", result)
+        return result
+    except requests.RequestException as exc:
+        logger.error("POST /api/v1/decay/touch — ke_client.touch failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"KE API error: {exc}")
+    except Exception as exc:
+        logger.error("POST /api/v1/decay/touch — error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/api/v1/decay/set-tier")
+def decay_set_tier(req: DecaySetTierRequest):
+    """Set decay tier for a vault artifact via knowledge-engine."""
+    logger.info("POST /api/v1/decay/set-tier — start, filepath=%s, tier=%s", req.filepath, req.tier)
+    try:
+        result = ke_client.set_tier(req.filepath, req.tier)
+        logger.info("POST /api/v1/decay/set-tier — success: %s", result)
+        return result
+    except requests.RequestException as exc:
+        logger.error("POST /api/v1/decay/set-tier — ke_client.set_tier failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"KE API error: {exc}")
+    except Exception as exc:
+        logger.error("POST /api/v1/decay/set-tier — error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
 # System status endpoint
 # ---------------------------------------------------------------------------
 
@@ -2542,3 +2589,26 @@ async def overview_queue():
     logger.info("overview_queue — returning %d items", len(result))
     _cache.set("overview_queue", result)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Creative Ideas (KE proxy)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/ideas/creative")
+def get_ideas_creative(count: int = Query(default=5, ge=1, le=50)):
+    """Get creative ideas from knowledge engine."""
+    logger.info("GET /api/v1/ideas/creative — start, count=%d", count)
+    try:
+        data = ke_client.get_creative(count)
+        ideas = data.get("ideas", data) if isinstance(data, dict) else data
+        logger.info("GET /api/v1/ideas/creative — success, count=%d", len(ideas))
+        return ideas
+    except requests.RequestException as exc:
+        logger.error("GET /api/v1/ideas/creative — ke_client.get_creative failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"KE API error: {exc}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("GET /api/v1/ideas/creative — error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))

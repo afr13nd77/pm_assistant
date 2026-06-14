@@ -5,6 +5,34 @@
 
 ---
 
+## 14.06.2026 — Decay Engine (BL-110, BL-111, BL-112, BL-113)
+
+### knowledge-engine 1.9.0
+- **Decay Engine** (Эббингауз): непрерывная шкала актуальности `relevance: 0.0-1.0`
+  - Формула: `strength = 1 + ln(access_count)`, `relevance = max(floor, 1.0 - (rate/strength) × days)`
+  - Domain-specific rates из `decay.yaml` (idea ~50д, prd ~42д, daily ~25д)
+- **Tier system**: 5 tier'ов (core → active → warm → cold → archive), пороги 7/21/60 дней
+- **Touch**: инкремент access_count + refresh last_accessed + promote tier при обращении
+  - Интеграция в enricher.py — автоматический touch при enrichment
+- **Creative recall**: `get_creative()` — случайная выборка из cold/archive tier
+- **CLI**: `decay-recalc`, `decay-init`, `creative`
+- **API**: POST /decay/recalc, POST /decay/touch, POST /decay/set-tier, GET /creative
+- **Health scorer**: метрика `decay_stale` (файлы с relevance < 0.3)
+- **Cron**: decay-recalc ежедневно в 05:00
+- **decay-init миграция**: 922 файла, 99 пропущено
+
+### pm-bot 1.10.0
+- **ke_client**: touch(), set_tier(), get_creative()
+- **vault_api**: прокси-эндпоинты decay/touch, decay/set-tier, ideas/creative
+- **Telegram**: /creative — случайные забытые идеи
+- **Web UI**:
+  - overview.html — панель "Забытые идеи" (creative recall)
+  - ideas.html — фильтр по tier (табы Все/Active/Warm/Cold/Archive/Core + AND-логика с domain)
+  - ideas.html + board.html — кнопка "Закрепить" (pin/unpin → set-tier core/active)
+  - style-matrix.css + style-light.css — стили для tier tabs, creative panel, pin button
+
+---
+
 ## 14.06.2026 — CI green: mypy + ruff (29 файлов)
 
 ### BL-131: Зелёный CI — устранение всех ошибок типизации и линта

@@ -935,6 +935,34 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Ошибка: {e}")
 
 
+async def handle_creative(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update):
+        return
+    assert update.effective_user is not None
+    assert update.message is not None
+    logger.info("handle_creative: запрос от user %s", update.effective_user.id)
+    try:
+        items = ke_client.get_creative(count=5)
+        logger.info("handle_creative: получено %d элементов от KE", len(items))
+        if not items:
+            await update.message.reply_text("Нет забытых идей — все артефакты в active/warm tier.")
+            logger.info("handle_creative: пусто, все артефакты активны")
+            return
+        lines = []
+        for item in items:
+            lines.append(
+                f"• {item['title']}\n"
+                f"  {item.get('domain', '?')} | {item.get('created', '?')} | "
+                f"{item.get('tier', '?')} | readiness {item.get('readiness', 0)}%"
+            )
+        text = "\U0001f52e Забытые идеи:\n\n" + "\n\n".join(lines)
+        await update.message.reply_text(text)
+        logger.info("handle_creative: отправлено %d идей", len(items))
+    except Exception as exc:
+        logger.error("handle_creative: ошибка: %s", exc, exc_info=True)
+        await update.message.reply_text(f"Ошибка creative recall: {exc}")
+
+
 async def handle_rebuild_index(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
@@ -1201,6 +1229,7 @@ def get_handlers():
         CommandHandler("pipeline_status", handle_pipeline_status),
         CommandHandler("pipeline_resume", handle_pipeline_resume),
         CommandHandler("domain", handle_domain),
+        CommandHandler("creative", handle_creative),
         CommandHandler("rebuild_index", handle_rebuild_index),
         CommandHandler("lint", handle_lint),
         CommandHandler("status", handle_status),

@@ -317,6 +317,27 @@ def _format_tag_yaml(tag: str) -> str:
     return f"  - {tag}"
 
 
+def _inject_decay_fields(content: str) -> str:
+    today = date.today().isoformat()
+    decay_block = f'relevance: 1.0\ntier: active\nlast_accessed: "{today}"\naccess_count: 0'
+
+    fm_match = re.match(r"(---\s*\n)(.*?)(\n---)", content, re.DOTALL)
+    if not fm_match:
+        return content
+
+    prefix = fm_match.group(1)
+    fm_body = fm_match.group(2)
+    suffix = fm_match.group(3)
+    rest = content[fm_match.end():]
+
+    if re.search(r'^tags:', fm_body, re.MULTILINE):
+        fm_body = re.sub(r'^(tags:)', decay_block + r'\n\1', fm_body, count=1, flags=re.MULTILINE)
+    else:
+        fm_body = fm_body.rstrip() + '\n' + decay_block
+
+    return prefix + fm_body + suffix + rest
+
+
 def _fill_frontmatter(template: str, idea_id: str, idea_data: dict, today: str, readiness_pct: int) -> str:
     """Replace frontmatter field values in the template string."""
     fm_match = re.match(r"(---\s*\n)(.*?)(\n---)", template, re.DOTALL)
@@ -346,6 +367,9 @@ def _fill_frontmatter(template: str, idea_id: str, idea_data: dict, today: str, 
 
     for pattern, replacement in replacements:
         fm_body = re.sub(pattern, replacement, fm_body, count=1, flags=re.MULTILINE)
+
+    decay_block = f'relevance: 1.0\ntier: active\nlast_accessed: "{today}"\naccess_count: 0'
+    fm_body = re.sub(r'^(tags:)', decay_block + r'\n\1', fm_body, count=1, flags=re.MULTILINE)
 
     fm_body = re.sub(
         r'^tags:.*?(?=\n[a-z]|\n---|\Z)',
@@ -483,6 +507,8 @@ def write_meeting(content: str, source_name: str) -> Path:
         today = date.today().isoformat()
         base = Path(source_name).stem
 
+        content = _inject_decay_fields(content)
+
         # 1. Save raw original
         raw_dir = raw_meetings()
         raw_path = raw_dir / source_name
@@ -532,6 +558,8 @@ def write_jira_draft(content: str) -> Path:
 
         filename = f"{today}-jira-{idx:02d}.md"
 
+        content = _inject_decay_fields(content)
+
         # 1. Save raw copy
         raw_path = raw_dir / filename
         raw_path.write_text(content, encoding="utf-8")
@@ -568,6 +596,7 @@ def write_report(content: str) -> Path:
     """
     logger.info("write_report: saving weekly report")
     try:
+        content = _inject_decay_fields(content)
         folder = wiki_reports()
         today = date.today().isoformat()
         week = date.today().isocalendar()[1]
@@ -817,6 +846,8 @@ def write_daily(content: str) -> Path:
         # Generate filename from wiki dir (source of truth for numbering)
         wiki_dir = wiki_daily_logs()
         filename = _daily_filename(wiki_dir)
+
+        content = _inject_decay_fields(content)
 
         # 1. Save raw (immutable) copy
         raw_dir = raw_daily_logs()

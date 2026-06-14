@@ -892,6 +892,19 @@
               <div class="skeleton skeleton-panel"></div>
             </div>
           </div>
+
+          <!-- Creative Recall -->
+          <div class="panel" id="creative-panel" style="display:none;">
+            <div class="panel-header">
+              <div class="panel-header-title">
+                <span class="capture-header-dot"></span>
+                FORGOTTEN IDEAS
+              </div>
+            </div>
+            <div class="panel-body" id="creative-body">
+              <div class="creative-recall" id="creative-list"></div>
+            </div>
+          </div>
         </div>
 
       </div><!-- /cmd-body -->
@@ -1379,6 +1392,79 @@ async function submitCapture() {
 }
 
 // ================================================================
+// FETCH: Creative Recall (Forgotten Ideas)
+// ================================================================
+
+var _creativeItems = [];
+
+async function fetchCreativeRecall() {
+  var panel = document.getElementById('creative-panel');
+  var list = document.getElementById('creative-list');
+  if (!panel || !list) return;
+
+  try {
+    if (typeof api === 'undefined' || !api.creative) {
+      console.log('[creative] api.creative not available');
+      return;
+    }
+    var items = await api.creative(5);
+    _creativeItems = items;
+
+    if (!items || !items.length) {
+      panel.style.display = 'none';
+      return;
+    }
+
+    panel.style.display = '';
+    list.innerHTML = items.map(function(item, idx) {
+      return '<div class="creative-card" id="creative-card-' + idx + '">' +
+        '<div class="creative-card-body">' +
+          '<div class="creative-title">' + (item.title || 'Untitled') + '</div>' +
+          '<div class="creative-card-footer">' +
+            '<span class="creative-domain">' + (item.domain || '') + '</span>' +
+            '<span class="creative-date">' + (item.created || '') + '</span>' +
+            '<span class="creative-tier creative-tier--' + (item.tier || 'cold') + '">' + (item.tier || '').toUpperCase() + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<button class="creative-btn" onclick="touchCreative(' + idx + ')">RECALL</button>' +
+      '</div>';
+    }).join('');
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      console.error('[creative] fetch failed:', e.message);
+    }
+    panel.style.display = 'none';
+  }
+}
+
+async function touchCreative(idx) {
+  var item = _creativeItems[idx];
+  if (!item) return;
+
+  var card = document.getElementById('creative-card-' + idx);
+  var btn = card ? card.querySelector('.creative-btn') : null;
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+
+  try {
+    await api.touchIdea(item.filepath);
+    if (card) {
+      card.style.opacity = '0';
+      card.style.transition = 'opacity 0.3s ease';
+      setTimeout(function() { card.remove(); }, 300);
+    }
+    _creativeItems[idx] = null;
+    var remaining = _creativeItems.filter(function(i) { return i !== null; });
+    if (!remaining.length) {
+      var panel = document.getElementById('creative-panel');
+      if (panel) panel.style.display = 'none';
+    }
+  } catch (e) {
+    console.error('[creative] touch failed:', e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '[RECALL]'; }
+  }
+}
+
+// ================================================================
 // FETCH ALL + TIMERS + KEYBOARD
 // ================================================================
 
@@ -1391,6 +1477,7 @@ function fetchAll() {
   if (!captureActive) fetchActivityFeed();
 
   fetchHealthScore();
+  fetchCreativeRecall();
 }
 
 // Keyboard handler
@@ -1415,6 +1502,7 @@ setInterval(function() {
   var captureActive = document.activeElement && document.activeElement.id === 'capture-text';
   if (!captureActive) fetchActivityFeed();
   fetchHealthScore();
+  fetchCreativeRecall();
   updateRefreshTimestamp();
 }, 60000);
 

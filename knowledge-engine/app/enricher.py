@@ -91,6 +91,13 @@ def enrich(filepath: str | Path, vault_path: str = "", dry_run: bool = False) ->
         logger.error(f"Failed to update frontmatter: {e}")
         return {"status": "error", "message": f"Frontmatter update failed: {e}"}
 
+    try:
+        from knowledge_engine.decay_engine import touch
+        touch(str(filepath), vault_path)
+        logger.info(f"enricher: touch ok for {filepath}")
+    except Exception as exc:
+        logger.warning(f"enricher: touch failed for {filepath}: {exc}")
+
     logger.info(f"Enrichment complete: {filepath.name}, {len(linked_paths)} links")
     return {
         "status": "ok",

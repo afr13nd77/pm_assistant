@@ -414,13 +414,20 @@ class TestWriteDaily:
         assert "wiki" in str(filepath)
         assert "daily-logs" in str(filepath)
         assert filepath.exists()
-        assert filepath.read_text(encoding="utf-8") == content
+        saved = filepath.read_text(encoding="utf-8")
+        assert "tags: [daily-log]" in saved
+        assert "relevance: 1.0" in saved
+        assert "tier: active" in saved
+        assert "last_accessed:" in saved
+        assert "access_count: 0" in saved
 
         # Raw copy
         raw_dir = tmp_path / "raw" / "inbound" / "daily-logs"
         raw_files = list(raw_dir.glob("*.md"))
         assert len(raw_files) == 1
-        assert raw_files[0].read_text(encoding="utf-8") == content
+        raw_saved = raw_files[0].read_text(encoding="utf-8")
+        assert "tags: [daily-log]" in raw_saved
+        assert "relevance: 1.0" in raw_saved
 
     def test_filename_uses_today_date(self, tmp_path):
         from app.obsidian_writer import write_daily

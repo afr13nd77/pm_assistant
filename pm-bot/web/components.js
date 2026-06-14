@@ -119,7 +119,7 @@ function registerComponents(app) {
   /* ========================================
      AppSidebar -- shared navigation sidebar
      Props:
-       active (string): domains | ideas | roadmap | board | timeline | report | settings | about
+       active (string): overview | domains | ideas | roadmap | board | timeline | report | settings | about
      ======================================== */
   app.component('app-sidebar', {
     props: {
@@ -128,6 +128,7 @@ function registerComponents(app) {
     computed: {
       links: function() {
         return [
+          { name: 'overview', label: 'OVERVIEW', href: 'overview.html', icon: 'monitoring' },
           { name: 'domains', label: 'DASHBOARD', href: 'dashboard.html', icon: 'space_dashboard' },
           { name: 'ideas', label: 'IDEAS', href: 'ideas.html', icon: 'lightbulb' },
           { name: 'roadmap', label: 'DEVELOPMENT', href: 'roadmap.html', icon: 'rocket_launch' },
@@ -170,14 +171,16 @@ function registerComponents(app) {
      ======================================== */
   app.component('note-card', {
     props: {
-      type:    { type: String, default: '' },
-      title:   { type: String, default: '' },
-      tags:    { type: Array, default: function() { return []; } },
-      date:    { type: String, default: '' },
-      status:  { type: String, default: '' },
-      jiraKey: { type: String, default: '' }
+      type:     { type: String, default: '' },
+      title:    { type: String, default: '' },
+      tags:     { type: Array, default: function() { return []; } },
+      date:     { type: String, default: '' },
+      status:   { type: String, default: '' },
+      jiraKey:  { type: String, default: '' },
+      tier:     { type: String, default: 'active' },
+      filepath: { type: String, default: '' }
     },
-    emits: ['click'],
+    emits: ['click', 'pin'],
     computed: {
       tagClasses: function() {
         var self = this;
@@ -256,6 +259,7 @@ function registerComponents(app) {
             </span>\
           </div>\
         </div>\
+        <button class="pin-btn" :class="{pinned: tier === \'core\'}" @click.stop="$emit(\'pin\')" :title="tier === \'core\' ? \'Открепить\' : \'Закрепить\'">📌</button>\
       </div>'
   });
 
@@ -381,9 +385,11 @@ function registerComponents(app) {
       date:      { type: String, default: '' },
       domain:    { type: String, default: '' },
       filename:  { type: String, default: '' },
-      status:    { type: String, default: '' }
+      status:    { type: String, default: '' },
+      tier:      { type: String, default: 'active' },
+      filepath:  { type: String, default: '' }
     },
-    emits: ['click', 'dragstart'],
+    emits: ['click', 'dragstart', 'pin'],
     computed: {
       fillColor: function() {
         if (this.readiness >= 80) return 'fill-high';
@@ -417,6 +423,7 @@ function registerComponents(app) {
             </div>\
           </div>\
         </div>\
+        <button class="pin-btn" :class="{pinned: tier === \'core\'}" @click.stop="$emit(\'pin\')" :title="tier === \'core\' ? \'Открепить\' : \'Закрепить\'">📌</button>\
       </div>'
   });
 

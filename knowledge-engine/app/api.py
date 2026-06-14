@@ -13,6 +13,7 @@ import pathlib
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from shared import vault_paths as _vp
@@ -86,6 +87,19 @@ class JiraKeySyncPatchRequest(BaseModel):
 
 class JiraKeySyncSyncRequest(BaseModel):
     content: str
+
+
+class DecayRecalcRequest(BaseModel):
+    dry_run: bool = False
+
+
+class DecayTouchRequest(BaseModel):
+    filepath: str
+
+
+class DecaySetTierRequest(BaseModel):
+    filepath: str
+    tier: str
 
 
 # ---------------------------------------------------------------------------
@@ -616,4 +630,100 @@ def jira_key_sync_sync(req: JiraKeySyncSyncRequest):
         return result
     except Exception as exc:
         logger.error("API jira-key-sync/sync error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# 19. POST /api/v1/decay/recalc
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/decay/recalc")
+def decay_recalc(req: DecayRecalcRequest):
+    logger.info("API decay/recalc: dry_run=%s", req.dry_run)
+    try:
+        from knowledge_engine.decay_engine import load_config, recalc_vault
+
+        config = load_config()
+        result = recalc_vault(_vault_path_str(), config, dry_run=req.dry_run)
+        logger.info(
+            "API decay/recalc: completed, processed=%d, skipped=%d",
+            result.get("processed", 0), result.get("skipped", 0),
+        )
+        return result
+    except Exception as exc:
+        logger.error("API decay/recalc error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# 20. POST /api/v1/decay/touch
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/decay/touch")
+def decay_touch(req: DecayTouchRequest):
+    logger.info("API decay/touch: filepath=%s", req.filepath)
+    try:
+        from knowledge_engine.decay_engine import load_config, touch
+
+        config = load_config()
+        result = touch(req.filepath, _vault_path_str(), config)
+        if result.get("status") == "skip":
+            logger.warning("API decay/touch: skip, reason=%s", result.get("reason"))
+            raise HTTPException(status_code=404, detail=result.get("reason", "not found"))
+        logger.info(
+            "API decay/touch: completed, access_count=%s, tier=%s->%s",
+            result.get("access_count"), result.get("old_tier"), result.get("new_tier"),
+        )
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("API decay/touch error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# 21. POST /api/v1/decay/set-tier
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/decay/set-tier")
+def decay_set_tier(req: DecaySetTierRequest):
+    logger.info("API decay/set-tier: filepath=%s, tier=%s", req.filepath, req.tier)
+    try:
+        from knowledge_engine.decay_engine import set_tier
+
+        result = set_tier(req.filepath, req.tier, _vault_path_str())
+        if result.get("status") == "error":
+            logger.warning("API decay/set-tier: error, reason=%s", result.get("reason"))
+            raise HTTPException(status_code=400, detail=result.get("reason", "bad request"))
+        if result.get("status") == "skip":
+            logger.warning("API decay/set-tier: skip, reason=%s", result.get("reason"))
+            raise HTTPException(status_code=404, detail=result.get("reason", "not found"))
+        logger.info(
+            "API decay/set-tier: completed, old_tier=%s, new_tier=%s",
+            result.get("old_tier"), result.get("new_tier"),
+        )
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("API decay/set-tier error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# 22. GET /api/v1/creative
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/creative")
+def get_creative_items(count: int = 5):
+    logger.info("API creative: count=%d", count)
+    try:
+        from knowledge_engine.decay_engine import get_creative
+
+        items = get_creative(_vault_path_str(), count=count)
+        logger.info("API creative: returning %d items", len(items))
+        return items
+    except Exception as exc:
+        logger.error("API creative error: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))

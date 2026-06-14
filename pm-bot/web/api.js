@@ -303,6 +303,29 @@ var api = {
   /** GET /api/v1/vault/health -- vault health score with breakdown and trends */
   vaultHealth: function() {
     return apiFetch('/vault/health');
+  },
+
+  /** GET /api/v1/ideas/creative?count=N -- forgotten ideas for creative recall */
+  creative: function(count) {
+    count = count || 5;
+    return apiFetch('/ideas/creative?count=' + count);
+  },
+
+  /** POST /api/v1/decay/touch -- reset decay timer for an idea */
+  touchIdea: function(filepath) {
+    return apiFetch('/decay/touch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filepath: filepath })
+    });
+  },
+
+  setTier: function(filepath, tier) {
+    return apiFetch('/decay/set-tier', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filepath: filepath, tier: tier })
+    });
   }
 };
 

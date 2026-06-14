@@ -41,6 +41,7 @@ async def post_init(application):
         BotCommand("status", "Статус хранилища"),
         BotCommand("lint", "Проверка хранилища"),
         BotCommand("domain", "Управление доменами"),
+        BotCommand("creative", "Случайные забытые идеи"),
         BotCommand("test_enrichment", "Тест напоминаний"),
     ]
     await application.bot.set_my_commands(commands)

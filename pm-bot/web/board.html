@@ -84,7 +84,10 @@
             :date="item.date"
             :status="item.status"
             :jira-key="item.jira_key || ''"
+            :tier="item.tier || 'active'"
+            :filepath="item.filepath || ''"
             @click="openDrawer(item)"
+            @pin="togglePin(item)"
           ></note-card>
           <button v-if="inboxItems.length > visibleInbox.length" class="cmd-btn cmd-btn-muted" style="width:100%;margin-top:4px;" @click="showMore">SHOW MORE ({{ inboxItems.length - visibleInbox.length }} hidden)</button>
           <div v-if="!inboxItems.length" class="empty-state">No items</div>
@@ -102,7 +105,10 @@
             :date="item.date"
             :status="item.status"
             :jira-key="item.jira_key || ''"
+            :tier="item.tier || 'active'"
+            :filepath="item.filepath || ''"
             @click="openDrawer(item)"
+            @pin="togglePin(item)"
           ></note-card>
           <button v-if="processingItems.length > visibleProcessing.length" class="cmd-btn cmd-btn-muted" style="width:100%;margin-top:4px;" @click="showMore">SHOW MORE ({{ processingItems.length - visibleProcessing.length }} hidden)</button>
           <div v-if="!processingItems.length" class="empty-state">No items</div>
@@ -120,7 +126,10 @@
             :date="item.date"
             :status="item.status"
             :jira-key="item.jira_key || ''"
+            :tier="item.tier || 'active'"
+            :filepath="item.filepath || ''"
             @click="openDrawer(item)"
+            @pin="togglePin(item)"
           ></note-card>
           <button v-if="doneItems.length > visibleDone.length" class="cmd-btn cmd-btn-muted" style="width:100%;margin-top:4px;" @click="showMore">SHOW MORE ({{ doneItems.length - visibleDone.length }} hidden)</button>
           <div v-if="!doneItems.length" class="empty-state">No items</div>
@@ -442,6 +451,18 @@
           loadData();
         }
 
+        async function togglePin(item) {
+          console.log('[board] togglePin:', item.filename, 'current tier:', item.tier);
+          var newTier = item.tier === 'core' ? 'active' : 'core';
+          try {
+            var result = await api.setTier(item.filepath, newTier);
+            console.log('[board] togglePin success:', result);
+            item.tier = result.new_tier;
+          } catch (err) {
+            console.error('[board] togglePin error:', err.message);
+          }
+        }
+
         // --- Lifecycle ---
         onMounted(function() {
           console.log('[board] mounted — loading initial data');
@@ -526,7 +547,8 @@
           parseTags,
           openDrawer,
           closeDrawer,
-          onJiraCreated
+          onJiraCreated,
+          togglePin
         };
       }
     });

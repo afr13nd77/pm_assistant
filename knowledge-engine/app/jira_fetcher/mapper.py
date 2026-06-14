@@ -283,6 +283,10 @@ def to_markdown(issue: dict, jira_url: str) -> str:
         f'created_at: "{created_at}"\n'
         f'updated_at: "{updated_at}"\n'
         f'synced_at: "{synced_at}"\n'
+        f"relevance: 1.0\n"
+        f"tier: active\n"
+        f'last_accessed: "{synced_at[:10]}"\n'
+        f"access_count: 0\n"
         f"tags: {tags_yaml}\n"
         f"{epic_extra}"
         "---\n"

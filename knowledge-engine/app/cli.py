@@ -144,6 +144,20 @@ def main():
     health_parser.add_argument("--save", action="store_true", help="Save score to history file")
     health_parser.add_argument("--json", dest="json_output", action="store_true", help="Output full JSON with trends")
 
+    decay_recalc_parser = subparsers.add_parser("decay-recalc", help="Recalculate relevance and tier for all vault artifacts")
+    decay_recalc_parser.add_argument("--vault", default=None, help="Vault root path (default: /vault or $VAULT_PATH)")
+    decay_recalc_parser.add_argument("--config", default="/app/decay.yaml", help="Path to decay.yaml config (default: /app/decay.yaml)")
+    decay_recalc_parser.add_argument("--dry-run", action="store_true", help="Show changes without writing files")
+
+    decay_init_parser = subparsers.add_parser("decay-init", help="Initialize decay fields for vault artifacts missing them")
+    decay_init_parser.add_argument("--vault", default=None, help="Vault root path (default: /vault or $VAULT_PATH)")
+    decay_init_parser.add_argument("--config", default="/app/decay.yaml", help="Path to decay.yaml config (default: /app/decay.yaml)")
+    decay_init_parser.add_argument("--dry-run", action="store_true", help="Show changes without writing files")
+
+    creative_parser = subparsers.add_parser("creative", help="Show random forgotten ideas from cold/archive tier")
+    creative_parser.add_argument("--vault", default=None, help="Vault root path")
+    creative_parser.add_argument("--count", type=int, default=5, help="Number of items (default: 5)")
+
     status_parser = subparsers.add_parser("status", help="Show vault status summary")
     status_parser.add_argument("--vault", default=None, help="Vault root path")
 
@@ -558,6 +572,34 @@ def main():
                 print(f"  {key}: {count} (penalty: -{penalty})")
 
         sys.exit(0)
+
+    elif args.command == "decay-recalc":
+        from .decay_engine import load_config, recalc_vault
+        logger.info("decay-recalc: starting, vault=%s, config=%s, dry_run=%s", vault_path, args.config, args.dry_run)
+        config = load_config(args.config)
+        result = recalc_vault(vault_path, config, dry_run=args.dry_run)
+        logger.info(
+            "decay-recalc: completed, processed=%d, skipped=%d, transitions=%d, errors=%d",
+            result["processed"], result["skipped"], len(result["transitions"]), len(result["errors"])
+        )
+        _output_json(result)
+        sys.exit(0)
+
+    elif args.command == "decay-init":
+        from .decay_engine import load_config, init_vault
+        logger.info("decay-init: starting, vault=%s, config=%s, dry_run=%s", vault_path, args.config, args.dry_run)
+        config = load_config(args.config)
+        result = init_vault(vault_path, config, dry_run=args.dry_run)
+        logger.info("decay-init: completed, migrated=%d, skipped=%d", result["migrated"], result["skipped"])
+        _output_json(result)
+        sys.exit(0)
+
+    elif args.command == "creative":
+        logger.info("CLI creative: vault=%s, count=%d", vault_path, args.count)
+        from .decay_engine import get_creative
+        items = get_creative(vault_path, count=args.count)
+        logger.info("CLI creative: found %d items", len(items))
+        _output_json(items)
 
     elif args.command == "status":
         from shared import vault_paths as _vp

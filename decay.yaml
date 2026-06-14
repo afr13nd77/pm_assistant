@@ -1,0 +1,26 @@
+# PM Assistant — Decay Engine Configuration
+# Монтируется read-only: ./decay.yaml:/app/decay.yaml:ro
+# Формула: relevance = max(floor, 1.0 - (rate / strength) * days_since_access)
+# Strength (spacing effect): strength = 1 + ln(max(1, access_count))
+
+floor: 0.05
+
+tier_thresholds:
+  active: 7
+  warm: 21
+  cold: 60
+
+default_rate: 0.020
+
+rates:
+  idea: 0.020
+  task: 0.025
+  epic: 0.015
+  prd: 0.023
+  meeting: 0.030
+  daily-log: 0.040
+  report: 0.015
+  knowledge: 0.010
+  bug: 0.030
+  userstory: 0.020
+  concept: 0.015

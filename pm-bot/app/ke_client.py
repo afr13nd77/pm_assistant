@@ -38,7 +38,8 @@ def _get(path: str, timeout: int, params: dict | None = None) -> dict:
     resp = requests.get(url, params=params, timeout=timeout)
     resp.raise_for_status()
     result = resp.json()
-    logger.info("ke_client GET %s -> status=%s", url, result.get("status", "ok"))
+    status = result.get("status", "ok") if isinstance(result, dict) else "ok"
+    logger.info("ke_client GET %s -> status=%s, type=%s", url, status, type(result).__name__)
     return result
 
 
@@ -230,3 +231,33 @@ def jira_key_sync_sync(content: str) -> dict:
     """Sync Jira keys found in daily note content."""
     return _post("/api/v1/jira-key-sync/sync", _get_timeout("default"),
                  json={"content": content})
+
+
+# ---------------------------------------------------------------------------
+# 19. POST /api/v1/decay/touch
+# ---------------------------------------------------------------------------
+
+def touch(filepath: str) -> dict:
+    """Touch a vault artifact to reset its decay timer."""
+    return _post("/api/v1/decay/touch", _get_timeout("default"),
+                 json={"filepath": filepath})
+
+
+# ---------------------------------------------------------------------------
+# 20. POST /api/v1/decay/set-tier
+# ---------------------------------------------------------------------------
+
+def set_tier(filepath: str, tier: str) -> dict:
+    """Set decay tier for a vault artifact."""
+    return _post("/api/v1/decay/set-tier", _get_timeout("default"),
+                 json={"filepath": filepath, "tier": tier})
+
+
+# ---------------------------------------------------------------------------
+# 21. GET /api/v1/creative
+# ---------------------------------------------------------------------------
+
+def get_creative(count: int = 5) -> list:
+    """Get creative ideas from vault via KE."""
+    return _get("/api/v1/creative", _get_timeout("default"),
+                params={"count": count})

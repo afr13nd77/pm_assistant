@@ -67,6 +67,16 @@
         </button>
       </div>
 
+      <!-- Tier filter tabs -->
+      <div class="tier-filter" style="margin-top:10px;">
+        <button :class="{active: tierFilter === null}" @click="tierFilter = null">
+          All <span class="count">{{ ideas.length }}</span>
+        </button>
+        <button v-for="t in tiers" :key="t.key" :class="{active: tierFilter === t.key}" @click="tierFilter = t.key">
+          {{ t.label }} <span class="count">{{ tierCount(t.key) }}</span>
+        </button>
+      </div>
+
       <!-- Loading state -->
       <div v-if="loading" class="loading">LOADING...</div>
 
@@ -88,7 +98,10 @@
             :domain="item.domain"
             :filename="item.filename"
             :status="item.status"
+            :tier="item.tier || 'active'"
+            :filepath="item.filepath || ''"
             @click="openDrawer(item)"
+            @pin="togglePin(item)"
             @dragstart="onDragStart($event, item)"
             @dragend="onDragEnd($event)"
           ></idea-card>
@@ -109,7 +122,10 @@
             :domain="item.domain"
             :filename="item.filename"
             :status="item.status"
+            :tier="item.tier || 'active'"
+            :filepath="item.filepath || ''"
             @click="openDrawer(item)"
+            @pin="togglePin(item)"
             @dragstart="onDragStart($event, item)"
             @dragend="onDragEnd($event)"
           ></idea-card>
@@ -130,7 +146,10 @@
             :domain="item.domain"
             :filename="item.filename"
             :status="item.status"
+            :tier="item.tier || 'active'"
+            :filepath="item.filepath || ''"
             @click="openDrawer(item)"
+            @pin="togglePin(item)"
             @dragstart="onDragStart($event, item)"
             @dragend="onDragEnd($event)"
           ></idea-card>
@@ -151,7 +170,10 @@
             :domain="item.domain"
             :filename="item.filename"
             :status="item.status"
+            :tier="item.tier || 'active'"
+            :filepath="item.filepath || ''"
             @click="openDrawer(item)"
+            @pin="togglePin(item)"
             @dragstart="onDragStart($event, item)"
             @dragend="onDragEnd($event)"
           ></idea-card>
@@ -276,6 +298,16 @@
         var capturing = ref(false);
         var chatMessages = ref([]);
 
+        // Tier filter
+        var tierFilter = ref(null);
+        var tiers = ref([
+          {key: "core", label: "Core"},
+          {key: "active", label: "Active"},
+          {key: "warm", label: "Warm"},
+          {key: "cold", label: "Cold"},
+          {key: "archive", label: "Archive"},
+        ]);
+
         // Drag-and-drop state
         var dragItem = ref(null);
         var dragSourceStatus = ref('');
@@ -302,19 +334,29 @@
           return m ? m[1] : '';
         }
 
+        // Computed — tier-filtered base list (AND with domain filter already applied by API)
+        var filteredIdeas = computed(function() {
+          if (tierFilter.value === null) return ideas.value;
+          return ideas.value.filter(function(i) { return (i.tier || 'active') === tierFilter.value; });
+        });
+
+        function tierCount(tier) {
+          return ideas.value.filter(function(i) { return (i.tier || 'active') === tier; }).length;
+        }
+
         // Computed — column filtering
         var newIdeas = computed(function() {
-          return ideas.value.filter(function(i) { return statusColumn(i.status) === 'new'; })
+          return filteredIdeas.value.filter(function(i) { return statusColumn(i.status) === 'new'; })
             .sort(function(a, b) { return (b.readiness || 0) - (a.readiness || 0); });
         });
         var hypothesisIdeas = computed(function() {
-          return ideas.value.filter(function(i) { return statusColumn(i.status) === 'hypothesis'; });
+          return filteredIdeas.value.filter(function(i) { return statusColumn(i.status) === 'hypothesis'; });
         });
         var readyIdeas = computed(function() {
-          return ideas.value.filter(function(i) { return statusColumn(i.status) === 'ready'; });
+          return filteredIdeas.value.filter(function(i) { return statusColumn(i.status) === 'ready'; });
         });
         var rejectedIdeas = computed(function() {
-          return ideas.value.filter(function(i) { return statusColumn(i.status) === 'rejected'; });
+          return filteredIdeas.value.filter(function(i) { return statusColumn(i.status) === 'rejected'; });
         });
 
         var totalCount = computed(function() { return ideas.value.length; });
@@ -559,6 +601,18 @@
           };
         }
 
+        async function togglePin(item) {
+          console.log('[ideas] togglePin:', item.filename, 'current tier:', item.tier);
+          var newTier = item.tier === 'core' ? 'active' : 'core';
+          try {
+            var result = await api.setTier(item.filepath, newTier);
+            console.log('[ideas] togglePin success:', result);
+            item.tier = result.new_tier;
+          } catch (err) {
+            console.error('[ideas] togglePin error:', err.message);
+          }
+        }
+
         // Lifecycle
         onMounted(function() {
           console.log('[ideas] mounted — loading initial data');
@@ -606,6 +660,7 @@
           ideas, domains, activeDomain, loading, error,
           ideaDrawerOpen, ideaDrawerItem, displayLimit, refreshMode,
           captureDrawerOpen, captureType, captureText, capturing, chatMessages,
+          tierFilter, tiers, tierCount, filteredIdeas,
           newIdeas, hypothesisIdeas, readyIdeas, rejectedIdeas,
           visibleNew, visibleHypothesis, visibleReady, visibleRejected,
           totalCount, readyCount,
@@ -614,7 +669,7 @@
           capture, handleKeydown,
           dragItem, dragSourceStatus, toasts, warningModal,
           onDragStart, onDragOver, onDragLeave, onDragEnd, onDrop,
-          executeStatusChange, showToast, showWarningModal
+          executeStatusChange, showToast, showWarningModal, togglePin
         };
       }
     });

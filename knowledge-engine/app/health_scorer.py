@@ -23,6 +23,7 @@ _WEIGHTS = {
     "stale_drafts": 1,
     "unsorted_misc": 0.5,
     "ingest_backlog": 0.2,
+    "decay_stale": 0.5,
 }
 
 _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
@@ -162,6 +163,22 @@ def calculate_health(vault_path: str) -> dict:
             "error": f"check failed: {exc}",
         }
 
+    # decay_stale
+    try:
+        decay_result = _check_decay_stale(vault_path)
+        count = decay_result["count"]
+        breakdown["decay_stale"] = decay_result
+        logger.info("calculate_health: decay_stale count=%d", count)
+    except Exception as exc:
+        logger.warning("calculate_health: decay_stale check failed: %s", exc, exc_info=True)
+        breakdown["decay_stale"] = {
+            "count": 0,
+            "weight": _WEIGHTS["decay_stale"],
+            "penalty": 0,
+            "items": [],
+            "error": f"check failed: {exc}",
+        }
+
     # pipeline_metrics (informational, does not affect score)
     try:
         backlog_items: list[dict] = breakdown["ingest_backlog"]["items"]  # type: ignore[assignment]
@@ -229,6 +246,7 @@ def _compute_score(breakdown: dict) -> tuple:
     raw -= breakdown.get("stale_drafts", {}).get("count", 0) * 1
     raw -= breakdown.get("unsorted_misc", {}).get("count", 0) * 0.5
     raw -= breakdown.get("ingest_backlog", {}).get("count", 0) * 0.2
+    raw -= breakdown.get("decay_stale", {}).get("penalty", 0)
     raw -= breakdown.get("description_coverage", {}).get("penalty", 0)
 
     score = int(max(0, min(100, raw)))
@@ -593,6 +611,60 @@ def _check_ingest_backlog(vault_path: str) -> list:
         len(backlog),
     )
     return backlog
+
+
+def _check_decay_stale(vault_path: str) -> dict:
+    logger.info("_check_decay_stale: starting, vault_path=%s", vault_path)
+
+    vault = Path(vault_path)
+    domains = vault_paths.all_domains()
+    weight = _WEIGHTS["decay_stale"]
+    archive_items: list[dict] = []
+    scanned = 0
+
+    for domain in domains:
+        for artifact_type in ("ideas", "tasks", "epics"):
+            artifact_dir = vault / "wiki" / "domains" / domain / artifact_type
+            if not artifact_dir.is_dir():
+                continue
+
+            for md_file in artifact_dir.iterdir():
+                if not md_file.is_file() or md_file.suffix.lower() != ".md":
+                    continue
+
+                scanned += 1
+
+                try:
+                    metadata, _body = read_frontmatter(md_file)
+                except Exception as exc:
+                    logger.warning("_check_decay_stale: cannot read %s: %s", md_file, exc)
+                    continue
+
+                tier = metadata.get("tier", "")
+                if isinstance(tier, str) and tier.strip().lower() == "archive":
+                    rel_path = md_file.relative_to(vault).as_posix()
+                    relevance = metadata.get("relevance", 0.05)
+                    if not isinstance(relevance, (int, float)):
+                        relevance = 0.05
+                    archive_items.append({
+                        "file": rel_path,
+                        "tier": "archive",
+                        "relevance": relevance,
+                    })
+
+    count = len(archive_items)
+    result = {
+        "count": count,
+        "weight": weight,
+        "penalty": count * weight,
+        "items": archive_items[:10],
+    }
+
+    logger.info(
+        "_check_decay_stale: completed, scanned=%d archive_count=%d penalty=%.1f",
+        scanned, count, result["penalty"],
+    )
+    return result
 
 
 def _calculate_pipeline_metrics(vault_path: str, ingest_backlog: list[dict]) -> dict:
