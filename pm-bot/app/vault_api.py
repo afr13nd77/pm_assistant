@@ -18,13 +18,13 @@ Uses domain-based vault structure:
 import json
 import logging
 import os
-from typing import Any
 import re
 import threading
 import time as _time
 import urllib.parse
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import requests
 import yaml

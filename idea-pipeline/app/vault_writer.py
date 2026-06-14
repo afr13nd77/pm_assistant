@@ -64,7 +64,7 @@ def write_input(
         "source_file": source_file,
         "tags": ["pipeline", "input"],
     }
-    post = frontmatter.Post(text, **metadata)
+    post = frontmatter.Post(text, handler=None, **metadata)
     content = frontmatter.dumps(post)
 
     filepath = vault_paths.raw_ideas() / filename
@@ -171,7 +171,7 @@ def write_epic(
         "total_story_points": total_story_points,
         "tags": ["pipeline", "epic"],
     }
-    post = frontmatter.Post(body, **metadata)
+    post = frontmatter.Post(body, handler=None, **metadata)
     content = frontmatter.dumps(post)
 
     filepath = vault_paths.wiki_domain_dir(domain, "epics") / filename
@@ -215,7 +215,7 @@ def write_tasks(
             "depends_on": depends_on,
             "tags": ["pipeline", "task"],
         }
-        post = frontmatter.Post(body, **metadata)
+        post = frontmatter.Post(body, handler=None, **metadata)
         content = frontmatter.dumps(post)
 
         filename = f"{today}-{clean_slug}-task-{idx:02d}.md"
