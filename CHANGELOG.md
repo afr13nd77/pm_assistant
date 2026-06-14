@@ -5,6 +5,21 @@
 
 ---
 
+## 14.06.2026 — CI green: mypy + ruff (29 файлов)
+
+### BL-131: Зелёный CI — устранение всех ошибок типизации и линта
+- **mypy**: 253 ошибки в 16 файлах устранены
+  - `knowledge-engine`: type narrowing для YAML/JSON данных (dict union → dict[str, Any]), Optional params, fcntl type:ignore
+  - `pm-bot`: assert-narrowing для nullable Update properties (182 ошибки в handlers.py), Any type fix, variable scope fix
+  - `idea-pipeline`: orchestrator null guards (pipeline_run → None check), TextBlock isinstance check, frontmatter.Post handler arg
+- **ruff**: 26 lint-ошибок устранены (unused imports, undefined names, complex imports)
+- **Тесты**: check_unsorted_misc обновлены под wikilink-логику (BL-118), все 30+ тестов pass
+- **GitHub Actions CI**: lint + typecheck + test matrix зелёные
+- **Pre-commit hook**: ruff --fix срабатывает автоматически
+- Затронуты компоненты: pm-bot, knowledge-engine, idea-pipeline, shared (29 файлов изменено)
+
+---
+
 ## 14.06.2026 — pm-bot 1.9.0, knowledge-engine 1.8.0, idea-pipeline 1.1.2
 
 ### BL-126 + BL-130: Дедупликация + декаплинг (closed)

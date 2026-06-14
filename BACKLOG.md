@@ -273,6 +273,7 @@
 | ~~BL-126~~ | ~~Дедупликация кода + конфигурируемость~~ | ~~pm-bot, knowledge-engine, idea-pipeline~~ | ✅ **Закрыто 14.06.2026.** shared/ модуль (6 файлов, 1283 строки): llm_client, file_writer, vault_paths, domain_config, frontmatter_utils, settings. settings.yaml централизованная конфигурация. KE HTTP API (18 эндпоинтов, api.py 618 строк). ke_client.py HTTP-клиент (233 строки). Rate limiter для Telegram. SQLite volume (pm-bot-data). Удалено 10 дубликатов (-2298 строк). Объединено с BL-130. Спека: docs/dedup-and-config/. |
 | BL-127 | Onboarding-док и бэкап-стратегия | инфраструктура | Bus factor = 1: описать систему целиком (vault + сервисы + интеграции), процедуру восстановления, бэкап vault'а (git). Аудит: Б-6 |
 | ~~BL-130~~ | ~~Декаплинг pm-bot и knowledge-engine~~ | ~~инфраструктура~~ | ✅ **Закрыто 14.06.2026.** pm-bot больше не копирует код KE. COPY knowledge-engine удалён из Dockerfile. 21 subprocess.run → ke_client HTTP-вызовы. KE API на порту 8001 (serve + watch). Объединено с BL-126. |
+| ~~BL-131~~ | ~~CI green: mypy + ruff~~ | ~~инфраструктура~~ | ✅ **Реализовано 14.06.2026.** Устранены все ошибки mypy (253 ошибки в 16 файлах) и ruff lint (26 ошибок) по всем компонентам. KE: type narrowing для YAML/JSON данных, Optional params, fcntl type:ignore. pm-bot: assert-narrowing для nullable Update properties (182 ошибки в handlers.py), Any type fix, variable scope fix. idea-pipeline: orchestrator null guards, TextBlock isinstance, frontmatter.Post handler arg. Тесты check_unsorted_misc обновлены под wikilink-логику. |
 
 ---
 
@@ -280,9 +281,9 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 72 | BL-01..BL-08, BL-11..BL-18, BL-25..BL-29, BL-31..BL-34, BL-40..BL-57, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-109, BL-114..BL-120, BL-122..BL-126, BL-130 |
+| ✅ Реализовано | 73 | BL-01..BL-08, BL-11..BL-18, BL-25..BL-29, BL-31..BL-34, BL-40..BL-57, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-109, BL-114..BL-120, BL-122..BL-126, BL-130, BL-131 |
 | ✅ Баги исправлены | 24 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129 |
 | Идея | 29 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-24, BL-30, BL-35..BL-39, BL-58..BL-65, BL-70..BL-73, BL-81, BL-100, BL-110..BL-113 |
 | Аудит 10.06.2026 | 1 | BL-127 (P2) |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **129** | |
+| **Итого** | **130** | |
