@@ -426,39 +426,43 @@ class TestCheckStaleDrafts:
 # ---------------------------------------------------------------------------
 
 class TestCheckUnsortedMisc:
-    def test_old_misc_file_reported(self, tmp_path):
+    def test_unreferenced_misc_file_reported(self, tmp_path):
+        """A misc file with no wikilink reference from wiki/ is reported."""
         linter = _import_linter(tmp_path)
         misc_dir = tmp_path / "raw" / "inbound" / "misc"
         misc_dir.mkdir(parents=True, exist_ok=True)
         old_file = misc_dir / "old-note.txt"
         old_file.write_text("hello", encoding="utf-8")
-        _set_mtime_days_ago(old_file, 10)
 
         result = linter.check_unsorted_misc(str(tmp_path))
 
         assert len(result) == 1
-        item = result[0]
-        assert item["days_old"] >= 10
-        assert "old-note.txt" in item["file"]
+        assert "old-note.txt" in result[0]["file"]
+        assert result[0]["name"] == "old-note.txt"
+        assert "days_old" not in result[0]
 
-    def test_recent_misc_file_not_reported(self, tmp_path):
+    def test_referenced_misc_file_not_reported(self, tmp_path):
+        """A misc file referenced via wikilink from wiki/ is NOT reported."""
         linter = _import_linter(tmp_path)
         misc_dir = tmp_path / "raw" / "inbound" / "misc"
         misc_dir.mkdir(parents=True, exist_ok=True)
         new_file = misc_dir / "new-note.txt"
         new_file.write_text("hello", encoding="utf-8")
-        _set_mtime_days_ago(new_file, 2)
+        # Create a wiki file that references this misc file by stem
+        wiki_file = tmp_path / "wiki" / "domains" / "test" / "ref.md"
+        wiki_file.parent.mkdir(parents=True, exist_ok=True)
+        wiki_file.write_text("See [[new-note]]", encoding="utf-8")
 
         result = linter.check_unsorted_misc(str(tmp_path))
         assert result == []
 
-    def test_exactly_7_days_old_is_reported(self, tmp_path):
+    def test_unreferenced_misc_file_always_reported(self, tmp_path):
+        """Any misc file without a wikilink reference is reported regardless of age."""
         linter = _import_linter(tmp_path)
         misc_dir = tmp_path / "raw" / "inbound" / "misc"
         misc_dir.mkdir(parents=True, exist_ok=True)
         f = misc_dir / "boundary.txt"
         f.write_text("data", encoding="utf-8")
-        _set_mtime_days_ago(f, 7)
 
         result = linter.check_unsorted_misc(str(tmp_path))
         assert len(result) == 1
