@@ -345,7 +345,7 @@ html, body {
 /* ── Card-clip (base layout) ── */
 .card-clip {
   position: relative;
-  padding: 20px;
+  padding: 20px 20px 34px;
   cursor: pointer;
   transition: all 0.3s;
   overflow: hidden;
@@ -1052,6 +1052,23 @@ html, body {
 .card-corner-magenta { color: var(--magenta); }
 .card-corner-amber   { color: var(--amber); }
 .card-corner-green   { color: var(--green); }
+
+/* ── Pin button (structural positioning — always loaded) ── */
+.pin-btn {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  z-index: 5;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 5px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  filter: grayscale(1);
+}
 
 /* ---- Color utilities (Phase 0: inline style elimination) ---- */
 
