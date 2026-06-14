@@ -6,7 +6,7 @@ from datetime import date
 from pathlib import Path
 
 import requests
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
 from shared import vault_paths
@@ -64,6 +64,7 @@ def _is_allowed(update: Update) -> bool:
     if ALLOWED_CHAT_ID == 0:
         # Режим первого запуска — выводим chat_id и блокируем
         return False
+    assert update.effective_chat is not None
     return update.effective_chat.id == ALLOWED_CHAT_ID
 
 def _run_enrichment(filepath):
@@ -155,6 +156,8 @@ def _split_message(text: str, limit: int = 4096) -> list[str]:
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    assert update.effective_chat is not None
+    assert update.message is not None
     chat_id = update.effective_chat.id
     if ALLOWED_CHAT_ID == 0:
         await update.message.reply_text(
@@ -187,28 +190,38 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
+    assert update.message is not None
+    assert context.user_data is not None
     context.user_data["mode"] = "idea"
     await update.message.reply_text("Пиши идею 👇")
 
 async def handle_jira(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
+    assert update.message is not None
+    assert context.user_data is not None
     context.user_data["mode"] = "jira"
     await update.message.reply_text("Опиши задачу для Jira 👇")
 
 async def handle_daily(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
+    assert update.message is not None
+    assert context.user_data is not None
     context.user_data["mode"] = "daily"
     await update.message.reply_text("Пиши дневную заметку 👇")
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    assert update.effective_chat is not None
+    assert update.message is not None
+    assert context.user_data is not None
     if not _is_allowed(update):
         chat_id = update.effective_chat.id
         await update.message.reply_text(f"Доступ закрыт. Твой chat_id: {chat_id}")
         return
 
     text = update.message.text
+    assert text is not None
     mode = context.user_data.get("mode", "idea")
     context.user_data["mode"] = "idea"  # сброс после использования
 
@@ -267,6 +280,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_synthesize(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
+    assert update.message is not None
     await update.message.reply_text("⏳ Запускаю синтез...")
     logger.info("Starting synthesis via knowledge-engine")
 
@@ -294,6 +308,7 @@ async def handle_synthesize(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_fetch_meetings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
+    assert update.message is not None
     await update.message.reply_text("Проверяю почту на новые транскрибации...")
     logger.info("Manual fetch_meetings triggered via Telegram")
 
@@ -325,6 +340,8 @@ async def handle_fetch_meetings(update: Update, context: ContextTypes.DEFAULT_TY
 async def handle_jira_sync(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
+    assert update.effective_chat is not None
+    assert update.message is not None
     await update.message.reply_text("⏳ Синхронизирую с Jira...")
     logger.info("Manual jira_sync triggered via Telegram: chat_id=%s", update.effective_chat.id)
 
@@ -354,6 +371,8 @@ async def handle_jira_sync(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_jira_import(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
+    assert update.effective_chat is not None
+    assert update.message is not None
 
     key = " ".join(context.args) if context.args else ""
     if not key:
@@ -399,6 +418,8 @@ async def handle_jira_create(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """
     if not _is_allowed(update):
         return
+    assert update.effective_chat is not None
+    assert update.message is not None
 
     if not context.args or len(context.args) != 2:
         await update.message.reply_text(
@@ -458,12 +479,16 @@ MAX_VOICE_DURATION = 600
 
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    assert update.effective_chat is not None
+    assert update.message is not None
+    assert context.user_data is not None
     if not _is_allowed(update):
         chat_id = update.effective_chat.id
         await update.message.reply_text(f"Доступ закрыт. Твой chat_id: {chat_id}")
         return
 
     voice = update.message.voice
+    assert voice is not None
 
     if voice.duration > MAX_VOICE_DURATION:
         logger.warning(f"Голосовое слишком длинное: {voice.duration}s (макс {MAX_VOICE_DURATION}s)")
@@ -561,6 +586,8 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_pipeline(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
+    assert update.effective_chat is not None
+    assert update.message is not None
 
     text = " ".join(context.args) if context.args else ""
     if not text:
@@ -590,6 +617,8 @@ async def handle_pipeline(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_pipeline_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
+    assert update.effective_chat is not None
+    assert update.message is not None
 
     file_path = " ".join(context.args) if context.args else ""
     if not file_path:
@@ -619,6 +648,7 @@ async def handle_pipeline_file(update: Update, context: ContextTypes.DEFAULT_TYP
 async def handle_pipeline_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
+    assert update.message is not None
 
     pipeline_id = context.args[0] if context.args else None
     logger.info("Pipeline status requested: pipeline_id=%s", pipeline_id)
@@ -657,6 +687,7 @@ async def handle_pipeline_status(update: Update, context: ContextTypes.DEFAULT_T
 async def handle_pipeline_resume(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
+    assert update.message is not None
 
     if not context.args or len(context.args) < 2:
         await update.message.reply_text(
@@ -704,6 +735,8 @@ def _pluralize_artifact(n: int) -> str:
 async def handle_domain(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
+    assert update.effective_chat is not None
+    assert update.message is not None
 
     args = context.args or []
 
@@ -783,6 +816,8 @@ async def handle_domain(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_lint(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
+    assert update.effective_user is not None
+    assert update.message is not None
     logger.info("handle_lint: user=%s", update.effective_user.id)
     await update.message.reply_text("🔍 Запускаю проверку vault...")
 
@@ -845,6 +880,8 @@ async def handle_lint(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
+    assert update.effective_user is not None
+    assert update.message is not None
     logger.info("handle_status: user=%s", update.effective_user.id)
     await update.message.reply_text("📊 Собираю статус vault...")
 
@@ -901,6 +938,8 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_rebuild_index(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
+    assert update.effective_chat is not None
+    assert update.message is not None
 
     args = context.args or []
     domain = args[0] if args else None
@@ -937,16 +976,20 @@ async def handle_rebuild_index(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def _handle_pipeline_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    assert update.callback_query is not None
+    assert context.chat_data is not None
     query = update.callback_query
     await query.answer()  # acknowledge the callback
 
-    msg_id = query.message.message_id
-    chat_id = query.message.chat_id
+    assert isinstance(query.message, Message)
+    msg: Message = query.message
+    msg_id = msg.message_id
+    chat_id = msg.chat.id
 
     if query.data == "pipeline":
         file_path = context.chat_data.pop(f"pipeline_file:{msg_id}", None)
         if not file_path:
-            await query.message.reply_text("⚠️ Не удалось найти файл идеи. Попробуй /pipeline_file")
+            await msg.reply_text("⚠️ Не удалось найти файл идеи. Попробуй /pipeline_file")
             # Remove keyboard
             await query.edit_message_reply_markup(reply_markup=None)
             return
@@ -960,7 +1003,7 @@ async def _handle_pipeline_callback(update: Update, context: ContextTypes.DEFAUL
                 notify_chat_id=str(chat_id),
             )
             await query.edit_message_reply_markup(reply_markup=None)
-            await query.message.reply_text(
+            await msg.reply_text(
                 f"🚀 Pipeline запущен\n"
                 f"ID: `{result.get('pipeline_id', '')}`\n"
                 f"Уведомлю по завершении.",
@@ -973,19 +1016,21 @@ async def _handle_pipeline_callback(update: Update, context: ContextTypes.DEFAUL
             await query.edit_message_reply_markup(reply_markup=None)
             error_msg = str(e)
             if "409" in error_msg or "already running" in error_msg.lower():
-                await query.message.reply_text("⚠️ Другой pipeline уже выполняется. Попробуй позже.")
+                await msg.reply_text("⚠️ Другой pipeline уже выполняется. Попробуй позже.")
             else:
-                await query.message.reply_text(f"❌ Не удалось запустить pipeline: {e}")
+                await msg.reply_text(f"❌ Не удалось запустить pipeline: {e}")
 
     elif query.data == "skip_pipeline":
         logger.info("Pipeline skipped via inline: chat_id=%s, msg_id=%s", chat_id, msg_id)
         context.chat_data.pop(f"pipeline_file:{msg_id}", None)
         await query.edit_message_reply_markup(reply_markup=None)
-        await query.message.reply_text("👌 Ок, идея сохранена.")
+        await msg.reply_text("👌 Ок, идея сохранена.")
 
 
 async def handle_test_enrichment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Manually trigger enrichment reminder check (dev/test only)."""
+    assert update.effective_chat is not None
+    assert update.message is not None
     logger.info("/test_enrichment command received from chat_id=%s", update.effective_chat.id)
     if not _is_allowed(update):
         logger.warning("/test_enrichment: unauthorized access from chat_id=%s", update.effective_chat.id)
@@ -1008,6 +1053,8 @@ async def handle_progress(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /progress [DD.MM.YYYY] — send daily dev report from vault."""
     if not _is_allowed(update):
         return
+    assert update.effective_chat is not None
+    assert update.message is not None
 
     from datetime import datetime as _dt
 
@@ -1114,6 +1161,8 @@ def _find_latest_report(reports_dir, suffix):
 async def handle_ingest(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update):
         return
+    assert update.effective_chat is not None
+    assert update.message is not None
     await update.message.reply_text("Обрабатываю клиппинги...")
     logger.info("handle_ingest: triggered, chat_id=%s", update.effective_chat.id)
 

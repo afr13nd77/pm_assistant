@@ -18,6 +18,7 @@ Uses domain-based vault structure:
 import json
 import logging
 import os
+from typing import Any
 import re
 import threading
 import time as _time
@@ -55,7 +56,7 @@ class _VaultCache:
 
     def __init__(self, ttl_seconds: float = 5.0):
         self._ttl = ttl_seconds
-        self._store: dict[str, tuple[float, any]] = {}
+        self._store: dict[str, tuple[float, Any]] = {}
 
     def get(self, key: str):
         entry = self._store.get(key)
@@ -1190,14 +1191,15 @@ def capture_note(req: CaptureRequest):
             from app.obsidian_writer import write_jira_draft
 
             logger.info("POST /api/v1/capture — processing %s via Claude", req.type)
+            jira_content: str
             try:
-                content = process_jira_ticket(req.text)
-                logger.info("POST /api/v1/capture — Claude returned %d chars", len(content))
+                jira_content = process_jira_ticket(req.text)
+                logger.info("POST /api/v1/capture — Claude returned %d chars", len(jira_content))
             except Exception as llm_err:
                 logger.warning("POST /api/v1/capture — Claude API failed, saving raw draft: %s", llm_err)
-                content = _fallback_jira_content(req.text)
+                jira_content = _fallback_jira_content(req.text)
 
-            filepath = write_jira_draft(content)
+            filepath = write_jira_draft(jira_content)
             logger.info("POST /api/v1/capture — saved draft to %s", filepath)
             _cache.invalidate()
 
@@ -1216,7 +1218,10 @@ def capture_note(req: CaptureRequest):
             filepath.name,
             relative_path,
         )
-        response_content = json.dumps(content, ensure_ascii=False) if isinstance(content, dict) else content
+        if req.type == "idea":
+            response_content = json.dumps(content, ensure_ascii=False) if isinstance(content, dict) else str(content)
+        else:
+            response_content = jira_content
         return CaptureResponse(
             filename=filepath.name,
             path=relative_path,

@@ -44,7 +44,9 @@ class PipelineClaudeClient:
                     timeout=current_timeout,
                 )
                 latency = time.monotonic() - started_at
-                output_text = response.content[0].text
+                block = response.content[0]
+                assert isinstance(block, anthropic.types.TextBlock)
+                output_text = block.text
                 logger.info(
                     "Claude call succeeded: model=%s, output_len=%d, latency=%.2fs",
                     model,
@@ -92,7 +94,9 @@ class PipelineClaudeClient:
                         timeout=current_timeout,
                     )
                     latency = time.monotonic() - started_at
-                    output_text = response.content[0].text
+                    block = response.content[0]
+                    assert isinstance(block, anthropic.types.TextBlock)
+                    output_text = block.text
                     logger.info(
                         "Claude call succeeded after timeout retry: model=%s, "
                         "output_len=%d, latency=%.2fs",

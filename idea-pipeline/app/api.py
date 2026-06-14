@@ -81,6 +81,8 @@ async def run_pipeline(
     )
 
     if request.file_path is not None:
+        if _vault_path is None:
+            raise HTTPException(status_code=503, detail="Vault path not configured")
         full_path = _validate_file_path(request.file_path, _vault_path)
         input_text = full_path.read_text(encoding="utf-8")
         input_type = "file"
@@ -116,6 +118,9 @@ async def run_pipeline(
         domain=domain,
         source_file=source_file,
     )
+
+    if _orchestrator is None:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
 
     if _orchestrator.is_running:
         logger.warning(
@@ -233,6 +238,9 @@ async def resume_pipeline(
         raw_dir = vault_paths.raw_ideas()
         input_path = raw_dir / f"{today}-{slug}-input.md"
         input_text = input_path.read_text(encoding="utf-8") if input_path.exists() else ""
+
+    if _orchestrator is None:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
 
     if _orchestrator.is_running:
         logger.warning(

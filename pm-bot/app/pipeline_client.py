@@ -69,7 +69,7 @@ def resume_pipeline(pipeline_id: str, start_from: str) -> dict:
 def list_pipelines(limit: int = 20, status: str | None = None) -> dict:
     """List pipeline runs. Returns API response dict."""
     url = f"{PIPELINE_API_URL}/pipeline/"
-    params = {"limit": limit}
+    params: dict[str, int | str] = {"limit": limit}
     if status:
         params["status"] = status
 
