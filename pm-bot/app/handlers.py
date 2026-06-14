@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import re
@@ -10,13 +9,14 @@ import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
-from . import ke_client
 from shared import vault_paths
+from shared.vault_paths import VAULT_PATH
+
+from . import ke_client
 from .claude_client import process_daily, process_idea, process_jira_ticket
 from .obsidian_writer import write_daily, write_idea, write_jira_draft
 from .rate_limiter import TelegramRateLimiter
 from .stt import transcribe
-from shared.vault_paths import VAULT_PATH
 
 _rate_limiter = TelegramRateLimiter()
 

@@ -225,10 +225,10 @@ def sync_daily_jira_keys(content: str, vault_path: str) -> dict:
     }
     logger.info(
         "sync_daily_jira_keys: completed: keys=%d, missing=%d, imported=%d, failed=%d",
-        len(summary["keys"]),
-        len(summary["missing"]),
-        len(summary["imported"]),
-        len(summary["failed"]),
+        len(keys),
+        len(missing),
+        len(imported),
+        len(failed),
     )
     return summary
 

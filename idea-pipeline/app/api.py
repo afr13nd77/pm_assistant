@@ -5,7 +5,6 @@ from typing import Optional
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from idea_pipeline import vault_writer
-from shared import vault_paths
 from idea_pipeline.auth import ApiKeyMiddleware
 from idea_pipeline.claude_client import PipelineClaudeClient
 from idea_pipeline.config import load_config
@@ -21,6 +20,8 @@ from idea_pipeline.models import (
 from idea_pipeline.orchestrator import PipelineOrchestrator
 from idea_pipeline.state import PipelineStore
 from slugify import slugify
+
+from shared import vault_paths
 
 logger = logging.getLogger(__name__)
 

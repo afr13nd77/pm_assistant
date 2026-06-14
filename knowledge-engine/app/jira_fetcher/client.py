@@ -56,9 +56,9 @@ def _get_config() -> tuple[str, str]:
 def _make_request(
     url: str,
     headers: dict,
-    params: dict = None,
+    params: dict | None = None,
     method: str = "GET",
-    json_body: dict = None,
+    json_body: dict | None = None,
 ) -> dict | list:
     """
     Perform an HTTP request with one retry on connection error or 5xx response.
@@ -229,6 +229,7 @@ def search(
         )
 
         data = _make_request(url, headers, params)
+        assert isinstance(data, dict)
 
         issues = data.get("issues", [])
         total = data.get("total", 0)
@@ -273,6 +274,7 @@ def get_issue(key: str) -> dict:
     url = f"{jira_url}/rest/api/2/issue/{key}"
 
     data = _make_request(url, headers, {})
+    assert isinstance(data, dict)
 
     logger.info("get_issue: successfully fetched issue key=%s", key)
     return data
@@ -307,6 +309,7 @@ def create_issue(payload: dict) -> dict:
         logger.error("create_issue: failed to create issue")
         raise
 
+    assert isinstance(data, dict)
     logger.info("[jira-client] created issue %s", data["key"])
     return data
 
@@ -366,6 +369,7 @@ def get_project_issue_types(project_key: str) -> list[dict]:
     url = f"{jira_url}/rest/api/2/project/{project_key}"
 
     result = _make_request(url, headers)
+    assert isinstance(result, dict)
 
     raw_types = result.get("issueTypes", [])
     issue_types = [

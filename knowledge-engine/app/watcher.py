@@ -7,8 +7,9 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers.polling import PollingObserver
 
 from shared import vault_paths
-from .enricher import enrich
 from shared.frontmatter_utils import read_frontmatter
+
+from .enricher import enrich
 from .status_migrator import VALID_STATUSES
 
 logger = logging.getLogger(__name__)

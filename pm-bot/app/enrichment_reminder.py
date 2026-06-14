@@ -141,8 +141,9 @@ def _scan_all_ideas() -> list[dict]:
         List of dicts with keys: path, filename, id, title, status,
         readiness, empty_sections, domain.
     """
-    from .vault_api import _calculate_readiness, parse_note
     from shared.vault_paths import all_domains, wiki_domain_dir
+
+    from .vault_api import _calculate_readiness, parse_note
 
     results: list[dict] = []
     domains = all_domains()
@@ -198,8 +199,9 @@ async def run_enrichment_check(bot, chat_id: int) -> None:
     """
     logger.info("run_enrichment_check: start")
     try:
-        from .enrichment_db import get_reminded_today, init_db, record_reminder
         from shared.vault_paths import VAULT_PATH
+
+        from .enrichment_db import get_reminded_today, init_db, record_reminder
 
         db_path = VAULT_PATH / ".enrichment-reminders.db"
         init_db(db_path)

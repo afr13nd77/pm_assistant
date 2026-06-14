@@ -14,9 +14,10 @@ from pathlib import Path
 
 import requests
 
+from shared.file_writer import atomic_write
+
 from .. import claude_client
 from ..enricher import enrich
-from shared.file_writer import atomic_write
 from .classifier import extract_type, make_daily_filename, make_filename, route_protocol
 from .imap_client import EmailAttachment, IMAPError, fetch_emails
 from .state import State

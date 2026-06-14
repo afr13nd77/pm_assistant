@@ -9,10 +9,10 @@ import shutil
 from collections import defaultdict
 from pathlib import Path
 
-from shared import domain_config
-from shared import vault_paths
-from .domain_manager import update_domain_index, append_domain_log, _ARTIFACT_TYPES
+from shared import domain_config, vault_paths
 from shared.frontmatter_utils import read_frontmatter, update_frontmatter
+
+from .domain_manager import _ARTIFACT_TYPES, append_domain_log, update_domain_index
 
 logger = logging.getLogger(__name__)
 
@@ -325,13 +325,13 @@ def batch_reclassify(
     moved = 0
     failed = 0
     errors: list[str] = []
-    by_domain: dict[str, int] = defaultdict(int)
+    by_domain_actual: dict[str, int] = defaultdict(int)
 
     for item in to_move:
         result = move_artifact(item["file"], item["target_domain"])
         if result["status"] == "ok":
             moved += 1
-            by_domain[item["target_domain"]] += 1
+            by_domain_actual[item["target_domain"]] += 1
             logger.info(
                 f"batch_reclassify: moved {item['filename']} -> "
                 f"{item['target_domain']}"
@@ -353,7 +353,7 @@ def batch_reclassify(
         "failed": failed,
         "errors": errors,
         "unmatched": len(unmatched),
-        "by_domain": dict(by_domain),
+        "by_domain": dict(by_domain_actual),
     }
 
 

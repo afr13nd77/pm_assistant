@@ -8,6 +8,7 @@ from pathlib import Path
 from shared import vault_paths
 from shared.file_writer import atomic_write
 from shared.frontmatter_utils import read_frontmatter
+
 from .linter import check_broken_links, check_orphan_pages, check_stale_drafts, check_unsorted_misc
 
 logger = logging.getLogger(__name__)
@@ -163,7 +164,8 @@ def calculate_health(vault_path: str) -> dict:
 
     # pipeline_metrics (informational, does not affect score)
     try:
-        pipeline_metrics = _calculate_pipeline_metrics(vault_path, breakdown["ingest_backlog"]["items"])
+        backlog_items: list[dict] = breakdown["ingest_backlog"]["items"]  # type: ignore[assignment]
+        pipeline_metrics = _calculate_pipeline_metrics(vault_path, backlog_items)
         logger.info("calculate_health: pipeline_metrics ratio=%.1f lag=%s",
                      pipeline_metrics["ingest_ratio"],
                      pipeline_metrics.get("avg_lag_hours", "N/A"))
@@ -262,8 +264,9 @@ def save_history(vault_path: str, score_entry: dict) -> None:
     today = datetime.now(timezone.utc).date()
     cutoff = (today - timedelta(days=_HISTORY_TTL_DAYS)).isoformat()
 
-    entries = [e for e in history["entries"] if e.get("date", "") >= cutoff]
-    logger.info("save_history: TTL cleanup removed %d old entries", len(history["entries"]) - len(entries))
+    history_entries: list[dict] = history["entries"]  # type: ignore[assignment]
+    entries = [e for e in history_entries if e.get("date", "") >= cutoff]
+    logger.info("save_history: TTL cleanup removed %d old entries", len(history_entries) - len(entries))
 
     entry_date = score_entry.get("date", "")
     entries = [e for e in entries if e.get("date") != entry_date]

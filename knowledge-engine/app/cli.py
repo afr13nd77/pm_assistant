@@ -220,6 +220,7 @@ def main():
 
         if args.domain_command == "create":
             from shared import domain_config as _dc
+
             from .domain_manager import create_domain
             try:
                 path = create_domain(args.name)
@@ -332,8 +333,9 @@ def main():
     elif args.command == "rebuild-index":
         from shared import vault_paths as _vp
         _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
-        from .domain_manager import _ARTIFACT_TYPES, update_domain_index
         from shared.vault_paths import all_domains
+
+        from .domain_manager import _ARTIFACT_TYPES, update_domain_index
 
         if args.domain:
             target_domains = [args.domain]
@@ -626,10 +628,12 @@ def main():
 
     elif args.command == "serve":
         import pathlib
+
         from shared import vault_paths as _vp
         vault_path = getattr(args, "vault", None) or os.getenv("VAULT_PATH", "/vault")
         _vp.VAULT_PATH = pathlib.Path(vault_path)
         import uvicorn
+
         from .api import app
         logger.info("KE API server starting on %s:%s", args.host, args.port)
         uvicorn.run(app, host=args.host, port=args.port, log_level="info")

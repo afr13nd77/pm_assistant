@@ -13,8 +13,9 @@ from datetime import datetime
 from pathlib import Path
 
 from shared import frontmatter_utils, vault_paths
-from ..domain_manager import append_domain_log, update_domain_index
 from shared.file_writer import atomic_write
+
+from ..domain_manager import append_domain_log, update_domain_index
 from ..notifier import send_telegram
 from . import client as jira_client
 from . import state as sync_state

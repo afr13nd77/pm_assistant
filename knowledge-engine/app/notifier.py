@@ -6,7 +6,7 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-def send_telegram(message: str, bot_token: str = None, chat_id: str = None, parse_mode: str = "Markdown") -> bool:
+def send_telegram(message: str, bot_token: str | None = None, chat_id: str | None = None, parse_mode: str | None = "Markdown") -> bool:
     bot_token = bot_token or os.getenv("BOT_TOKEN")
     chat_id = chat_id or os.getenv("ALLOWED_CHAT_ID")
 

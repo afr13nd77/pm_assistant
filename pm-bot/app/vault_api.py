@@ -33,7 +33,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from shared import domain_config
-from . import ke_client
 from shared.vault_paths import (
     VAULT_PATH,
     all_domains,
@@ -41,6 +40,8 @@ from shared.vault_paths import (
     wiki_meetings,
     wiki_reports,
 )
+
+from . import ke_client
 
 logger = logging.getLogger(__name__)
 

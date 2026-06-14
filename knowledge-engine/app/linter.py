@@ -5,6 +5,7 @@ from pathlib import Path
 
 from shared import vault_paths
 from shared.frontmatter_utils import read_frontmatter
+
 from .status_migrator import VALID_STATUSES
 
 logger = logging.getLogger(__name__)
@@ -493,7 +494,7 @@ def check_unsorted_misc(vault_path: str) -> list[dict]:
 
 def check_invalid_idea_statuses(vault_path: str) -> list[dict]:
     logger.info("check_invalid_idea_statuses: starting scan")
-    results = []
+    results: list[dict[str, str | None]] = []
     root = Path(vault_path) / "wiki" / "domains"
     if not root.exists():
         logger.info("check_invalid_idea_statuses: wiki/domains not found, returning empty")

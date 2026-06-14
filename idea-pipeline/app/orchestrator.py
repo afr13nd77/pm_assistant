@@ -6,13 +6,14 @@ from datetime import date
 from pathlib import Path
 
 from idea_pipeline import vault_writer
-from shared import vault_paths
 from idea_pipeline.agents.analyst import AnalystAgent
 from idea_pipeline.agents.decomposer import DecomposerAgent
 from idea_pipeline.agents.pm_agent import PMAgent
 from idea_pipeline.claude_client import PipelineClaudeClient
 from idea_pipeline.config import PipelineConfig
 from idea_pipeline.state import PipelineStage, PipelineStore
+
+from shared import vault_paths
 
 logger = logging.getLogger(__name__)
 

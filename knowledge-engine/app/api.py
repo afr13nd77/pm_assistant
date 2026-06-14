@@ -329,6 +329,7 @@ def domains_create(req: DomainCreateRequest):
     )
     try:
         from shared import domain_config as _dc
+
         from .domain_manager import create_domain
 
         path = create_domain(req.name)
@@ -453,8 +454,9 @@ def status():
 def rebuild_index(req: RebuildIndexRequest):
     logger.info("API rebuild-index: domain=%s", req.domain)
     try:
-        from .domain_manager import _ARTIFACT_TYPES, update_domain_index
         from shared.vault_paths import all_domains
+
+        from .domain_manager import _ARTIFACT_TYPES, update_domain_index
 
         if req.domain:
             target_domains = [req.domain]
@@ -523,7 +525,6 @@ def ingest_clippings(req: IngestClippingsRequest):
 def health():
     logger.info("API health: calculating vault health score")
     try:
-        from datetime import datetime, timezone
 
         from .health_scorer import calculate_health, load_history
 

@@ -98,7 +98,7 @@ def decode_str(value: Optional[str]) -> str:
     return decoded
 
 
-def select_folder(imap: imaplib.IMAP4_SSL, folder: str) -> list[bytes]:
+def select_folder(imap: imaplib.IMAP4_SSL, folder: str) -> list[bytes | None]:
     """
     Select an IMAP folder, encoding the name with Modified UTF-7 if needed.
 
@@ -131,7 +131,8 @@ def select_folder(imap: imaplib.IMAP4_SSL, folder: str) -> list[bytes]:
         _, folders = imap.list()
         if folders:
             for f in folders:
-                logger.warning("  Available folder: %s", f.decode(errors="replace"))
+                if isinstance(f, bytes):
+                    logger.warning("  Available folder: %s", f.decode(errors="replace"))
     except Exception as list_err:
         logger.warning("Could not list folders: %s", list_err)
 
@@ -194,6 +195,7 @@ def _extract_txt_attachments(
             )
             continue
 
+        assert isinstance(payload, bytes)
         content = payload.decode("utf-8", errors="replace")
         logger.info(
             "Extracted .txt attachment: filename='%s', %d chars (message_id=%s)",
@@ -304,6 +306,7 @@ def fetch_emails(
                 continue
 
             raw_email = msg_data[0][1]
+            assert isinstance(raw_email, bytes)
             msg = email.message_from_bytes(raw_email)
 
             message_id = msg.get("Message-ID", "").strip()

@@ -8,6 +8,7 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 from shared import vault_paths
+
 from .claude_client import process_meeting
 from .obsidian_writer import write_meeting
 from .rate_limiter import TelegramRateLimiter

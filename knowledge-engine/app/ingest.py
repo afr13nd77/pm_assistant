@@ -10,9 +10,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from shared import vault_paths
-from .domain_manager import append_domain_log, update_domain_index
 from shared.file_writer import atomic_write, locked_append
 from shared.frontmatter_utils import read_frontmatter
+
+from .domain_manager import append_domain_log, update_domain_index
 
 logger = logging.getLogger(__name__)
 

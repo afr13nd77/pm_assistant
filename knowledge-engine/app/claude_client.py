@@ -81,3 +81,6 @@ def _call_claude(user_content: str, max_tokens: int, operation: str) -> str:
             else:
                 logger.error("_call_claude: %s failed (attempt 2): %s", operation, e)
                 raise
+
+    # Unreachable: the loop always returns or raises, but mypy cannot prove it
+    raise RuntimeError(f"_call_claude: {operation} failed after all retries")

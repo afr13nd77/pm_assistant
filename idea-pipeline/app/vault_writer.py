@@ -4,9 +4,9 @@ from datetime import date, datetime
 from pathlib import Path
 
 import frontmatter
-from shared import vault_paths
 from slugify import slugify
 
+from shared import vault_paths
 from shared.file_writer import atomic_write
 
 logger = logging.getLogger(__name__)
