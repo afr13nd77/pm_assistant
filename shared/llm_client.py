@@ -97,6 +97,11 @@ def call_with_fallback(
     """Call LLM with automatic fallback from Ollama to Claude API on failure."""
     client, model, extra_kwargs = get_client(operation)
 
+    is_ollama = model != "claude-sonnet-4-6"
+    ollama_timeout = timeout * 5 if (is_ollama and timeout) else timeout
+    if is_ollama and timeout:
+        logger.info("call_with_fallback: Ollama timeout adjusted: %ds → %ds", timeout, ollama_timeout)
+
     kwargs: dict = {
         "model": model,
         "max_tokens": max_tokens,
@@ -105,8 +110,8 @@ def call_with_fallback(
     }
     if system:
         kwargs["system"] = system
-    if timeout:
-        kwargs["timeout"] = timeout
+    if ollama_timeout:
+        kwargs["timeout"] = ollama_timeout
 
     try:
         logger.info("call_with_fallback: calling model=%s, operation=%s", model, operation)

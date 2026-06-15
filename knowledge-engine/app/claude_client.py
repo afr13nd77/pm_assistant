@@ -6,6 +6,11 @@ from shared import llm_client
 
 logger = logging.getLogger(__name__)
 
+_MIN_RESPONSE_LENGTH = {
+    "meeting_protocol": 200,
+    "synthesize": 100,
+}
+
 
 def _load_prompt(name: str) -> str:
     path = Path(__file__).parent / "prompts" / f"{name}.txt"
@@ -72,6 +77,16 @@ def _call_claude(user_content: str, max_tokens: int, operation: str) -> str:
 
             elapsed = time.time() - start
             logger.info("_call_claude: %s OK, %d chars in %.1fs", operation, len(result), elapsed)
+
+            min_length = _MIN_RESPONSE_LENGTH.get(operation, 0)
+            if min_length and len(result) < min_length:
+                msg = (
+                    f"Response too short for {operation}: "
+                    f"{len(result)} chars < {min_length} minimum"
+                )
+                logger.warning("_call_claude: %s", msg)
+                raise ValueError(msg)
+
             return result
 
         except Exception as e:
