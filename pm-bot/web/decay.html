@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ru" class="theme-matrix">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Board — Decay</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+  <script>
+  (function() {
+    try {
+      var t = localStorage.getItem('pm_theme');
+      if (t === 'light') {
+        document.documentElement.className = 'theme-light';
+        document.getElementById('theme-css').href = 'style-light.css';
+      }
+    } catch(e) {}
+  })();
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div id="app" v-cloak>
+  <app-sidebar active="decay"></app-sidebar>
+  <main class="page-content" style="overflow-y:auto; padding: 24px;">
+
+    <!-- Header -->
+    <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:20px;">
+      <h1 style="font-size:16px; font-weight:500;">Decay State Dashboard</h1>
+      <span id="generated-at" style="font-size:11px; color:var(--text-muted);"></span>
+    </div>
+
+    <!-- Empty state -->
+    <div id="empty-state" class="decay-empty-state" style="display:none;">
+      Нет артефактов для анализа. Добавьте заметки в vault.
+    </div>
+
+    <!-- Content (hidden until data loads) -->
+    <div id="decay-content" style="display:none;">
+
+      <!-- Metrics strip (4 cards) -->
+      <div class="decay-metrics">
+        <div class="decay-metric-card">
+          <p class="decay-metric-label">Всего</p>
+          <p class="decay-metric-value" id="metric-total">—</p>
+        </div>
+        <div class="decay-metric-card">
+          <p class="decay-metric-label">Active + Warm</p>
+          <p class="decay-metric-value" id="metric-active" style="color:var(--tier-active)">—</p>
+        </div>
+        <div class="decay-metric-card">
+          <p class="decay-metric-label">Cold + Archive</p>
+          <p class="decay-metric-value" id="metric-cold" style="color:var(--tier-cold)">—</p>
+        </div>
+        <div class="decay-metric-card">
+          <p class="decay-metric-label">Vault health</p>
+          <p class="decay-metric-value" id="metric-health">—</p>
+        </div>
+      </div>
+
+      <!-- Decay landscape (bubble scatter) -->
+      <p class="decay-section-label">Decay landscape — каждая точка = артефакт</p>
+      <div id="scatter-legend" class="decay-legend"></div>
+      <p style="font-size:11px; color:var(--text-muted); text-align:right; margin:0 0 8px;">верхний правый угол → forgotten gems</p>
+      <div class="decay-chart-container">
+        <canvas id="scatter-chart"></canvas>
+      </div>
+
+      <!-- Donut + Projection (2-column grid) -->
+      <div class="decay-grid">
+        <div>
+          <p class="decay-section-label">Tier distribution</p>
+          <div class="decay-donut-container">
+            <canvas id="donut-chart"></canvas>
+          </div>
+          <div id="donut-legend" class="decay-donut-legend"></div>
+        </div>
+        <div>
+          <p class="decay-section-label" style="margin-bottom:6px;">Проекция: без активности</p>
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+            <input type="range" id="projection-slider" min="0" max="30" value="0" step="1" class="decay-projection-slider">
+            <span style="font-size:13px; color:var(--text-muted); white-space:nowrap;">+<span id="projection-days">0</span> дн.</span>
+          </div>
+          <div id="projection-bars"></div>
+        </div>
+      </div>
+
+      <!-- Domain health (stacked horizontal bars) -->
+      <p class="decay-section-label">Здоровье по доменам</p>
+      <div id="domains-legend" class="decay-legend"></div>
+      <div class="decay-domains-container">
+        <canvas id="domains-chart"></canvas>
+      </div>
+
+      <!-- Forgotten gems -->
+      <p class="decay-section-label">Forgotten gems — top 5 для creative recall</p>
+      <div id="gems-container" class="decay-gems"></div>
+
+      <!-- Footer notes -->
+      <div class="decay-footer">
+        <p>Тиры: active ≤7д · warm ≤21д · cold ≤60д · archive >60д · core — защищён от decay.</p>
+        <p>Формула: strength = 1 + ln(access_count), relevance = max(0.05, 1.0 − (rate/strength) × days).</p>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Scripts -->
+<script src="api.js"></script>
+<script src="components.js"></script>
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script>
+  var app = Vue.createApp({});
+  registerComponents(app);
+  app.mount('#app');
+</script>
+<script src="decay.js"></script>
+</body>
+</html>

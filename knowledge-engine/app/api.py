@@ -727,3 +727,25 @@ def get_creative_items(count: int = 5):
     except Exception as exc:
         logger.error("API creative error: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# 23. GET /api/v1/decay/snapshot
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/decay/snapshot")
+def decay_snapshot():
+    logger.info("API decay/snapshot: start")
+    try:
+        from knowledge_engine.decay_engine import load_config, snapshot_vault
+
+        config = load_config()
+        result = snapshot_vault(_vault_path_str(), config)
+        logger.info(
+            "API decay/snapshot: completed, total=%d",
+            result.get("total", 0),
+        )
+        return result
+    except Exception as exc:
+        logger.error("API decay/snapshot error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))

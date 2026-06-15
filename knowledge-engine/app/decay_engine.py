@@ -251,6 +251,88 @@ def recalc_vault(vault_path: str, config: DecayConfig | None = None, dry_run: bo
     return {"processed": processed, "skipped": skipped, "transitions": transitions, "errors": errors}
 
 
+def snapshot_vault(vault_path: str, config: DecayConfig | None = None) -> dict:
+    logger.info(f"snapshot_vault: starting, vault_path={vault_path}")
+
+    if config is None:
+        config = load_config()
+
+    today = date.today()
+    md_files = _collect_md_files(vault_path)
+
+    items: list[dict] = []
+
+    for filepath in md_files:
+        try:
+            frontmatter, _ = read_frontmatter(filepath)
+
+            if not frontmatter:
+                continue
+
+            last_accessed_raw = (
+                frontmatter.get("last_accessed")
+                or frontmatter.get("updated")
+                or frontmatter.get("created")
+            )
+
+            if last_accessed_raw is not None:
+                last_accessed_date = _parse_date(last_accessed_raw)
+            else:
+                mtime_ts = os.path.getmtime(filepath)
+                last_accessed_date = datetime.fromtimestamp(mtime_ts).date()
+
+            if last_accessed_date is None:
+                continue
+
+            days = (today - last_accessed_date).days
+            access_count = int(frontmatter.get("access_count", 0))
+
+            if frontmatter.get("tier") == "core":
+                tier = "core"
+                relevance = 1.0
+            else:
+                artifact_type = _get_artifact_type(str(filepath), frontmatter)
+                rate = config.rates.get(artifact_type, config.default_rate)
+                relevance = round(calc_relevance(days, access_count, rate, config.floor), 2)
+                tier = calc_tier(days, config.tier_thresholds)
+
+            title = str(frontmatter.get("title", filepath.stem))
+
+            rel_path_obj = filepath.relative_to(vault_path)
+            parts = rel_path_obj.parts
+            domain = ""
+            if "domains" in parts:
+                idx = parts.index("domains")
+                if idx + 1 < len(parts):
+                    domain = parts[idx + 1]
+
+            artifact_type = _get_artifact_type(str(filepath), frontmatter)
+            rel_path = str(filepath.relative_to(vault_path)).replace("\\", "/")
+
+            items.append({
+                "filepath": rel_path,
+                "title": title,
+                "domain": domain,
+                "type": artifact_type,
+                "tier": tier,
+                "relevance": relevance,
+                "days_since_access": days,
+                "access_count": access_count,
+            })
+
+        except Exception as exc:
+            logger.warning(f"snapshot_vault: error processing {filepath}: {exc}")
+            continue
+
+    logger.info(f"snapshot_vault: completed, total={len(items)}")
+    return {
+        "total": len(items),
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "tier_thresholds": dict(config.tier_thresholds),
+        "items": items,
+    }
+
+
 def touch(filepath: str, vault_path: str, config: DecayConfig | None = None) -> dict:
     logger.info(f"touch: filepath={filepath}")
 

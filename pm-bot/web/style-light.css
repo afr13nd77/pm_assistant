@@ -71,6 +71,13 @@
   --primary-dim: rgba(14, 19, 17, 0.40);
   --primary-bg: rgba(14, 19, 17, 0.04);
   --primary-bd: rgba(14, 19, 17, 0.15);
+
+  /* Decay tier colors (theme-independent) */
+  --tier-active:  #1D9E75;
+  --tier-warm:    #EF9F27;
+  --tier-cold:    #D85A30;
+  --tier-archive: #888780;
+  --tier-core:    #378ADD;
 }
 
 /* Base Overrides */

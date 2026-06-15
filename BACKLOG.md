@@ -1,7 +1,7 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.9.0 / knowledge-engine 1.8.0 / idea-pipeline 1.1.2 / web-ui 1.15.6
-**Обновлён:** 14.06.2026 (BL-132)
+**Версии:** pm-bot 1.10.0 / knowledge-engine 1.9.0 / idea-pipeline 1.1.2 / web-ui 1.16.0
+**Обновлён:** 15.06.2026 (BL-132)
 
 ---
 
@@ -203,11 +203,11 @@
 | BL-112 | Touch при обращении | pm-bot, knowledge-engine | При использовании digest'а в контексте pm-bot → increment `access_count`, refresh `last_accessed`, promote tier на 1 ступень. Spacing effect: чем чаще обращение, тем медленнее забывание. Ref: autograph `engine.py: cmd_touch()` |
 | BL-113 | Creative recall | pm-bot, web-ui | Случайная выборка 3-5 карточек из cold/archive tier для переоткрытия забытых идей. Telegram: `/creative`. Web UI: блок "Забытые идеи" на overview.html. Ref: autograph `engine.py: cmd_creative()` |
 
-### 8.2 Decay dashboard
+### 8.2 Decay dashboard — Реализовано
 
 | # | Название | Компонент | Описание |
 |---|:---|:---|:---|
-| BL-132 | Decay state dashboard | web-ui | Интерактивный дашборд состояния базы знаний на основе decay-модели. Блоки: (1) **Decay landscape** — bubble scatter (X=дней с обращения, Y=кол-во обращений, размер=relevance, цвет=tier); ключевой паттерн — «forgotten gems» в верхнем правом углу; (2) **Tier distribution** donut с центральным счётчиком; (3) **Проекция без активности** — слайдер +30 дней, дельты по тирам; (4) **Здоровье по доменам** — stacked horizontal bars; (5) **Forgotten gems** — top-5 cold/archive с высоким access_count для creative recall. Прототип: `docs/decay-engine-dashboard/index.html`. Реализовать как страницу web-ui или встроить в overview.html; подключить к GET /api/v1/decay/recalc + GET /creative. Данные прототипа синтетические (seed 42, 275 артефактов). |
+| BL-132 | ✅ Decay state dashboard | web-ui, knowledge-engine, pm-bot | Интерактивный дашборд состояния базы знаний на основе decay-модели. 6 блоков: (1) Metrics strip (4 KPI), (2) Decay landscape — bubble scatter (Chart.js), (3) Tier distribution donut с центральным счётчиком, (4) Проекция без активности — слайдер +30 дней с дельтами, (5) Здоровье по доменам — stacked horizontal bars, (6) Forgotten gems — top-5 cold/archive. API: GET /api/v1/decay/snapshot (922 артефакта, <3с). Спека: docs/decay-engine-dashboard/ (13 задач, все done). |
 
 ### 8.3 Health scoring — Реализовано
 
@@ -287,8 +287,8 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 78 | BL-01..BL-08, BL-11..BL-18, BL-25..BL-29, BL-31..BL-34, BL-40..BL-57, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130, BL-131 |
+| ✅ Реализовано | 79 | BL-01..BL-08, BL-11..BL-18, BL-25..BL-29, BL-31..BL-34, BL-40..BL-57, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-132 |
 | ✅ Баги исправлены | 24 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129 |
-| Идея | 26 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-24, BL-30, BL-35..BL-39, BL-58..BL-65, BL-70..BL-73, BL-81, BL-100, BL-132 |
+| Идея | 25 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-24, BL-30, BL-35..BL-39, BL-58..BL-65, BL-70..BL-73, BL-81, BL-100 |
 | ❌ Удалено | 1 | BL-121 |
 | **Итого** | **131** | |

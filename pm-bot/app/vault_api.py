@@ -2283,6 +2283,27 @@ def decay_set_tier(req: DecaySetTierRequest):
 
 
 # ---------------------------------------------------------------------------
+# Decay snapshot endpoint
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/decay/snapshot")
+def get_decay_snapshot():
+    """Get full decay state snapshot via knowledge-engine."""
+    logger.info("GET /api/v1/decay/snapshot — start")
+    try:
+        result = ke_client.decay_snapshot()
+        total = result.get("total", 0) if isinstance(result, dict) else 0
+        logger.info("GET /api/v1/decay/snapshot — success, total=%d", total)
+        return result
+    except requests.RequestException as exc:
+        logger.error("GET /api/v1/decay/snapshot — ke_client failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"KE API error: {exc}")
+    except Exception as exc:
+        logger.error("GET /api/v1/decay/snapshot — error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
 # System status endpoint
 # ---------------------------------------------------------------------------
 

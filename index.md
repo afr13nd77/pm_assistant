@@ -41,6 +41,7 @@ pm_assistant/
 │   ├── unified-domain-rules/        # BL-119: requirements.md, design.md, tasks.md
 │   ├── domain-general-revision/     # BL-124 DONE: requirements.md, design.md, tasks.md
 │   ├── dedup-and-config/            # BL-126+BL-130 DONE: requirements.md, design.md, tasks.md (28 задач)
+│   ├── decay-engine-dashboard/      # BL-132 DONE: requirements.md, design.md, tasks.md (13 задач), прототип index.html
 │   └── architecture/adr/           # 4 ADR (решения по архитектуре)
 │
 ├── pm-bot/                         # Telegram-бот (capture)
@@ -60,7 +61,7 @@ pm_assistant/
 │       ├── stt.py                  # Speech-to-Text (faster-whisper, lazy import, env STT_ENABLED)
 │       ├── transcript_watcher.py   # watchdog: транскрипты .txt → Meetings/
 │       ├── vault_api.py            # FastAPI REST сервер: vault API + user-prefs API + capture + test-ollama + in-memory TTL cache
-│       ├── ke_client.py            # HTTP-клиент к KE API (18 функций, заменяет subprocess)
+│       ├── ke_client.py            # HTTP-клиент к KE API (19 функций, заменяет subprocess)
 │       ├── rate_limiter.py         # TelegramRateLimiter (token bucket, params из settings)
 │       ├── enrichment_reminder.py  # ЖЦ идей: скан по доменам, readiness %, Telegram-напоминания
 │       ├── enrichment_db.py        # SQLite: дедупликация напоминаний (cooldown 24ч, cleanup 90д)
@@ -74,9 +75,11 @@ pm_assistant/
 │       ├── dashboard.html           # домены, статистика артефактов, Jira sync status
 │       ├── roadmap.html            # roadmap с эпиками (auto-refresh 60s / manual + refresh icon)
 │       ├── timeline.html           # таймлайн фич
+│       ├── decay.html              # decay state dashboard: bubble scatter, donut, projection, domain bars, gems
+│       ├── decay.js                # логика decay dashboard: Chart.js, проекция, gems (424 строки)
 │       ├── report.html             # просмотр отчётов (marked.js для MD)
 │       ├── settings.html           # настройки (theme, refresh mode, prompts, Jira sync)
-│       ├── api.js                  # fetch-клиент к vault_api (cancellation, caching, user-prefs)
+│       ├── api.js                  # fetch-клиент к vault_api (cancellation, caching, user-prefs, decay snapshot)
 │       ├── components.js           # shared Vue 3 компоненты (sidebar, cards, drawer)
 │       ├── style.css               # базовая тема (flat)
 │       ├── style-matrix.css        # matrix тема (glow, neon)
@@ -94,7 +97,7 @@ pm_assistant/
 │       ├── __init__.py
 │       ├── __main__.py             # точка входа: python -m app
 │       ├── cli.py                  # CLI: jira-sync, jira-import, jira-create, jira-projects, jira-epics, jira-issue-types, enrich, synthesize, watch, index, lint, status
-│       ├── api.py                  # FastAPI HTTP API (18 эндпоинтов, порт 8001)
+│       ├── api.py                  # FastAPI HTTP API (19 эндпоинтов, порт 8001)
 │       ├── enricher.py             # обогащение идеи связями из vault
 │       ├── synthesizer.py          # синтез: кластеризация + сводка
 │       ├── vault_index.py          # сканирование vault, in-memory индекс

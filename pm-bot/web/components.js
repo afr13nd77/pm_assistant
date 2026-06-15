@@ -134,7 +134,8 @@ function registerComponents(app) {
           { name: 'roadmap', label: 'DEVELOPMENT', href: 'roadmap.html', icon: 'rocket_launch' },
           { name: 'board', label: 'TASKS', href: 'board.html', icon: 'task_alt' },
           { name: 'report', label: 'REPORTS', href: 'report.html', icon: 'summarize' },
-          { name: 'timeline', label: 'TIMELINE', href: 'timeline.html', icon: 'timeline' }
+          { name: 'timeline', label: 'TIMELINE', href: 'timeline.html', icon: 'timeline' },
+          { name: 'decay', label: 'DECAY', href: 'decay.html', icon: 'psychology' }
         ];
       }
     },

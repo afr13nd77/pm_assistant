@@ -17,6 +17,7 @@ from app.decay_engine import (
     init_vault,
     load_config,
     recalc_vault,
+    snapshot_vault,
     touch,
 )
 from shared.frontmatter_utils import read_frontmatter
@@ -488,3 +489,104 @@ class TestGetCreative:
 
         result = get_creative(str(tmp_path), count=3)
         assert len(result) == 3
+
+
+class TestSnapshotVault:
+    def _patch_today(self):
+        return patch("app.decay_engine.date", _FakeDate)
+
+    def test_snapshot_vault_empty(self, tmp_path):
+        result = snapshot_vault(str(tmp_path), config=DecayConfig())
+        assert result["total"] == 0
+        assert result["items"] == []
+
+    def test_snapshot_vault_basic(self, tmp_path):
+        _build_vault(tmp_path, {
+            "wiki/domains/search-engine/ideas/IDEA-001.md": {
+                "title": "Test Idea",
+                "tier": "active",
+                "relevance": 0.9,
+                "last_accessed": str(FIXED_TODAY),
+                "access_count": 5,
+            },
+            "wiki/domains/general/tasks/TASK-001.md": {
+                "title": "Test Task",
+                "tier": "warm",
+                "relevance": 0.7,
+                "last_accessed": str(FIXED_TODAY),
+                "access_count": 3,
+            },
+        })
+
+        with self._patch_today():
+            result = snapshot_vault(str(tmp_path), config=DecayConfig())
+
+        assert result["total"] == 2
+        assert len(result["items"]) == 2
+
+        expected_fields = {
+            "filepath", "title", "domain", "type", "tier",
+            "relevance", "days_since_access", "access_count",
+        }
+        for item in result["items"]:
+            assert set(item.keys()) == expected_fields
+
+    def test_snapshot_vault_core_included(self, tmp_path):
+        _build_vault(tmp_path, {
+            "wiki/domains/search-engine/ideas/IDEA-001.md": {
+                "title": "Core Idea",
+                "tier": "core",
+                "last_accessed": str(FIXED_TODAY),
+                "access_count": 2,
+            },
+        })
+
+        with self._patch_today():
+            result = snapshot_vault(str(tmp_path), config=DecayConfig())
+
+        assert result["total"] == 1
+        assert result["items"][0]["tier"] == "core"
+        assert result["items"][0]["relevance"] == 1.0
+
+    def test_snapshot_vault_no_frontmatter_skipped(self, tmp_path):
+        plain_dir = tmp_path / "wiki" / "domains" / "test" / "ideas"
+        plain_dir.mkdir(parents=True, exist_ok=True)
+        (plain_dir / "IDEA-001.md").write_text("just plain text", encoding="utf-8")
+
+        result = snapshot_vault(str(tmp_path), config=DecayConfig())
+        assert result["total"] == 0
+        assert result["items"] == []
+
+    def test_snapshot_vault_tier_thresholds(self, tmp_path):
+        result = snapshot_vault(str(tmp_path), config=DecayConfig())
+        assert "tier_thresholds" in result
+        assert "active" in result["tier_thresholds"]
+        assert "warm" in result["tier_thresholds"]
+        assert "cold" in result["tier_thresholds"]
+
+    def test_snapshot_vault_domain_extraction(self, tmp_path):
+        _build_vault(tmp_path, {
+            "wiki/domains/search-engine/ideas/IDEA-001.md": {
+                "title": "SE Idea",
+                "last_accessed": str(FIXED_TODAY),
+                "access_count": 1,
+            },
+            "wiki/meetings/MEETING-001.md": {
+                "title": "Meeting",
+                "last_accessed": str(FIXED_TODAY),
+                "access_count": 1,
+            },
+        })
+
+        with self._patch_today():
+            result = snapshot_vault(str(tmp_path), config=DecayConfig())
+
+        items_by_path = {item["filepath"]: item for item in result["items"]}
+
+        se_item = items_by_path.get("wiki/domains/search-engine/ideas/IDEA-001.md")
+        assert se_item is not None
+        assert se_item["domain"] == "search-engine"
+
+        meeting_item = items_by_path.get("wiki/meetings/MEETING-001.md")
+        assert meeting_item is not None
+        assert meeting_item["domain"] == ""

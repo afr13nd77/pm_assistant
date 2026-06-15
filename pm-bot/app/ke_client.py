@@ -261,3 +261,12 @@ def get_creative(count: int = 5) -> list:
     """Get creative ideas from vault via KE."""
     return _get("/api/v1/creative", _get_timeout("default"),
                 params={"count": count})
+
+
+# ---------------------------------------------------------------------------
+# 22. GET /api/v1/decay/snapshot
+# ---------------------------------------------------------------------------
+
+def decay_snapshot() -> dict:
+    """Get full decay state snapshot from KE."""
+    return _get("/api/v1/decay/snapshot", _get_timeout("default"))

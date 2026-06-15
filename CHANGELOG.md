@@ -5,6 +5,31 @@
 
 ---
 
+## 15.06.2026 — Decay State Dashboard (BL-132)
+
+### knowledge-engine 1.9.0
+- **snapshot_vault()**: read-only снимок всех артефактов с decay-данными (tier, relevance, days_since_access, access_count, domain, type)
+- **API**: GET /api/v1/decay/snapshot — полный JSON snapshot (922 артефакта, <3с)
+- **Тесты**: 6 unit-тестов для snapshot_vault (empty, basic, core, no-frontmatter, thresholds, domain extraction)
+
+### pm-bot 1.10.0
+- **ke_client**: decay_snapshot() — HTTP-клиент к KE API
+- **vault_api**: GET /api/v1/decay/snapshot — proxy endpoint
+
+### web-ui 1.16.0
+- **decay.html** + **decay.js**: интерактивный дашборд состояния базы знаний (Chart.js 4.x CDN)
+  - Metrics strip: 4 KPI (всего, active+warm, cold+archive, vault health %)
+  - Decay landscape: bubble scatter (X=дней с обращения, Y=обращений, размер=relevance, цвет=tier)
+  - Tier distribution: donut с центральным счётчиком + легенда
+  - Проекция без активности: слайдер 0..30 дней, клиентский пересчёт тиров с дельтами
+  - Здоровье по доменам: stacked horizontal bars (active/warm/cold/archive)
+  - Forgotten gems: top-5 карточек cold/archive по access_count
+- **Sidebar**: ссылка DECAY (иконка psychology) между TIMELINE и SETTINGS
+- **CSS**: tier-переменные (--tier-active..--tier-core) + decay-стили в обеих темах
+- **api.js**: метод api.decaySnapshot()
+
+---
+
 ## 14.06.2026 — Decay Engine (BL-110, BL-111, BL-112, BL-113)
 
 ### knowledge-engine 1.9.0

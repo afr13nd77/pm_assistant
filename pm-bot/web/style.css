@@ -63,6 +63,13 @@
   --text:  var(--text-body);
   --muted: var(--text-muted);
   --mono:  var(--font);
+
+  /* Decay tier colors (theme-independent) */
+  --tier-active:  #1D9E75;
+  --tier-warm:    #EF9F27;
+  --tier-cold:    #D85A30;
+  --tier-archive: #888780;
+  --tier-core:    #378ADD;
 }
 
 /* ------------------------------------------------------------
@@ -1461,4 +1468,200 @@ html, body {
 }
 .cmd-btn-amber:hover {
   background: var(--amber-bg);
+}
+
+/* ============================================================
+   DECAY DASHBOARD
+   ============================================================ */
+.decay-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.decay-metric-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px 16px;
+}
+.decay-metric-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.decay-metric-value {
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.decay-section-label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 0 0 10px;
+}
+.decay-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.decay-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.decay-legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.decay-chart-container {
+  position: relative;
+  height: 300px;
+  margin-bottom: 24px;
+}
+.decay-grid {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 24px;
+  align-items: start;
+  margin-bottom: 24px;
+}
+.decay-donut-container {
+  position: relative;
+  height: 200px;
+}
+.decay-donut-legend {
+  margin-top: 10px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.decay-donut-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.decay-donut-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.decay-projection {
+  margin-bottom: 24px;
+}
+.decay-projection-slider {
+  flex: 1;
+  accent-color: var(--tier-active);
+}
+.decay-projection-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.decay-bar-label {
+  width: 60px;
+  font-weight: 500;
+}
+.decay-bar-track {
+  flex: 1;
+  height: 7px;
+  background: var(--surface);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.decay-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.25s;
+}
+.decay-bar-count {
+  width: 26px;
+  text-align: right;
+  font-weight: 500;
+}
+.decay-bar-delta {
+  width: 30px;
+  text-align: right;
+  font-size: 11px;
+}
+.decay-domains-container {
+  position: relative;
+  height: 190px;
+  margin-bottom: 24px;
+}
+.decay-gems {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 24px;
+}
+.decay-gem-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.decay-gem-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.decay-gem-info {
+  flex: 1;
+  min-width: 0;
+}
+.decay-gem-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+.decay-gem-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.decay-gem-tier {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.decay-gem-rel {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.decay-empty-state {
+  text-align: center;
+  padding: 48px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.decay-footer {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.6;
 }

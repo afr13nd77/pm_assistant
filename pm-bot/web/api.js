@@ -326,6 +326,11 @@ var api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filepath: filepath, tier: tier })
     });
+  },
+
+  /** GET /api/v1/decay/snapshot -- full decay state snapshot */
+  decaySnapshot: function() {
+    return apiFetch('/decay/snapshot');
   }
 };
 
