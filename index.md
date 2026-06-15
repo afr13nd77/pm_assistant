@@ -13,12 +13,12 @@ pm_assistant/
 ├── docker-compose.yml              # оркестрация: pm-bot + knowledge-engine (:8001 API) + ke-cron + idea-pipeline
 ├── settings.yaml                   # централизованная runtime-конфигурация (timeouts, cooldowns, rate_limits)
 ├── CHANGELOG.md                    # журнал изменений по всем компонентам (от новых к старым)
-├── BACKLOG.md                      # бэклог: реализованные фичи (73), баги (24), идеи (29)
+├── BACKLOG.md                      # бэклог: реализованные фичи (79), баги (24), идеи (27)
 │
 ├── shared/                         # общий модуль — единый источник для pm-bot, KE, idea-pipeline
 │   ├── __init__.py                 # __version__ = "0.1.0"
 │   ├── file_writer.py              # file_lock, atomic_write, locked_append, append_section
-│   ├── llm_client.py               # _load_llm_prefs, get_client, call_with_fallback
+│   ├── llm_client.py               # _load_llm_prefs, get_client, call_with_fallback (Ollama timeout ×5)
 │   ├── vault_paths.py              # superset путей vault (25 функций)
 │   ├── domain_config.py            # загрузка/сохранение domain-config.yaml (13 функций)
 │   ├── frontmatter_utils.py        # read_frontmatter, update_frontmatter
@@ -103,7 +103,7 @@ pm_assistant/
 │       ├── vault_index.py          # сканирование vault, in-memory индекс
 │       ├── domain_manager.py       # управление доменами: scaffold, index, log
 │       ├── matcher.py              # keyword + tag matching
-│       ├── claude_client.py        # Claude API для enrichment/synthesis
+│       ├── claude_client.py        # Claude API для enrichment/synthesis/meeting_protocol, min response length validation
 │       ├── notifier.py             # Telegram уведомления через Bot API
 │       ├── watcher.py              # watchdog: Inbox/ → auto-enrichment
 │       ├── artifact_extractor.py   # извлечение артефактов
@@ -154,12 +154,12 @@ pm_assistant/
 
 | Компонент | Версия | Последнее изменение | Описание |
 |---|---|---|---|
-| **pm-bot** | 1.9.0 | 2026-06-14 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. |
-| **knowledge-engine** | 1.8.0 | 2026-06-14 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (18 эндпоинтов). Импорты из shared/. |
+| **pm-bot** | 1.10.0 | 2026-06-15 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. |
+| **knowledge-engine** | 1.9.0 | 2026-06-15 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (19 эндпоинтов). Импорты из shared/. |
 | **idea-pipeline** | 1.1.2 | 2026-06-14 | Orchestrator: Analyst → PM → Decomposer. Импорты vault_paths и file_writer из shared/. |
-| **web-ui** | 1.15.6 | 2026-06-12 | Dual-theme SPA дашборд. Health popup light-тема: .theme-light CSS specificity, theme-aware JS colors (BUG-016). Pipeline metrics секция в health breakdown (BL-123) |
+| **web-ui** | 1.16.0 | 2026-06-15 | Dual-theme SPA дашборд. Decay State Dashboard: bubble scatter, donut, projection slider, domain bars, forgotten gems (BL-132) |
 | **инфраструктура** | 1.0.0 | 2026-06-11 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120) |
-| **shared** | 0.1.0 | 2026-06-14 | Общий модуль: llm_client, file_writer, vault_paths, domain_config, frontmatter_utils, settings. Единый источник для всех компонентов |
+| **shared** | 0.1.0 | 2026-06-15 | Общий модуль: llm_client (Ollama timeout ×5), file_writer, vault_paths, domain_config, frontmatter_utils, settings. Единый источник для всех компонентов |
 
 Схема: semver `MAJOR.MINOR.PATCH`. MAJOR — ломающие изменения API/контрактов. MINOR — новый функционал. PATCH — багофиксы.
 
