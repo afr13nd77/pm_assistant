@@ -331,6 +331,12 @@ var api = {
   /** GET /api/v1/decay/snapshot -- full decay state snapshot */
   decaySnapshot: function() {
     return apiFetch('/decay/snapshot');
+  },
+
+  /** GET /api/v1/search?q=<query>&limit=<N> -- full-text search across vault */
+  search: function(query, limit) {
+    limit = limit || 20;
+    return apiFetch('/search?q=' + encodeURIComponent(query) + '&limit=' + limit);
   }
 };
 

@@ -1833,3 +1833,18 @@ body {
 .card-clip:hover .pin-btn.pinned:hover {
   opacity: 1;
 }
+
+/* === SEARCH OVERLAY (matrix) === */
+
+.search-panel {
+  border-color: rgba(0, 229, 255, 0.2);
+  box-shadow: 0 0 30px rgba(0, 229, 255, 0.1);
+}
+
+.search-result:hover {
+  box-shadow: inset 2px 0 0 var(--cyan, #00e5ff);
+}
+
+.search-input {
+  caret-color: var(--cyan);
+}

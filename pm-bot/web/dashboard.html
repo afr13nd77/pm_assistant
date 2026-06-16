@@ -119,7 +119,8 @@
 </head>
 <body>
   <div id="app" v-cloak>
-    <app-sidebar active="domains"></app-sidebar>
+    <app-sidebar active="domains" @search="searchOpen = true"></app-sidebar>
+    <search-overlay :open="searchOpen" @close="searchOpen = false"></search-overlay>
     <main class="page-content" style="position: relative; overflow: hidden;">
       <div class="scan-line"></div>
 
@@ -279,6 +280,7 @@
         var seeding = Vue.ref(false);
 
         var syncStatus = Vue.ref(null);
+        var searchOpen = Vue.ref(false);
 
         var totalArtifacts = Vue.computed(function() {
           return domains.value.reduce(function(sum, d) { return sum + d.total_count; }, 0);
@@ -417,9 +419,16 @@
           loadDomains();
           checkSeedBanner();
           loadSyncStatus();
+          document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+              e.preventDefault();
+              searchOpen.value = true;
+            }
+          });
         });
 
         return {
+          searchOpen:    searchOpen,
           domains:       domains,
           loading:       loading,
           error:         error,

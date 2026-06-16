@@ -20,7 +20,8 @@
 </head>
 <body>
   <div id="app" v-cloak>
-    <app-sidebar active="timeline"></app-sidebar>
+    <app-sidebar active="timeline" @search="searchOpen = true"></app-sidebar>
+    <search-overlay :open="searchOpen" @close="searchOpen = false"></search-overlay>
     <main class="page-content" style="position: relative; overflow: hidden;">
       <div class="scan-line"></div>
       <div class="text-page-title">FEATURE_TIME_MACHINE</div>
@@ -136,6 +137,7 @@
       const searched = ref(false);
       const searchedId = ref('');
 
+      const searchOpen = ref(false);
       const drawerOpen = ref(false);
       const drawerTask = ref(null);
       const drawerSource = ref('');
@@ -246,10 +248,14 @@
       onMounted(function() {
         document.addEventListener('keydown', function(e) {
           if (e.key === 'Escape') closeDrawer();
+          if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            searchOpen.value = true;
+          }
         });
       });
 
-      return { ticketId, events, metrics, loading, error, searched, searchedId, drawerOpen, drawerTask, drawerSource, taskStatusClass, fmtDate, loadTimeline, openEvent, closeDrawer, dotClass, stageClass, renderMd };
+      return { ticketId, events, metrics, loading, error, searched, searchedId, searchOpen, drawerOpen, drawerTask, drawerSource, taskStatusClass, fmtDate, loadTimeline, openEvent, closeDrawer, dotClass, stageClass, renderMd };
     }
   });
 

@@ -36,7 +36,8 @@
 </head>
 <body>
   <div id="app" v-cloak>
-    <app-sidebar active="board"></app-sidebar>
+    <app-sidebar active="board" @search="searchOpen = true"></app-sidebar>
+    <search-overlay :open="searchOpen" @close="searchOpen = false"></search-overlay>
     <main class="page-content" style="position: relative; overflow: hidden;">
       <div class="scan-line"></div>
       <div class="page-header">
@@ -232,6 +233,7 @@
         var displayLimit = ref(50);
         var refreshInterval = null;
         var refreshMode = ref('auto');
+        var searchOpen = ref(false);
 
         // --- Computed properties ---
         const inboxItems = computed(function() {
@@ -497,6 +499,10 @@
               taskDrawerOpen.value = false;
               taskDrawerItem.value = null;
             }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+              e.preventDefault();
+              searchOpen.value = true;
+            }
           });
         });
 
@@ -509,6 +515,7 @@
 
         return {
           // State
+          searchOpen,
           ideas,
           tasks,
           domains,

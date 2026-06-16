@@ -125,6 +125,7 @@ function registerComponents(app) {
     props: {
       active: { type: String, default: '' }
     },
+    emits: ['search'],
     computed: {
       links: function() {
         return [
@@ -142,6 +143,7 @@ function registerComponents(app) {
     template: '\
       <nav class="sidebar">\
         <div class="sidebar-logo">PM<span class="accent">_</span>BOARD</div>\
+        <button class="nav-link search-trigger" @click="$emit(\'search\')"><span class="material-symbols-outlined">search</span>SEARCH<kbd class="sidebar-kbd">Ctrl+K</kbd></button>\
         <a v-for="link in links"\
            :key="link.name"\
            :href="link.href"\
@@ -1111,6 +1113,163 @@ function registerComponents(app) {
               <cmd-button label="CREATE" color="cyan" :loading="creating" @click="create">
               </cmd-button>
               <span class="jira-create-cancel" @click="toggle">[CANCEL]</span>
+            </div>
+          </div>
+        </div>
+      </div>`
+  });
+
+  /* ========================================
+     SearchOverlay -- fullscreen search modal (Ctrl+K)
+     Props:
+       open (boolean): whether overlay is visible
+     Emits: close
+     ======================================== */
+  app.component('search-overlay', {
+    props: { open: { type: Boolean, default: false } },
+    emits: ['close'],
+    data: function() {
+      return {
+        query: '',
+        results: [],
+        loading: false,
+        error: '',
+        activeFilter: 'all',
+        debounceTimer: null
+      };
+    },
+    computed: {
+      filteredResults: function() {
+        if (this.activeFilter === 'all') return this.results;
+        return this.results.filter(r => r.category === this.activeFilter);
+      },
+      filterCounts: function() {
+        var counts = { all: this.results.length, idea: 0, task: 0, epic: 0, meeting: 0 };
+        this.results.forEach(function(r) {
+          if (counts[r.category] !== undefined) counts[r.category]++;
+        });
+        return counts;
+      },
+      showHint: function() {
+        return this.query.length > 0 && this.query.length < 2;
+      },
+      showEmpty: function() {
+        return this.query.length >= 2 && !this.loading && this.results.length === 0 && !this.error;
+      }
+    },
+    watch: {
+      open: function(val) {
+        if (val) {
+          this.query = '';
+          this.results = [];
+          this.error = '';
+          this.activeFilter = 'all';
+          this.$nextTick(() => {
+            if (this.$refs.searchInput) this.$refs.searchInput.focus();
+          });
+        }
+      }
+    },
+    methods: {
+      fmtDate: fmtDate,
+      onInput: function() {
+        clearTimeout(this.debounceTimer);
+        if (this.query.length < 2) {
+          this.results = [];
+          this.error = '';
+          return;
+        }
+        this.debounceTimer = setTimeout(() => this.doSearch(), 300);
+      },
+      doSearch: async function() {
+        this.loading = true;
+        this.error = '';
+        try {
+          var data = await api.search(this.query);
+          this.results = data.results;
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            this.error = 'Ошибка поиска, попробуйте позже';
+            console.error('[search-overlay] search failed:', err);
+          }
+        } finally {
+          this.loading = false;
+        }
+      },
+      navigate: function(result) {
+        window.location.href = result.url;
+        this.$emit('close');
+      },
+      setFilter: function(filter) {
+        this.activeFilter = filter;
+      },
+      onOverlayKeydown: function(e) {
+        if (e.key === 'Escape') this.$emit('close');
+      },
+      categoryIcon: function(category) {
+        var icons = {
+          idea: 'lightbulb',
+          task: 'task_alt',
+          epic: 'rocket_launch',
+          meeting: 'groups',
+          prd: 'description',
+          bug: 'bug_report',
+          report: 'summarize'
+        };
+        return icons[category] || 'article';
+      },
+      filterLabel: function(f) {
+        var labels = { all: 'ВСЕ', idea: 'ИДЕИ', task: 'ЗАДАЧИ', epic: 'ЭПИКИ', meeting: 'ВСТРЕЧИ' };
+        return labels[f] || f.toUpperCase();
+      }
+    },
+    template: `
+      <div class="search-overlay" v-if="open" @click.self="$emit('close')" @keydown="onOverlayKeydown">
+        <div class="search-panel">
+          <div class="search-header">
+            <span class="material-symbols-outlined search-icon">search</span>
+            <input
+              ref="searchInput"
+              class="search-input"
+              v-model="query"
+              @input="onInput"
+              placeholder="Поиск по vault..."
+            >
+            <kbd class="search-kbd">ESC</kbd>
+          </div>
+          <div class="search-filters" v-if="results.length">
+            <button
+              v-for="f in ['all','idea','task','epic','meeting']"
+              :key="f"
+              class="search-filter-btn"
+              :class="{ active: activeFilter === f }"
+              @click="setFilter(f)"
+            >{{ filterLabel(f) }} ({{ filterCounts[f] || 0 }})</button>
+          </div>
+          <div class="search-hint" v-if="showHint">Введите минимум 2 символа</div>
+          <div class="search-loading" v-if="loading">Поиск...</div>
+          <div class="search-error" v-if="error">{{ error }}</div>
+          <div class="search-empty" v-if="showEmpty">Ничего не найдено по запросу «{{ query }}»</div>
+          <div class="search-results" v-if="filteredResults.length">
+            <div
+              class="search-result"
+              v-for="(r, i) in filteredResults"
+              :key="r.path"
+              @click="navigate(r)"
+            >
+              <span class="material-symbols-outlined search-result-icon">{{ categoryIcon(r.category) }}</span>
+              <div class="search-result-body">
+                <div class="search-result-title"><span class="search-result-id" v-if="r.artifact_id">{{ r.artifact_id }}:</span> {{ r.title }}</div>
+                <div class="search-result-meta">
+                  <span class="search-result-category">{{ r.category.toUpperCase() }}</span>
+                  <span class="search-result-domain" v-if="r.domain !== 'cross-domain'">{{ r.domain }}</span>
+                  <span class="search-result-date">{{ fmtDate(r.date) }}</span>
+                </div>
+                <div class="search-result-tags" v-if="r.tags && r.tags.length">
+                  <span class="tag tag-sm" v-for="tag in r.tags.slice(0, 5)" :key="tag">{{ tag }}</span>
+                </div>
+              </div>
+              <span class="search-result-score">{{ r.score }}</span>
             </div>
           </div>
         </div>

@@ -773,7 +773,8 @@
 <body>
 
 <div id="app" v-cloak>
-  <app-sidebar active="overview"></app-sidebar>
+  <app-sidebar active="overview" @search="searchOpen = true"></app-sidebar>
+  <search-overlay :open="searchOpen" @close="searchOpen = false"></search-overlay>
   <div class="page-content">
     <main class="cmd-layout">
 
@@ -1507,7 +1508,22 @@ setInterval(function() {
 }, 60000);
 
 // Vue mount (sidebar only)
-var vueApp = Vue.createApp({});
+var vueApp = Vue.createApp({
+  data: function() {
+    return {
+      searchOpen: false
+    };
+  },
+  mounted: function() {
+    var self = this;
+    document.addEventListener('keydown', function(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        self.searchOpen = true;
+      }
+    });
+  }
+});
 registerComponents(vueApp);
 applyPageTheme().then(function() {
   vueApp.mount('#app');

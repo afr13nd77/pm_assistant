@@ -40,7 +40,8 @@
 </head>
 <body>
   <div id="app" v-cloak>
-    <app-sidebar active="ideas"></app-sidebar>
+    <app-sidebar active="ideas" @search="searchOpen = true"></app-sidebar>
+    <search-overlay :open="searchOpen" @close="searchOpen = false"></search-overlay>
     <main class="page-content" style="position: relative; overflow: hidden;">
       <div class="scan-line"></div>
       <div class="page-header">
@@ -314,6 +315,7 @@
         var toasts = ref([]);
         var toastIdCounter = 0;
         var warningModal = ref({ show: false, message: '', onConfirm: null, onCancel: null });
+        var searchOpen = ref(false);
 
         // Status-to-column mapping
         var STATUS_COLUMNS = {
@@ -646,6 +648,10 @@
               ideaDrawerOpen.value = false;
               ideaDrawerItem.value = null;
             }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+              e.preventDefault();
+              searchOpen.value = true;
+            }
           });
         });
 
@@ -657,7 +663,7 @@
         });
 
         return {
-          ideas, domains, activeDomain, loading, error,
+          ideas, domains, activeDomain, loading, error, searchOpen,
           ideaDrawerOpen, ideaDrawerItem, displayLimit, refreshMode,
           captureDrawerOpen, captureType, captureText, capturing, chatMessages,
           tierFilter, tiers, tierCount, filteredIdeas,

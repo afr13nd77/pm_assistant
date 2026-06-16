@@ -250,7 +250,8 @@
 </head>
 <body>
   <div id="app" v-cloak>
-    <app-sidebar active="report"></app-sidebar>
+    <app-sidebar active="report" @search="searchOpen = true"></app-sidebar>
+    <search-overlay :open="searchOpen" @close="searchOpen = false"></search-overlay>
     <main class="page-content" style="position: relative; overflow: hidden;">
       <div class="scan-line"></div>
 
@@ -358,6 +359,7 @@
         var regenerating = Vue.ref(false);
         var error = Vue.ref(null);
         var copySuccess = Vue.ref(false);
+        var searchOpen = Vue.ref(false);
 
         /**
          * Format a date string for display.
@@ -498,9 +500,16 @@
         Vue.onMounted(function() {
           console.log('[report] component mounted, loading reports');
           loadReports();
+          document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+              e.preventDefault();
+              searchOpen.value = true;
+            }
+          });
         });
 
         return {
+          searchOpen: searchOpen,
           reports: reports,
           selectedFilename: selectedFilename,
           reportContent: reportContent,

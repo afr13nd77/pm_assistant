@@ -20,7 +20,8 @@
 </head>
 <body>
   <div id="app" v-cloak>
-    <app-sidebar active="roadmap"></app-sidebar>
+    <app-sidebar active="roadmap" @search="searchOpen = true"></app-sidebar>
+    <search-overlay :open="searchOpen" @close="searchOpen = false"></search-overlay>
     <main class="page-content" style="position: relative; overflow: hidden;">
       <div class="scan-line"></div>
       <div class="page-header">
@@ -280,6 +281,7 @@
         var drawerTask = Vue.ref(null);
         var refreshMode = Vue.ref('auto');
         var refreshInterval = null;
+        var searchOpen = Vue.ref(false);
 
         var taskStatusClass = Vue.computed(function() {
           if (!drawerTask.value) return 'tag tag-muted';
@@ -458,6 +460,10 @@
                 closeDrawer();
               }
             }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+              e.preventDefault();
+              searchOpen.value = true;
+            }
           });
         });
 
@@ -469,6 +475,7 @@
         });
 
         return {
+          searchOpen: searchOpen,
           epics: epics,
           loading: loading,
           error: error,

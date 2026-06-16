@@ -21,7 +21,8 @@
 </head>
 <body>
 <div id="app" v-cloak>
-  <app-sidebar active="decay"></app-sidebar>
+  <app-sidebar active="decay" @search="searchOpen = true"></app-sidebar>
+  <search-overlay :open="searchOpen" @close="searchOpen = false"></search-overlay>
   <main class="page-content" style="overflow-y:auto; padding: 24px;">
 
     <!-- Header -->
@@ -111,7 +112,22 @@
 <script src="components.js"></script>
 <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 <script>
-  var app = Vue.createApp({});
+  var app = Vue.createApp({
+    data: function() {
+      return {
+        searchOpen: false
+      };
+    },
+    mounted: function() {
+      var self = this;
+      document.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+          e.preventDefault();
+          self.searchOpen = true;
+        }
+      });
+    }
+  });
   registerComponents(app);
   app.mount('#app');
 </script>

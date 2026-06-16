@@ -90,7 +90,8 @@
 </head>
 <body>
   <div id="app" v-cloak>
-    <app-sidebar active="settings"></app-sidebar>
+    <app-sidebar active="settings" @search="searchOpen = true"></app-sidebar>
+    <search-overlay :open="searchOpen" @close="searchOpen = false"></search-overlay>
     <main class="page-content" style="position: relative; overflow: hidden;">
       <div class="scan-line"></div>
       <div class="text-page-title">SETTINGS</div>
@@ -314,6 +315,7 @@
       var ollamaTesting = ref(false);
       var llmSaving = ref(false);
       var jiraSyncNotify = ref(true);
+      var searchOpen = ref(false);
 
       function buildPrefsPayload() {
         return {
@@ -514,9 +516,16 @@
         }).catch(function(err) {
           console.error('[settings] getUserPrefs error:', err.message);
         });
+        document.addEventListener('keydown', function(e) {
+          if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            searchOpen.value = true;
+          }
+        });
       });
 
       return {
+        searchOpen: searchOpen,
         settings: settings,
         loading: loading,
         error: error,

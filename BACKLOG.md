@@ -1,7 +1,7 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.10.0 / knowledge-engine 1.9.0 / idea-pipeline 1.1.2 / web-ui 1.16.0
-**Обновлён:** 15.06.2026 (BL-132)
+**Версии:** pm-bot 1.10.0 / knowledge-engine 1.9.0 / idea-pipeline 1.1.2 / web-ui 1.17.0
+**Обновлён:** 16.06.2026 (BL-60)
 
 ---
 
@@ -131,6 +131,7 @@
 | BL-57 | ✅ Domain config | web-ui | Настройка доменов через Web UI + CLI |
 | BL-101 | ✅ DD.MM.YYYY даты | web-ui | Единый формат дат DD.MM.YYYY на всех страницах и компонентах (cards, drawer, timeline, roadmap, dashboard, report) |
 | BL-102 | ✅ Board: классификация задач | web-ui | Классификация по jira_key (Jira vs internal), типы из frontmatter (BACKEND, FRONTEND, TESTING, RESEARCH, DESIGN), IDEA-* отфильтрованы с доски, fallback-тип NOTE → TASK |
+| BL-60 | ✅ Keyword Search | web-ui | Полнотекстовый поиск по vault: overlay Ctrl+K, debounce 300ms, фильтры по типу, artifact_id matching (+10 score) |
 
 ### 5.2 Идеи
 
@@ -138,13 +139,13 @@
 |---|:---|:---|:---|
 | BL-58 | Web UI для knowledge-файлов | web-ui | Просмотр клиппингов и knowledge-файлов (упомянуто в Out of Scope ingest-clippings) |
 | BL-59 | Mermaid Diagrams | web-ui | Рендеринг Mermaid-диаграмм в body PRD/Epic |
-| BL-60 | Keyword Search | web-ui | Полнотекстовый поиск по vault из Web UI |
 | BL-61 | Inline Editing | web-ui | Редактирование полей артефактов прямо из board/drawer |
 | BL-62 | Bulk Operations | web-ui | Мультивыбор карточек на доске для массовых действий |
 | BL-63 | Syntax Highlighting | web-ui | highlight.js для блоков кода в body артефактов |
 | BL-64 | highlight=IDEA-NNNN | web-ui | Поддержка ?highlight= параметра в ideas.html (авто-скролл к идее из напоминания) |
 | BL-65 | Time Machine | web-ui | Таймлайн фичи: IDEA -> Jira task -> PR -> release. Визуализация пути от заметки до прода |
 | BL-100 | Board: фильтрация по типу задачи | web-ui | Фильтр-табы по типу (JIRA_TASK, JIRA_BUG, MEETING_SUMMARY, NOTE и т.д.) на board.html. Режим «И»: при выборе нескольких типов показываются только задачи, соответствующие всем выбранным |
+| BL-135 | Decay: popup деталей Forgotten Gems | web-ui | На decay.html при клике на элемент в списке Forgotten Gems открывать всплывающее окно с деталями артефакта (по аналогии с popup на ideas.html). Показать: название, домен, relevance, tier, дату последнего обращения, body/описание |
 
 ---
 
@@ -291,6 +292,6 @@
 |:---|:---|:---|
 | ✅ Реализовано | 79 | BL-01..BL-08, BL-11..BL-18, BL-25..BL-29, BL-31..BL-34, BL-40..BL-57, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-132 |
 | ✅ Баги исправлены | 24 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129 |
-| Идея | 27 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-24, BL-30, BL-35..BL-39, BL-58..BL-65, BL-70..BL-73, BL-81, BL-100, BL-133..BL-134 |
+| Идея | 28 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-24, BL-30, BL-35..BL-39, BL-58..BL-65, BL-70..BL-73, BL-81, BL-100, BL-133..BL-135 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **133** | |
+| **Итого** | **134** | |
