@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 import pathlib
+import re
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
@@ -313,7 +314,62 @@ def jira_issue_types(project: str = Query(..., description="Jira project key (e.
 
 
 # ---------------------------------------------------------------------------
-# 10. GET /api/v1/domains
+# 10. GET /api/v1/jira-search
+# ---------------------------------------------------------------------------
+
+def _map_jira_issue(raw: dict) -> dict:
+    fields = raw.get("fields", {})
+    return {
+        "key": raw.get("key", ""),
+        "summary": fields.get("summary", ""),
+        "type": (fields.get("issuetype") or {}).get("name", ""),
+        "status": (fields.get("status") or {}).get("name", ""),
+        "assignee": (fields.get("assignee") or {}).get("displayName", ""),
+        "labels": fields.get("labels", []),
+        "priority": (fields.get("priority") or {}).get("name", ""),
+        "url": f"{os.getenv('JIRA_URL', '').rstrip('/')}/browse/{raw.get('key', '')}",
+    }
+
+
+@app.get("/api/v1/jira-search")
+def jira_search(
+    project: str = Query(..., description="Jira project key (e.g. SUP)"),
+    type: str = Query("", description="Issue type filter (e.g. Bug, Story)"),
+    status: str = Query("", description="Status filter (e.g. In Progress)"),
+    max_results: int = Query(50, ge=1, le=100, description="Max issues to return"),
+):
+    logger.info(
+        "GET /api/v1/jira-search — start, project=%s type=%r status=%r max=%d",
+        project, type, status, max_results,
+    )
+    if not re.match(r'^[A-Z][A-Z0-9]+$', project):
+        raise HTTPException(status_code=400, detail=f"Invalid project key: {project!r}")
+
+    jql_parts = [f'project = "{project}"']
+    if type:
+        jql_parts.append(f'issuetype = "{type}"')
+    if status:
+        jql_parts.append(f'status = "{status}"')
+    jql = " AND ".join(jql_parts) + " ORDER BY updated DESC"
+
+    try:
+        from .jira_fetcher import client
+        from .jira_fetcher.client import JiraClientError
+
+        issues = client.search(jql, limit=max_results)
+        mapped = [_map_jira_issue(i) for i in issues]
+        logger.info("GET /api/v1/jira-search — success, count=%d", len(mapped))
+        return {"status": "ok", "total": len(mapped), "issues": mapped}
+    except JiraClientError as exc:
+        logger.error("GET /api/v1/jira-search — error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=502, detail=str(exc))
+    except Exception as exc:
+        logger.error("GET /api/v1/jira-search — error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# 11. GET /api/v1/domains
 # ---------------------------------------------------------------------------
 
 @app.get("/api/v1/domains")

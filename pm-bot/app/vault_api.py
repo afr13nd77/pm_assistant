@@ -1718,6 +1718,39 @@ def get_jira_issue_types(projectKey: str):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@app.get("/api/v1/jira/search")
+async def jira_search_proxy(
+    project: str = Query(..., description="Jira project key (e.g. SUP)"),
+    type: str = Query("", description="Issue type filter"),
+    status: str = Query("", description="Status filter"),
+    max_results: int = Query(50, ge=1, le=100, description="Max issues"),
+):
+    """Proxy to KE jira-search endpoint."""
+    logger.info(
+        "GET /api/v1/jira/search — start, project=%s type=%r status=%r max=%d",
+        project, type, status, max_results,
+    )
+    # Validate project key
+    if not re.match(r"^[A-Z][A-Z0-9]+$", project):
+        logger.error("GET /api/v1/jira/search — rejected: invalid project=%s", project)
+        raise HTTPException(status_code=400, detail=f"Invalid project key: {project}")
+    try:
+        result = ke_client.jira_search(project, type, status, max_results)
+        logger.info(
+            "GET /api/v1/jira/search — success, total=%d",
+            result.get("total", 0) if isinstance(result, dict) else 0,
+        )
+        return result
+    except requests.RequestException as exc:
+        logger.error("GET /api/v1/jira/search — KE API error: %s", exc)
+        raise HTTPException(status_code=502, detail=f"KE API error: {exc}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("GET /api/v1/jira/search — error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 # ---------------------------------------------------------------------------
 # Jira Sync (force) endpoint
 # ---------------------------------------------------------------------------

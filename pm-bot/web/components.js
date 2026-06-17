@@ -561,6 +561,9 @@ function registerComponents(app) {
           this.editing = false;
           return;
         }
+        if (this.editValue == null || this.editValue === '') {
+          return;
+        }
         this.saving = true;
         this.feedbackClass = 'editable-saving';
         var self = this;
@@ -604,6 +607,7 @@ function registerComponents(app) {
       </span>\
       <span v-else :class="feedbackClass" style="display:inline-flex;align-items:center;gap:4px;">\
         <select v-if="options" ref="editSelect" class="editable-select" v-model="editValue" @change="save" @keydown="onKeydown" :disabled="saving">\
+          <option value="" disabled>— выбрать —</option>\
           <option v-for="opt in options" :key="opt" :value="opt">{{ opt }}</option>\
         </select>\
         <input v-else ref="editInput" class="editable-input" v-model="editValue" @keydown="onKeydown" @blur="cancel" :disabled="saving" />\
@@ -813,7 +817,7 @@ function registerComponents(app) {
         if (val && this.domains.length === 0) {
           var self = this;
           api.domains().then(function(list) {
-            self.domains = list.map(function(d) { return d.slug; });
+            self.domains = list.map(function(d) { return d.name || d.slug || ''; }).filter(Boolean);
           }).catch(function() {});
         }
       }
@@ -960,7 +964,7 @@ function registerComponents(app) {
         if (val && this.domains.length === 0) {
           var self = this;
           api.domains().then(function(list) {
-            self.domains = list.map(function(d) { return d.slug; });
+            self.domains = list.map(function(d) { return d.name || d.slug || ''; }).filter(Boolean);
           }).catch(function() {});
         }
       }
@@ -1580,6 +1584,691 @@ function registerComponents(app) {
             </div>
           </div>
         </div>
+      </div>`
+  });
+
+  /* ========================================
+     capture-terminal -- unified capture component
+     Two modes: simple (chat-style) / extended (card-based).
+     Two panels in extended: capture (idea/task/meeting) / jira (import).
+
+     Props:
+       layout (string): 'drawer' (default) or 'inline'
+       open   (boolean): whether the terminal is visible
+     Emits: close, captured, imported
+     ======================================== */
+  app.component('capture-terminal', {
+    props: {
+      layout: { type: String, default: 'drawer' },
+      open: { type: Boolean, default: true }
+    },
+    emits: ['close', 'captured', 'imported'],
+    data: function() {
+      return {
+        // Mode
+        mode: 'simple',
+
+        // Simple mode (drawer)
+        chatMessages: [],
+        captureText: '',
+        captureType: 'idea',
+        capturing: false,
+
+        // Extended mode: capture panel
+        extType: 'idea',
+        extText: '',
+        extSaving: false,
+        extSaveOk: false,
+        toastMessage: '',
+        toastVisible: false,
+        toastType: 'success',
+
+        // Extended mode: jira panel
+        jiraActive: false,
+        projects: [],
+        projectsLoading: false,
+        selectedProject: null,
+        recentProjectKeys: [],
+        projectSearch: '',
+        projectDropOpen: false,
+        issueTypes: [],
+        tickets: [],
+        ticketsLoading: false,
+        typeFilter: '',
+        statusFilter: '',
+        selectedTicketIds: [],
+        directKey: '',
+        importing: false,
+        importResult: null
+      };
+    },
+    computed: {
+      previewTitle: function() {
+        if (!this.extText || this.extText.trim().length < 3) return '';
+        var lines = this.extText.trim().split('\n');
+        var first = lines[0].substring(0, 60);
+        return first;
+      },
+      previewBody: function() {
+        if (!this.extText || this.extText.trim().length < 3) return '';
+        var lines = this.extText.trim().split('\n');
+        if (lines.length <= 1) return '';
+        return lines.slice(1).join('\n').trim().substring(0, 200);
+      },
+      filteredProjects: function() {
+        var q = this.projectSearch.toLowerCase();
+        if (!q) return null;
+        return this.projects.filter(function(p) {
+          return p.key.toLowerCase().indexOf(q) !== -1 || p.name.toLowerCase().indexOf(q) !== -1;
+        });
+      },
+      filteredTickets: function() {
+        var self = this;
+        return this.tickets.filter(function(t) {
+          if (self.typeFilter && t.type !== self.typeFilter) return false;
+          if (self.statusFilter && t.status !== self.statusFilter) return false;
+          return true;
+        });
+      },
+      selectedCount: function() {
+        return this.selectedTicketIds.length;
+      },
+      canSave: function() {
+        return this.extText.trim().length > 0 && !this.extSaving;
+      },
+      canImport: function() {
+        return this.selectedTicketIds.length > 0 && !this.importing;
+      },
+      recentProjects: function() {
+        var keys = this.recentProjectKeys;
+        return this.projects.filter(function(p) { return keys.indexOf(p.key) !== -1; });
+      },
+      otherProjects: function() {
+        var keys = this.recentProjectKeys;
+        return this.projects.filter(function(p) { return keys.indexOf(p.key) === -1; });
+      },
+      sessionDate: function() {
+        var d = new Date();
+        var dd = String(d.getDate()).padStart(2, '0');
+        var mm = String(d.getMonth() + 1).padStart(2, '0');
+        return dd + '.' + mm + '.' + d.getFullYear();
+      }
+    },
+    methods: {
+      initMode: function() {
+        try { this.mode = localStorage.getItem('pm_capture_mode') || 'simple'; } catch(e) { this.mode = 'simple'; }
+        try {
+          var r = JSON.parse(localStorage.getItem('pm_jira_recent_projects') || '[]');
+          this.recentProjectKeys = Array.isArray(r) ? r : [];
+        } catch(e) { this.recentProjectKeys = []; }
+      },
+
+      // --- Extended: type switching ---
+      setExtType: function(type) {
+        this.extType = type;
+        this.jiraActive = false;
+      },
+      activateJira: function() {
+        this.jiraActive = true;
+        if (this.projects.length === 0) this.loadProjects();
+      },
+
+      // --- Extended: capture ---
+      saveCapture: function() {
+        if (!this.canSave) return;
+        var self = this;
+        self.extSaving = true;
+        self.extSaveOk = false;
+        api.capture(self.extType, self.extText).then(function(resp) {
+          console.log('[capture-terminal] saved:', resp);
+          self.extSaveOk = true;
+          var fname = resp.filename || '';
+          self.showToast('success', 'Идея сохранена' + (fname ? ': ' + fname : ''));
+          self.$emit('captured', { type: self.extType, filename: fname });
+          self.extText = '';
+          setTimeout(function() { self.extSaveOk = false; }, 2000);
+        }).catch(function(err) {
+          console.error('[capture-terminal] save error:', err);
+          self.showToast('error', 'Ошибка сохранения: ' + (err.message || err));
+        }).finally(function() {
+          self.extSaving = false;
+        });
+      },
+      resetCapture: function() {
+        this.extText = '';
+      },
+      showToast: function(type, message) {
+        var self = this;
+        self.toastType = type || 'success';
+        self.toastMessage = message;
+        self.toastVisible = true;
+        var duration = type === 'error' ? 5000 : 4000;
+        setTimeout(function() { self.toastVisible = false; }, duration);
+      },
+
+      // --- Extended: jira ---
+      loadProjects: function() {
+        var self = this;
+        self.projectsLoading = true;
+        api.jiraProjects().then(function(data) {
+          self.projects = data.projects || data || [];
+          console.log('[capture-terminal] projects loaded:', self.projects.length);
+        }).catch(function(err) {
+          console.error('[capture-terminal] loadProjects error:', err);
+        }).finally(function() {
+          self.projectsLoading = false;
+        });
+      },
+      selectProject: function(proj) {
+        var self = this;
+        self.selectedProject = proj;
+        self.projectSearch = proj.key + ' — ' + proj.name;
+        self.projectDropOpen = false;
+        self.typeFilter = '';
+        self.statusFilter = '';
+        self.selectedTicketIds = [];
+        self.tickets = [];
+        // Save to recent
+        var recent = self.recentProjectKeys.filter(function(k) { return k !== proj.key; });
+        recent.unshift(proj.key);
+        if (recent.length > 5) recent = recent.slice(0, 5);
+        self.recentProjectKeys = recent;
+        try { localStorage.setItem('pm_jira_recent_projects', JSON.stringify(recent)); } catch(e) {}
+        // Load issue types and tickets
+        api.jiraIssueTypes(proj.key).then(function(data) {
+          self.issueTypes = (data.issue_types || data || []).map(function(t) { return t.name || t; });
+        }).catch(function() { self.issueTypes = []; });
+        self.loadTickets();
+      },
+      clearProject: function() {
+        this.selectedProject = null;
+        this.projectSearch = '';
+        this.tickets = [];
+        this.issueTypes = [];
+        this.typeFilter = '';
+        this.statusFilter = '';
+        this.selectedTicketIds = [];
+      },
+      loadTickets: function() {
+        if (!this.selectedProject) return;
+        var self = this;
+        self.ticketsLoading = true;
+        api.jiraSearch(self.selectedProject.key, self.typeFilter, self.statusFilter, 50).then(function(data) {
+          self.tickets = data.issues || [];
+          console.log('[capture-terminal] tickets loaded:', self.tickets.length);
+        }).catch(function(err) {
+          console.error('[capture-terminal] loadTickets error:', err);
+          self.tickets = [];
+        }).finally(function() {
+          self.ticketsLoading = false;
+        });
+      },
+      toggleTicket: function(key) {
+        var idx = this.selectedTicketIds.indexOf(key);
+        if (idx === -1) {
+          this.selectedTicketIds.push(key);
+        } else {
+          this.selectedTicketIds.splice(idx, 1);
+        }
+      },
+      isTicketSelected: function(key) {
+        return this.selectedTicketIds.indexOf(key) !== -1;
+      },
+      importSelected: function() {
+        if (!this.canImport) return;
+        var self = this;
+        self.importing = true;
+        var keys = self.selectedTicketIds.slice();
+        var ok = [];
+        var fail = [];
+        var chain = Promise.resolve();
+        keys.forEach(function(key) {
+          chain = chain.then(function() {
+            return api.jiraImport(key).then(function() {
+              ok.push(key);
+            }).catch(function() {
+              fail.push(key);
+            });
+          });
+        });
+        chain.then(function() {
+          self.importing = false;
+          self.selectedTicketIds = [];
+          if (fail.length === 0) {
+            self.importResult = { ok: true, text: 'Импортировано: ' + ok.length };
+            self.showToast('success', 'Импортировано тикетов: ' + ok.length);
+          } else {
+            self.importResult = { ok: false, text: 'Импортировано ' + ok.length + ' из ' + keys.length + ', ошибки: ' + fail.join(', ') };
+            self.showToast('error', 'Импортировано ' + ok.length + ' из ' + keys.length + ', ошибки: ' + fail.join(', '));
+          }
+          self.$emit('imported', { count: ok.length, keys: ok, failures: fail });
+          setTimeout(function() { self.importResult = null; }, 4000);
+        });
+      },
+
+      // --- Extended: keyboard ---
+      handleExtKeydown: function(e) {
+        if (e.ctrlKey && e.key === 'Enter') {
+          e.preventDefault();
+          if (this.jiraActive) {
+            this.importSelected();
+          } else {
+            this.saveCapture();
+          }
+        }
+      },
+
+      // --- Simple mode: capture ---
+      simpleCapture: function() {
+        if (this.capturing || !this.captureText.trim()) return;
+        var self = this;
+        var text = self.captureText.trim();
+        var type = self.captureType;
+        self.chatMessages.push({ role: 'user', type: type, text: text });
+        self.captureText = '';
+        self.capturing = true;
+
+        var promise;
+        if (type === 'jira_import') {
+          promise = api.jiraImport(text);
+        } else {
+          promise = api.capture(type, text);
+        }
+        promise.then(function(resp) {
+          var msg = resp.message || resp.filename || 'Записано';
+          self.chatMessages.push({ role: 'agent', text: msg });
+          if (type === 'jira_import') {
+            self.$emit('imported', { count: 1, keys: [text], failures: [] });
+          } else {
+            self.$emit('captured', { type: type, filename: resp.filename || '' });
+          }
+        }).catch(function(err) {
+          self.chatMessages.push({ role: 'error', text: String(err.message || err) });
+        }).finally(function() {
+          self.capturing = false;
+          self.$nextTick(function() {
+            var el = self.$el.querySelector('.capture-messages');
+            if (el) el.scrollTop = el.scrollHeight;
+          });
+        });
+
+        self.$nextTick(function() {
+          var el = self.$el.querySelector('.capture-messages');
+          if (el) el.scrollTop = el.scrollHeight;
+        });
+      },
+      simpleKeydown: function(e) {
+        if (e.ctrlKey && e.key === 'Enter') {
+          e.preventDefault();
+          this.simpleCapture();
+        }
+      },
+
+      // --- Project dropdown ---
+      onProjectInputFocus: function() {
+        this.projectDropOpen = true;
+        if (this.projects.length === 0) this.loadProjects();
+      },
+      onProjectInputBlur: function() {
+        var self = this;
+        setTimeout(function() { self.projectDropOpen = false; }, 200);
+      },
+
+      // --- Filter change ---
+      onFilterChange: function() {
+        this.selectedTicketIds = [];
+        this.loadTickets();
+      }
+    },
+    mounted: function() {
+      this.initMode();
+    },
+    watch: {
+      open: function(val) {
+        if (val) this.initMode();
+      }
+    },
+    template: `
+      <div>
+        <!-- ==================== SIMPLE MODE ==================== -->
+
+        <!-- Simple mode: drawer layout -->
+        <template v-if="mode === 'simple' && layout === 'drawer'">
+          <div class="capture-panel" style="border: none;">
+            <div class="capture-header">
+              <span class="capture-header-dot"></span> CAPTURE_TERMINAL
+              <span class="text-muted" style="margin-left: auto; cursor: pointer;" @click="$emit('close')">[x]</span>
+            </div>
+            <div class="capture-messages">
+              <div class="msg msg-system">SESSION_STARTED {{ sessionDate }}</div>
+              <div class="msg msg-agent">
+                <div class="msg-label">AGENT_</div>
+                Готов к захвату. Выбери тип — IDEA, TASK или MEETING — и фиксируй.
+              </div>
+              <template v-for="(msg, i) in chatMessages" :key="i">
+                <div v-if="msg.role === 'user'" class="msg msg-user">
+                  <div class="msg-label">USER_ [{{ msg.type.toUpperCase() }}]</div>
+                  {{ msg.text }}
+                </div>
+                <div v-if="msg.role === 'agent'" class="msg msg-agent">
+                  <div class="msg-label">AGENT_</div>
+                  {{ msg.text }}
+                </div>
+                <div v-if="msg.role === 'error'" class="msg msg-agent text-magenta msg-error">
+                  <div class="msg-label">ERROR_</div>
+                  {{ msg.text }}
+                </div>
+              </template>
+              <div v-if="capturing" class="msg msg-system text-yellow">Processing...</div>
+            </div>
+            <div class="type-selector">
+              <button class="type-btn" :class="{'active-idea': captureType === 'idea'}" @click="captureType = 'idea'">IDEA</button>
+              <button class="type-btn" :class="{'active-task': captureType === 'task'}" @click="captureType = 'task'">TASK</button>
+              <button class="type-btn" :class="{'active-meeting': captureType === 'meeting'}" @click="captureType = 'meeting'">MEETING</button>
+              <button class="type-btn" :class="{'active-task': captureType === 'jira_import'}" @click="captureType = 'jira_import'">JIRA_IMPORT</button>
+            </div>
+            <textarea
+              class="cp-textarea"
+              v-model="captureText"
+              @keydown="simpleKeydown"
+              :placeholder="captureType === 'jira_import' ? '// enter Jira key, e.g. GO-153' : '// type idea or task...'"
+              :disabled="capturing"
+            ></textarea>
+            <div class="capture-input-area">
+              <div class="send-row">
+                <span class="send-hint">Ctrl+Enter to send</span>
+                <cmd-button :label="captureType === 'jira_import' ? 'IMPORT' : 'CAPTURE'" color="cyan" :loading="capturing" @click="simpleCapture"></cmd-button>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Simple mode: inline layout -->
+        <template v-if="mode === 'simple' && layout === 'inline'">
+          <div class="capture-panel">
+            <div class="capture-header">
+              <span class="capture-header-dot"></span>
+              QUICK CAPTURE
+            </div>
+            <div class="capture-messages">
+              <div class="msg msg-system">session started</div>
+              <template v-for="(msg, i) in chatMessages" :key="'inl-'+i">
+                <div v-if="msg.role === 'user'" class="msg msg-user">{{ msg.text }}</div>
+                <div v-if="msg.role === 'agent'" class="msg msg-system">CAPTURED: {{ msg.text }}</div>
+                <div v-if="msg.role === 'error'" class="msg msg-system text-magenta">ERROR: {{ msg.text }}</div>
+              </template>
+            </div>
+            <div class="capture-input-area">
+              <input
+                type="text"
+                class="cp-input"
+                v-model="captureText"
+                placeholder="> enter idea..."
+                autocomplete="off"
+                @keydown.enter.prevent="simpleCapture"
+              />
+              <div class="send-row">
+                <span class="send-hint">Enter to send</span>
+                <cmd-button label="CAPTURE" color="cyan" :loading="capturing" @click="simpleCapture"></cmd-button>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ==================== EXTENDED MODE ==================== -->
+        <template v-if="mode === 'extended'">
+          <div @keydown="handleExtKeydown" style="position:relative;">
+
+            <!-- Toast notification -->
+            <div v-if="toastVisible" class="ct-toast" :class="'ct-toast--' + toastType">
+              <i :class="toastType === 'error' ? 'ti ti-alert-circle' : 'ti ti-circle-check'"></i>
+              {{ toastMessage }}
+            </div>
+
+            <!-- Header -->
+            <div class="ct-header">
+              <div class="ct-header-left">
+                <span class="ct-dot"></span>
+                <span class="ct-header-title">Capture</span>
+                <span class="ct-session-badge">{{ sessionDate }}</span>
+              </div>
+              <button v-if="layout === 'drawer'" class="ct-close" @click="$emit('close')"><i class="ti ti-x"></i></button>
+            </div>
+
+            <!-- Type bar -->
+            <div class="ct-type-bar">
+              <button
+                class="ct-chip"
+                :class="{ 'ct-chip--idea': !jiraActive && extType === 'idea' }"
+                @click="setExtType('idea')"
+              ><i class="ti ti-bulb"></i> Идея</button>
+              <button
+                class="ct-chip"
+                :class="{ 'ct-chip--task': !jiraActive && extType === 'task' }"
+                @click="setExtType('task')"
+              ><i class="ti ti-checkbox"></i> Задача</button>
+              <button
+                class="ct-chip"
+                :class="{ 'ct-chip--meet': !jiraActive && extType === 'meeting' }"
+                @click="setExtType('meeting')"
+              ><i class="ti ti-users"></i> Встреча</button>
+              <button
+                class="ct-chip"
+                :class="{ 'ct-chip--jira': jiraActive }"
+                @click="activateJira"
+              ><i class="ti ti-brand-jira"></i> Jira Import</button>
+            </div>
+
+            <!-- ---- Capture Panel ---- -->
+            <template v-if="!jiraActive">
+              <div class="ct-capture-body">
+                <div class="ct-field-label"><i class="ti ti-pencil"></i> Свободный ввод</div>
+                <textarea
+                  class="ct-textarea"
+                  v-model="extText"
+                  placeholder="// опиши идею, задачу или итог встречи..."
+                ></textarea>
+              </div>
+
+              <div class="ct-preview">
+                <div class="ct-preview-label"><i class="ti ti-database"></i> Предпросмотр записи</div>
+                <div class="ct-preview-row">
+                  <span class="ct-preview-key">Заголовок</span>
+                  <span class="ct-preview-value" :class="{ 'ct-preview-value--muted': !previewTitle }">{{ previewTitle || 'появится после ввода' }}</span>
+                </div>
+                <div class="ct-preview-row">
+                  <span class="ct-preview-key">Суть</span>
+                  <span class="ct-preview-value" :class="{ 'ct-preview-value--muted': !previewBody }">{{ previewBody || '—' }}</span>
+                </div>
+                <div class="ct-preview-row">
+                  <span class="ct-preview-key">Теги</span>
+                  <span class="ct-preview-value ct-preview-value--muted">—</span>
+                </div>
+              </div>
+
+              <div class="ct-dest-row">
+                <span class="ct-dest-label">Сохранить в:</span>
+                <div class="ct-dest-chip"><i class="ti ti-book"></i> База знаний</div>
+              </div>
+
+              <div class="ct-footer">
+                <span class="ct-hint">Ctrl+Enter — сохранить</span>
+                <div class="ct-footer-actions">
+                  <button class="ct-btn-ghost" @click="resetCapture">Сброс</button>
+                  <button class="ct-btn-primary" :disabled="!canSave" @click="saveCapture">
+                    <i class="ti ti-device-floppy"></i>
+                    <template v-if="extSaving">Сохранение...</template>
+                    <template v-else>Сохранить</template>
+                  </button>
+                  <span v-if="extSaveOk" class="ct-badge ct-badge--success" :style="'margin-left:4px'">
+                    <i class="ti ti-circle-check"></i> Сохранено
+                  </span>
+                </div>
+              </div>
+            </template>
+
+            <!-- ---- Jira Panel ---- -->
+            <template v-if="jiraActive">
+              <div class="ct-jira-body">
+                <div class="ct-field-label"><i class="ti ti-folder"></i> Проект<span class="ct-req">*</span></div>
+                <div class="ct-proj-wrap">
+                  <input
+                    class="ct-proj-input"
+                    :class="{ 'ct-proj-input--selected': selectedProject }"
+                    type="text"
+                    v-model="projectSearch"
+                    placeholder="Поиск по названию или ключу..."
+                    autocomplete="off"
+                    @focus="onProjectInputFocus"
+                    @blur="onProjectInputBlur"
+                  />
+                  <button
+                    class="ct-proj-clear"
+                    :class="{ 'ct-proj-clear--visible': selectedProject }"
+                    @click="clearProject"
+                  ><i class="ti ti-x"></i></button>
+
+                  <div class="ct-proj-drop" :class="{ 'ct-proj-drop--open': projectDropOpen }">
+                    <template v-if="projectsLoading">
+                      <div class="ct-no-results">Загрузка...</div>
+                    </template>
+                    <template v-else-if="filteredProjects !== null">
+                      <!-- Filtered results -->
+                      <template v-if="filteredProjects.length > 0">
+                        <div
+                          class="ct-proj-opt"
+                          v-for="p in filteredProjects"
+                          :key="p.key"
+                          @mousedown.prevent="selectProject(p)"
+                        >
+                          <span class="ct-proj-opt-key">{{ p.key }}</span>
+                          {{ p.name }}
+                        </div>
+                      </template>
+                      <div v-else class="ct-no-results">Ничего не найдено</div>
+                    </template>
+                    <template v-else>
+                      <!-- Unfiltered: recent + all sections -->
+                      <template v-if="recentProjects.length > 0">
+                        <div class="ct-drop-section"><i class="ti ti-clock"></i> Недавние</div>
+                        <div
+                          class="ct-proj-opt"
+                          v-for="p in recentProjects"
+                          :key="'r-'+p.key"
+                          @mousedown.prevent="selectProject(p)"
+                        >
+                          <span class="ct-proj-opt-key">{{ p.key }}</span>
+                          {{ p.name }}
+                          <i class="ti ti-clock ct-proj-opt-clock"></i>
+                        </div>
+                      </template>
+                      <div class="ct-drop-section">Все проекты</div>
+                      <div
+                        class="ct-proj-opt"
+                        v-for="p in otherProjects"
+                        :key="'a-'+p.key"
+                        @mousedown.prevent="selectProject(p)"
+                      >
+                        <span class="ct-proj-opt-key">{{ p.key }}</span>
+                        {{ p.name }}
+                      </div>
+                    </template>
+                  </div>
+                </div>
+
+                <div class="ct-filter-row">
+                  <select class="ct-filter" v-model="typeFilter" :disabled="!selectedProject" @change="onFilterChange">
+                    <option value="">Тип задачи</option>
+                    <option v-for="t in issueTypes" :key="t" :value="t">{{ t }}</option>
+                  </select>
+                  <select class="ct-filter" v-model="statusFilter" :disabled="!selectedProject" @change="onFilterChange">
+                    <option value="">Статус</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Done">Done</option>
+                    <option value="To Do">To Do</option>
+                  </select>
+                </div>
+
+                <div class="ct-or-divider">— или введи ID напрямую —</div>
+                <input class="ct-id-input" type="text" v-model="directKey" placeholder="SUP-1234 или https://jira.company.com/..." />
+              </div>
+
+              <!-- Ticket list -->
+              <div class="ct-ticket-list">
+                <template v-if="ticketsLoading">
+                  <div class="ct-ticket-empty">Загрузка тикетов...</div>
+                </template>
+                <template v-else-if="!selectedProject && !directKey">
+                  <div class="ct-ticket-empty"><i class="ti ti-folder-open"></i><span>Выбери проект выше</span></div>
+                </template>
+                <template v-else-if="filteredTickets.length === 0 && selectedProject">
+                  <div class="ct-ticket-empty"><i class="ti ti-folder-open"></i><span>Нет тикетов по фильтру</span></div>
+                </template>
+                <template v-else>
+                  <div
+                    class="ct-ticket-item"
+                    :class="{ 'ct-ticket-item--selected': isTicketSelected(t.key) }"
+                    v-for="t in filteredTickets"
+                    :key="t.key"
+                    @click="toggleTicket(t.key)"
+                  >
+                    <i class="ct-ticket-check" :class="isTicketSelected(t.key) ? 'ti ti-square-check' : 'ti ti-square'"></i>
+                    <div class="ct-card-body">
+                      <div class="ct-card-top">
+                        <span class="ct-card-id">{{ t.key }}</span>
+                        <a v-if="t.url" class="ct-card-link" :href="t.url" target="_blank" @click.stop><i class="ti ti-external-link"></i></a>
+                        <span class="ct-card-spacer"></span>
+                        <span v-if="t.assignee" class="ct-card-who"><i class="ti ti-user"></i> {{ t.assignee }}</span>
+                      </div>
+                      <div class="ct-card-title">{{ t.summary || t.title || '—' }}</div>
+                      <div class="ct-card-meta">
+                        <span class="ct-badge ct-badge--neutral">{{ t.type || '—' }}</span>
+                        <span class="ct-sep">/</span>
+                        <span class="ct-status-badge">{{ t.status || '—' }}</span>
+                        <template v-if="t.priority">
+                          <span class="ct-sep">/</span>
+                          <span class="ct-badge" :class="t.priority === 'Critical' || t.priority === 'Blocker' ? 'ct-badge--danger' : 'ct-badge--neutral'">{{ t.priority }}</span>
+                        </template>
+                        <template v-if="t.labels && t.labels.length">
+                          <span class="ct-sep">/</span>
+                          <span class="ct-label-chip" v-for="l in t.labels.slice(0, 3)" :key="l"><i class="ti ti-tag"></i> {{ l }}</span>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+
+              <!-- Selection row -->
+              <div class="ct-sel-row" v-if="selectedCount > 0" :style="'display:flex'">
+                <i class="ti ti-checks"></i>
+                <span>Выбрано: {{ selectedCount }}</span>
+              </div>
+
+              <div class="ct-dest-row">
+                <span class="ct-dest-label">Импортировать в:</span>
+                <div class="ct-dest-chip"><i class="ti ti-book"></i> База знаний</div>
+              </div>
+
+              <div class="ct-footer">
+                <span class="ct-hint" v-if="!selectedProject">Сначала выбери проект</span>
+                <span class="ct-hint" v-else>Ctrl+Enter — импортировать</span>
+                <div class="ct-footer-actions">
+                  <button class="ct-btn-ghost" @click="$emit('close')">Отмена</button>
+                  <button class="ct-btn-primary" :disabled="!canImport" @click="importSelected">
+                    <i class="ti ti-download"></i>
+                    <template v-if="importing">Импорт...</template>
+                    <template v-else>Импортировать</template>
+                  </button>
+                  <span v-if="importResult" class="ct-badge" :class="importResult.ok ? 'ct-badge--success' : 'ct-badge--danger'" :style="'margin-left:4px'">
+                    <i class="ti ti-circle-check"></i> {{ importResult.text }}
+                  </span>
+                </div>
+              </div>
+            </template>
+
+          </div>
+        </template>
       </div>`
   });
 }

@@ -130,6 +130,21 @@
           </div>
         </div>
 
+        <!-- Capture Terminal mode section -->
+        <div class="settings-section">
+          <div class="settings-section-title">// CAPTURE TERMINAL</div>
+          <div class="field-group">
+            <div class="field-label">CAPTURE_TERMINAL_MODE</div>
+            <div class="toggle-row">
+              <button class="toggle-btn" :class="{ active: captureMode === 'simple' }"
+                      @click="setCaptureMode('simple')">SIMPLE</button>
+              <button class="toggle-btn" :class="{ active: captureMode === 'extended' }"
+                      @click="setCaptureMode('extended')">EXTENDED</button>
+            </div>
+            <div class="field-note">SIMPLE: chat-style terminal. EXTENDED: card-based UI with live preview and Jira Import.</div>
+          </div>
+        </div>
+
         <!-- LLM Provider section -->
         <div class="settings-section">
           <div class="settings-section-title">// LLM PROVIDER</div>
@@ -315,6 +330,7 @@
       var ollamaTesting = ref(false);
       var llmSaving = ref(false);
       var jiraSyncNotify = ref(true);
+      var captureMode = ref('simple');
       var searchOpen = ref(false);
 
       function buildPrefsPayload() {
@@ -324,7 +340,8 @@
           llm_provider: llmProvider.value,
           ollama_url: ollamaUrl.value,
           ollama_model: ollamaModel.value,
-          jira_sync_notify: jiraSyncNotify.value
+          jira_sync_notify: jiraSyncNotify.value,
+          capture_mode: captureMode.value
         };
       }
 
@@ -448,6 +465,13 @@
         });
       }
 
+      function setCaptureMode(mode) {
+        console.log('[settings] setCaptureMode:', mode);
+        captureMode.value = mode;
+        api.saveUserPrefs(buildPrefsPayload());
+        try { localStorage.setItem('pm_capture_mode', mode); } catch(e) {}
+      }
+
       function setLlmProvider(provider) {
         console.log('[settings] setLlmProvider:', provider);
         llmProvider.value = provider;
@@ -508,7 +532,9 @@
           ollamaUrl.value = prefs.ollama_url || '';
           ollamaModel.value = prefs.ollama_model || 'qwen3.5:latest';
           jiraSyncNotify.value = prefs.jira_sync_notify !== false;
-          console.log('[settings] prefs loaded: refresh=%s theme=%s llm=%s', refreshMode.value, currentTheme.value, llmProvider.value);
+          captureMode.value = prefs.capture_mode || 'simple';
+          try { localStorage.setItem('pm_capture_mode', captureMode.value); } catch(e) {}
+          console.log('[settings] prefs loaded: refresh=%s theme=%s llm=%s capture=%s', refreshMode.value, currentTheme.value, llmProvider.value, captureMode.value);
           applyPageTheme(currentTheme.value);
           if (llmProvider.value !== 'claude' && ollamaUrl.value) {
             testOllamaConnection();
@@ -555,6 +581,8 @@
         saveOllamaSettings: saveOllamaSettings,
         jiraSyncNotify: jiraSyncNotify,
         setJiraSyncNotify: setJiraSyncNotify,
+        captureMode: captureMode,
+        setCaptureMode: setCaptureMode,
         buildPrefsPayload: buildPrefsPayload,
       };
     }

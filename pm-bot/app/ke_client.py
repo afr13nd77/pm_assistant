@@ -137,7 +137,24 @@ def jira_issue_types(project: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 10. GET /api/v1/domains
+# 10. GET /api/v1/jira-search
+# ---------------------------------------------------------------------------
+
+def jira_search(
+    project: str, type: str = "", status: str = "", max_results: int = 50
+) -> dict:
+    """Search Jira issues by project with optional filters."""
+    logger.info("jira_search: project=%s type=%r status=%r max=%d", project, type, status, max_results)
+    params: dict = {"project": project, "max_results": max_results}
+    if type:
+        params["type"] = type
+    if status:
+        params["status"] = status
+    return _get("/api/v1/jira-search", _get_timeout("jira_search"), params=params)
+
+
+# ---------------------------------------------------------------------------
+# 11. GET /api/v1/domains
 # ---------------------------------------------------------------------------
 
 def domain_list() -> dict:
@@ -146,7 +163,7 @@ def domain_list() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 11. POST /api/v1/domains
+# 12. POST /api/v1/domains
 # ---------------------------------------------------------------------------
 
 def domain_create(name: str, display_name: Optional[str] = None,
@@ -164,7 +181,7 @@ def domain_create(name: str, display_name: Optional[str] = None,
 
 
 # ---------------------------------------------------------------------------
-# 12. POST /api/v1/lint
+# 13. POST /api/v1/lint
 # ---------------------------------------------------------------------------
 
 def lint() -> dict:
@@ -173,7 +190,7 @@ def lint() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 13. GET /api/v1/status
+# 14. GET /api/v1/status
 # ---------------------------------------------------------------------------
 
 def status() -> dict:
@@ -182,7 +199,7 @@ def status() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 14. POST /api/v1/rebuild-index
+# 15. POST /api/v1/rebuild-index
 # ---------------------------------------------------------------------------
 
 def rebuild_index(domain: Optional[str] = None) -> dict:
@@ -195,7 +212,7 @@ def rebuild_index(domain: Optional[str] = None) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 15. POST /api/v1/ingest-clippings
+# 16. POST /api/v1/ingest-clippings
 # ---------------------------------------------------------------------------
 
 def ingest_clippings(dry_run: bool = False, notify: bool = False) -> dict:
@@ -205,7 +222,7 @@ def ingest_clippings(dry_run: bool = False, notify: bool = False) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 16. GET /api/v1/health
+# 17. GET /api/v1/health
 # ---------------------------------------------------------------------------
 
 def health() -> dict:
@@ -214,7 +231,7 @@ def health() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 17. POST /api/v1/jira-key-sync/patch
+# 18. POST /api/v1/jira-key-sync/patch
 # ---------------------------------------------------------------------------
 
 def jira_key_sync_patch(filepath: str, keys_map: dict[str, str]) -> dict:
@@ -224,7 +241,7 @@ def jira_key_sync_patch(filepath: str, keys_map: dict[str, str]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 18. POST /api/v1/jira-key-sync/sync
+# 19. POST /api/v1/jira-key-sync/sync
 # ---------------------------------------------------------------------------
 
 def jira_key_sync_sync(content: str) -> dict:
@@ -234,7 +251,7 @@ def jira_key_sync_sync(content: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 19. POST /api/v1/decay/touch
+# 20. POST /api/v1/decay/touch
 # ---------------------------------------------------------------------------
 
 def touch(filepath: str) -> dict:
@@ -244,7 +261,7 @@ def touch(filepath: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 20. POST /api/v1/decay/set-tier
+# 21. POST /api/v1/decay/set-tier
 # ---------------------------------------------------------------------------
 
 def set_tier(filepath: str, tier: str) -> dict:
@@ -254,7 +271,7 @@ def set_tier(filepath: str, tier: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 21. GET /api/v1/creative
+# 22. GET /api/v1/creative
 # ---------------------------------------------------------------------------
 
 def get_creative(count: int = 5) -> list:
@@ -264,7 +281,7 @@ def get_creative(count: int = 5) -> list:
 
 
 # ---------------------------------------------------------------------------
-# 22. GET /api/v1/decay/snapshot
+# 23. GET /api/v1/decay/snapshot
 # ---------------------------------------------------------------------------
 
 def decay_snapshot() -> dict:

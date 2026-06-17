@@ -6,6 +6,7 @@
 <title>PM Board — Command Center</title>
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
 <script>
 (function() {
   try {
@@ -846,23 +847,11 @@
           </div>
 
           <!-- Capture Terminal -->
-          <div class="capture-panel">
-            <div class="capture-header">
-              <span class="capture-header-dot"></span>
-              QUICK CAPTURE
-              <span class="kbd-badge" style="margin-left:auto">N</span>
-            </div>
-            <div class="capture-messages" id="capture-log">
-              <div class="msg msg-system">session started</div>
-            </div>
-            <div class="capture-input-area">
-              <input type="text" class="cp-input" id="capture-text" placeholder="> enter idea..." autocomplete="off" />
-              <div class="send-row">
-                <span class="send-hint">Enter to send</span>
-                <button class="cmd-btn cmd-btn-primary" id="capture-btn" onclick="submitCapture()">[CAPTURE]</button>
-              </div>
-            </div>
-          </div>
+          <capture-terminal
+            layout="inline"
+            @captured="onOverviewCaptured"
+            @imported="onOverviewImported"
+          ></capture-terminal>
         </div>
 
         <!-- Right Column -->
@@ -1338,58 +1327,21 @@ async function fetchActivityFeed() {
 }
 
 // ================================================================
-// SUBMIT: Capture
+// HANDLERS: capture-terminal component events
 // ================================================================
 
-async function submitCapture() {
-  var textEl = document.getElementById('capture-text');
-  var logEl = document.getElementById('capture-log');
-  var btn = document.getElementById('capture-btn');
-  if (!textEl || !logEl) return;
+function onOverviewCaptured(ev) {
+  console.log('[overview] onOverviewCaptured:', ev);
+  fetchIdeaFunnel();
+  fetchQueue();
+  fetchActivityFeed();
+}
 
-  var text = textEl.value.trim();
-  if (!text) return;
-
-  // Add user message
-  var userMsg = document.createElement('div');
-  userMsg.className = 'msg msg-user';
-  userMsg.textContent = text;
-  logEl.appendChild(userMsg);
-  logEl.scrollTop = logEl.scrollHeight;
-
-  textEl.value = '';
-  if (btn) { btn.disabled = true; btn.textContent = 'SENDING...'; }
-
-  try {
-    var r = await fetchWithTimeout(API + '/capture', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'idea', text: text })
-    });
-    if (!r.ok) throw new Error('not ok');
-    var result = await r.json();
-    var id = result.filename || result.id || 'captured';
-
-    var sysMsg = document.createElement('div');
-    sysMsg.className = 'msg msg-system';
-    sysMsg.textContent = 'CAPTURED: ' + id;
-    logEl.appendChild(sysMsg);
-    logEl.scrollTop = logEl.scrollHeight;
-
-    // Refresh KPI
-    fetchIdeaFunnel();
-  } catch (e) {
-    var errMsg = document.createElement('div');
-    errMsg.className = 'msg msg-error';
-    errMsg.textContent = '// ERROR: could not save';
-    logEl.appendChild(errMsg);
-    logEl.scrollTop = logEl.scrollHeight;
-
-    // Preserve text on error
-    textEl.value = text;
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '[CAPTURE]'; }
-  }
+function onOverviewImported(ev) {
+  console.log('[overview] onOverviewImported:', ev);
+  fetchIdeaFunnel();
+  fetchQueue();
+  fetchActivityFeed();
 }
 
 // ================================================================
@@ -1474,8 +1426,8 @@ function fetchAll() {
   fetchIdeaFunnel();
   fetchQueue();
 
-  var captureActive = document.activeElement && document.activeElement.id === 'capture-text';
-  if (!captureActive) fetchActivityFeed();
+  var isTyping = document.activeElement && (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT');
+  if (!isTyping) fetchActivityFeed();
 
   fetchHealthScore();
   fetchCreativeRecall();
@@ -1486,12 +1438,8 @@ document.addEventListener('keydown', function(e) {
   var tag = document.activeElement ? document.activeElement.tagName : '';
   if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey && tag !== 'TEXTAREA' && tag !== 'INPUT') {
     e.preventDefault();
-    var ct = document.getElementById('capture-text');
+    var ct = document.querySelector('.capture-terminal textarea, .capture-terminal input');
     if (ct) ct.focus();
-  }
-  if (e.key === 'Enter' && !e.shiftKey && document.activeElement && document.activeElement.id === 'capture-text') {
-    e.preventDefault();
-    submitCapture();
   }
 });
 
@@ -1500,8 +1448,8 @@ setInterval(fetchSystemStatus, 30000);
 setInterval(function() {
   fetchIdeaFunnel();
   fetchQueue();
-  var captureActive = document.activeElement && document.activeElement.id === 'capture-text';
-  if (!captureActive) fetchActivityFeed();
+  var isTyping = document.activeElement && (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT');
+  if (!isTyping) fetchActivityFeed();
   fetchHealthScore();
   fetchCreativeRecall();
   updateRefreshTimestamp();
@@ -1513,6 +1461,20 @@ var vueApp = Vue.createApp({
     return {
       searchOpen: false
     };
+  },
+  methods: {
+    onOverviewCaptured: function(ev) {
+      console.log('[overview] onOverviewCaptured:', ev);
+      fetchIdeaFunnel();
+      fetchQueue();
+      fetchActivityFeed();
+    },
+    onOverviewImported: function(ev) {
+      console.log('[overview] onOverviewImported:', ev);
+      fetchIdeaFunnel();
+      fetchQueue();
+      fetchActivityFeed();
+    }
   },
   mounted: function() {
     var self = this;

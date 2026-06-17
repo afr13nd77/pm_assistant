@@ -392,6 +392,315 @@ for (var i = 0; i < expectedComponents.length; i++) {
   assert('settings.html has LIGHT button', settingsContent.indexOf("setTheme('light')") >= 0);
 })();
 
+/* ========================================
+   Test capture-terminal component (BL-137 T-08)
+   ======================================== */
+(function() {
+  var comp = registeredComponents['capture-terminal'];
+  assert('capture-terminal is registered', comp !== undefined);
+
+  /* Props */
+  assert('capture-terminal has props.layout', comp.props && comp.props.layout !== undefined);
+  assert('capture-terminal props.layout default is drawer', comp.props.layout.default === 'drawer');
+  assert('capture-terminal props.layout type is String', comp.props.layout.type.name === 'String');
+  assert('capture-terminal has props.open', comp.props && comp.props.open !== undefined);
+  assert('capture-terminal props.open default is true', comp.props.open.default === true);
+  assert('capture-terminal props.open type is Boolean', comp.props.open.type.name === 'Boolean');
+
+  /* Emits */
+  assert('capture-terminal emits close', comp.emits && comp.emits.indexOf('close') >= 0);
+  assert('capture-terminal emits captured', comp.emits && comp.emits.indexOf('captured') >= 0);
+  assert('capture-terminal emits imported', comp.emits && comp.emits.indexOf('imported') >= 0);
+
+  /* Data */
+  var dataFn = comp.data;
+  assert('capture-terminal data is a function', typeof dataFn === 'function');
+  var data = dataFn();
+  assert('capture-terminal data.mode is simple', data.mode === 'simple');
+  assert('capture-terminal data.chatMessages is array', Array.isArray(data.chatMessages));
+  assert('capture-terminal data.captureText is empty', data.captureText === '');
+  assert('capture-terminal data.captureType is idea', data.captureType === 'idea');
+  assert('capture-terminal data.capturing is false', data.capturing === false);
+  assert('capture-terminal data.extType is idea', data.extType === 'idea');
+  assert('capture-terminal data.extText is empty', data.extText === '');
+  assert('capture-terminal data.extSaving is false', data.extSaving === false);
+  assert('capture-terminal data.extSaveOk is false', data.extSaveOk === false);
+  assert('capture-terminal data.jiraActive is false', data.jiraActive === false);
+  assert('capture-terminal data.projects is array', Array.isArray(data.projects));
+  assert('capture-terminal data.projectsLoading is false', data.projectsLoading === false);
+  assert('capture-terminal data.selectedProject is null', data.selectedProject === null);
+  assert('capture-terminal data.recentProjectKeys is array', Array.isArray(data.recentProjectKeys));
+  assert('capture-terminal data.projectSearch is empty', data.projectSearch === '');
+  assert('capture-terminal data.projectDropOpen is false', data.projectDropOpen === false);
+  assert('capture-terminal data.issueTypes is array', Array.isArray(data.issueTypes));
+  assert('capture-terminal data.tickets is array', Array.isArray(data.tickets));
+  assert('capture-terminal data.ticketsLoading is false', data.ticketsLoading === false);
+  assert('capture-terminal data.typeFilter is empty', data.typeFilter === '');
+  assert('capture-terminal data.statusFilter is empty', data.statusFilter === '');
+  assert('capture-terminal data.selectedTicketIds is array', Array.isArray(data.selectedTicketIds));
+  assert('capture-terminal data.directKey is empty', data.directKey === '');
+  assert('capture-terminal data.importing is false', data.importing === false);
+  assert('capture-terminal data.importResult is null', data.importResult === null);
+
+  /* Computed: previewTitle */
+  assert('capture-terminal has computed.previewTitle', typeof comp.computed.previewTitle === 'function');
+  assert('previewTitle empty when no text', comp.computed.previewTitle.call({ extText: '' }) === '');
+  assert('previewTitle empty when short text', comp.computed.previewTitle.call({ extText: 'ab' }) === '');
+  assert('previewTitle returns first line', comp.computed.previewTitle.call({ extText: 'Hello world\nSecond line' }) === 'Hello world');
+  assert('previewTitle truncates at 60 chars', comp.computed.previewTitle.call({ extText: 'A'.repeat(80) }).length === 60);
+
+  /* Computed: previewBody */
+  assert('capture-terminal has computed.previewBody', typeof comp.computed.previewBody === 'function');
+  assert('previewBody empty when no text', comp.computed.previewBody.call({ extText: '' }) === '');
+  assert('previewBody empty when single line', comp.computed.previewBody.call({ extText: 'Hello world' }) === '');
+  assert('previewBody returns remainder', comp.computed.previewBody.call({ extText: 'Line 1\nLine 2\nLine 3' }) === 'Line 2\nLine 3');
+  assert('previewBody truncates at 200 chars', comp.computed.previewBody.call({ extText: 'Title\n' + 'B'.repeat(300) }).length === 200);
+
+  /* Computed: filteredProjects */
+  assert('capture-terminal has computed.filteredProjects', typeof comp.computed.filteredProjects === 'function');
+  var mockProjects = [
+    { key: 'SUP', name: 'Support' },
+    { key: 'DEV', name: 'Development' },
+    { key: 'GO', name: 'Go Project' }
+  ];
+  assert('filteredProjects returns null when no search', comp.computed.filteredProjects.call({ projectSearch: '', projects: mockProjects }) === null);
+  var filtered = comp.computed.filteredProjects.call({ projectSearch: 'sup', projects: mockProjects });
+  assert('filteredProjects filters by key', filtered.length === 1 && filtered[0].key === 'SUP');
+  var filtered2 = comp.computed.filteredProjects.call({ projectSearch: 'dev', projects: mockProjects });
+  assert('filteredProjects filters by name', filtered2.length === 1 && filtered2[0].key === 'DEV');
+
+  /* Computed: filteredTickets */
+  assert('capture-terminal has computed.filteredTickets', typeof comp.computed.filteredTickets === 'function');
+  var mockTickets = [
+    { key: 'SUP-1', type: 'Bug', status: 'To Do' },
+    { key: 'SUP-2', type: 'Story', status: 'In Progress' },
+    { key: 'SUP-3', type: 'Bug', status: 'In Progress' }
+  ];
+  var allTickets = comp.computed.filteredTickets.call({ tickets: mockTickets, typeFilter: '', statusFilter: '' });
+  assert('filteredTickets returns all when no filter', allTickets.length === 3);
+  var typeFiltered = comp.computed.filteredTickets.call({ tickets: mockTickets, typeFilter: 'Bug', statusFilter: '' });
+  assert('filteredTickets filters by type', typeFiltered.length === 2);
+  var statusFiltered = comp.computed.filteredTickets.call({ tickets: mockTickets, typeFilter: '', statusFilter: 'In Progress' });
+  assert('filteredTickets filters by status', statusFiltered.length === 2);
+  var bothFiltered = comp.computed.filteredTickets.call({ tickets: mockTickets, typeFilter: 'Bug', statusFilter: 'In Progress' });
+  assert('filteredTickets filters by both', bothFiltered.length === 1 && bothFiltered[0].key === 'SUP-3');
+
+  /* Computed: selectedCount */
+  assert('capture-terminal has computed.selectedCount', typeof comp.computed.selectedCount === 'function');
+  assert('selectedCount with empty', comp.computed.selectedCount.call({ selectedTicketIds: [] }) === 0);
+  assert('selectedCount with items', comp.computed.selectedCount.call({ selectedTicketIds: ['A', 'B'] }) === 2);
+
+  /* Computed: canSave */
+  assert('capture-terminal has computed.canSave', typeof comp.computed.canSave === 'function');
+  assert('canSave true when text and not saving', comp.computed.canSave.call({ extText: 'hello', extSaving: false }) === true);
+  assert('canSave false when empty', comp.computed.canSave.call({ extText: '', extSaving: false }) === false);
+  assert('canSave false when saving', comp.computed.canSave.call({ extText: 'hello', extSaving: true }) === false);
+  assert('canSave false when whitespace only', comp.computed.canSave.call({ extText: '   ', extSaving: false }) === false);
+
+  /* Computed: canImport */
+  assert('capture-terminal has computed.canImport', typeof comp.computed.canImport === 'function');
+  assert('canImport true when selected and not importing', comp.computed.canImport.call({ selectedTicketIds: ['X'], importing: false }) === true);
+  assert('canImport false when none selected', comp.computed.canImport.call({ selectedTicketIds: [], importing: false }) === false);
+  assert('canImport false when importing', comp.computed.canImport.call({ selectedTicketIds: ['X'], importing: true }) === false);
+
+  /* Computed: recentProjects and otherProjects */
+  assert('capture-terminal has computed.recentProjects', typeof comp.computed.recentProjects === 'function');
+  assert('capture-terminal has computed.otherProjects', typeof comp.computed.otherProjects === 'function');
+  var ctx = { recentProjectKeys: ['SUP'], projects: mockProjects };
+  var recent = comp.computed.recentProjects.call(ctx);
+  assert('recentProjects returns matching', recent.length === 1 && recent[0].key === 'SUP');
+  var other = comp.computed.otherProjects.call(ctx);
+  assert('otherProjects returns non-matching', other.length === 2);
+
+  /* Computed: sessionDate */
+  assert('capture-terminal has computed.sessionDate', typeof comp.computed.sessionDate === 'function');
+  var dateStr = comp.computed.sessionDate.call({});
+  assert('sessionDate format DD.MM.YYYY', /^\d{2}\.\d{2}\.\d{4}$/.test(dateStr));
+
+  /* Methods existence */
+  assert('capture-terminal has method initMode', typeof comp.methods.initMode === 'function');
+  assert('capture-terminal has method setExtType', typeof comp.methods.setExtType === 'function');
+  assert('capture-terminal has method activateJira', typeof comp.methods.activateJira === 'function');
+  assert('capture-terminal has method saveCapture', typeof comp.methods.saveCapture === 'function');
+  assert('capture-terminal has method resetCapture', typeof comp.methods.resetCapture === 'function');
+  assert('capture-terminal has method loadProjects', typeof comp.methods.loadProjects === 'function');
+  assert('capture-terminal has method selectProject', typeof comp.methods.selectProject === 'function');
+  assert('capture-terminal has method clearProject', typeof comp.methods.clearProject === 'function');
+  assert('capture-terminal has method loadTickets', typeof comp.methods.loadTickets === 'function');
+  assert('capture-terminal has method toggleTicket', typeof comp.methods.toggleTicket === 'function');
+  assert('capture-terminal has method isTicketSelected', typeof comp.methods.isTicketSelected === 'function');
+  assert('capture-terminal has method importSelected', typeof comp.methods.importSelected === 'function');
+  assert('capture-terminal has method handleExtKeydown', typeof comp.methods.handleExtKeydown === 'function');
+  assert('capture-terminal has method simpleCapture', typeof comp.methods.simpleCapture === 'function');
+  assert('capture-terminal has method simpleKeydown', typeof comp.methods.simpleKeydown === 'function');
+  assert('capture-terminal has method onProjectInputFocus', typeof comp.methods.onProjectInputFocus === 'function');
+  assert('capture-terminal has method onProjectInputBlur', typeof comp.methods.onProjectInputBlur === 'function');
+  assert('capture-terminal has method onFilterChange', typeof comp.methods.onFilterChange === 'function');
+
+  /* Method: setExtType */
+  var ctx2 = { extType: 'idea', jiraActive: true };
+  comp.methods.setExtType.call(ctx2, 'task');
+  assert('setExtType sets type', ctx2.extType === 'task');
+  assert('setExtType deactivates jira', ctx2.jiraActive === false);
+
+  /* Method: activateJira */
+  var loadProjectsCalled = false;
+  var ctx3 = { jiraActive: false, projects: [], loadProjects: function() { loadProjectsCalled = true; } };
+  comp.methods.activateJira.call(ctx3);
+  assert('activateJira sets jiraActive true', ctx3.jiraActive === true);
+  assert('activateJira loads projects when empty', loadProjectsCalled === true);
+
+  /* Method: activateJira when projects exist */
+  var loadProjectsCalled2 = false;
+  var ctx4 = { jiraActive: false, projects: [{ key: 'A', name: 'A' }], loadProjects: function() { loadProjectsCalled2 = true; } };
+  comp.methods.activateJira.call(ctx4);
+  assert('activateJira does not reload when projects exist', loadProjectsCalled2 === false);
+
+  /* Method: resetCapture */
+  var ctx5 = { extText: 'some text' };
+  comp.methods.resetCapture.call(ctx5);
+  assert('resetCapture clears text', ctx5.extText === '');
+
+  /* Method: toggleTicket */
+  var ctx6 = { selectedTicketIds: [] };
+  comp.methods.toggleTicket.call(ctx6, 'SUP-1');
+  assert('toggleTicket adds key', ctx6.selectedTicketIds.indexOf('SUP-1') >= 0);
+  comp.methods.toggleTicket.call(ctx6, 'SUP-1');
+  assert('toggleTicket removes key', ctx6.selectedTicketIds.indexOf('SUP-1') === -1);
+
+  /* Method: isTicketSelected */
+  assert('isTicketSelected true', comp.methods.isTicketSelected.call({ selectedTicketIds: ['X'] }, 'X') === true);
+  assert('isTicketSelected false', comp.methods.isTicketSelected.call({ selectedTicketIds: ['X'] }, 'Y') === false);
+
+  /* Method: clearProject */
+  var ctx7 = {
+    selectedProject: { key: 'A' }, projectSearch: 'A', tickets: [1],
+    issueTypes: ['Bug'], typeFilter: 'Bug', statusFilter: 'Done', selectedTicketIds: ['X']
+  };
+  comp.methods.clearProject.call(ctx7);
+  assert('clearProject resets selectedProject', ctx7.selectedProject === null);
+  assert('clearProject resets projectSearch', ctx7.projectSearch === '');
+  assert('clearProject resets tickets', ctx7.tickets.length === 0);
+  assert('clearProject resets issueTypes', ctx7.issueTypes.length === 0);
+  assert('clearProject resets typeFilter', ctx7.typeFilter === '');
+  assert('clearProject resets statusFilter', ctx7.statusFilter === '');
+  assert('clearProject resets selectedTicketIds', ctx7.selectedTicketIds.length === 0);
+
+  /* Method: initMode reads from localStorage */
+  _mockStorage['pm_capture_mode'] = 'extended';
+  _mockStorage['pm_jira_recent_projects'] = '["SUP","DEV"]';
+  var ctx8 = { mode: 'simple', recentProjectKeys: [] };
+  comp.methods.initMode.call(ctx8);
+  assert('initMode reads mode from localStorage', ctx8.mode === 'extended');
+  assert('initMode reads recentProjectKeys from localStorage', ctx8.recentProjectKeys.length === 2 && ctx8.recentProjectKeys[0] === 'SUP');
+  // Restore
+  _mockStorage['pm_capture_mode'] = 'simple';
+  delete _mockStorage['pm_jira_recent_projects'];
+
+  /* Method: onFilterChange */
+  var loadTicketsCalled = false;
+  var ctx9 = { selectedTicketIds: ['X', 'Y'], loadTickets: function() { loadTicketsCalled = true; } };
+  comp.methods.onFilterChange.call(ctx9);
+  assert('onFilterChange clears selection', ctx9.selectedTicketIds.length === 0);
+  assert('onFilterChange triggers loadTickets', loadTicketsCalled === true);
+
+  /* Template */
+  assert('capture-terminal has template', typeof comp.template === 'string');
+
+  /* Simple mode template checks */
+  assert('template has simple mode v-if', comp.template.indexOf('mode === \'simple\'') >= 0);
+  assert('template has CAPTURE_TERMINAL header', comp.template.indexOf('CAPTURE_TERMINAL') >= 0);
+  assert('template has capture-messages class', comp.template.indexOf('capture-messages') >= 0);
+  assert('template has type-selector', comp.template.indexOf('type-selector') >= 0);
+  assert('template has IDEA button', comp.template.indexOf('IDEA') >= 0);
+  assert('template has TASK button', comp.template.indexOf('TASK') >= 0);
+  assert('template has MEETING button', comp.template.indexOf('MEETING') >= 0);
+  assert('template has JIRA_IMPORT button', comp.template.indexOf('JIRA_IMPORT') >= 0);
+  assert('template has cp-textarea', comp.template.indexOf('cp-textarea') >= 0);
+  assert('template has cmd-button for simple mode', comp.template.indexOf('cmd-button') >= 0);
+  assert('template has Ctrl+Enter hint', comp.template.indexOf('Ctrl+Enter') >= 0);
+
+  /* Simple mode inline layout */
+  assert('template has QUICK CAPTURE', comp.template.indexOf('QUICK CAPTURE') >= 0);
+  assert('template has cp-input for inline', comp.template.indexOf('cp-input') >= 0);
+
+  /* Extended mode template checks */
+  assert('template has extended mode v-if', comp.template.indexOf('mode === \'extended\'') >= 0);
+  assert('template has ct-header class', comp.template.indexOf('ct-header') >= 0);
+  assert('template has ct-type-bar', comp.template.indexOf('ct-type-bar') >= 0);
+  assert('template has ct-chip class', comp.template.indexOf('ct-chip') >= 0);
+  assert('template has ct-textarea', comp.template.indexOf('ct-textarea') >= 0);
+  assert('template has ct-preview', comp.template.indexOf('ct-preview') >= 0);
+  assert('template has ct-dest-row', comp.template.indexOf('ct-dest-row') >= 0);
+  assert('template has ct-footer', comp.template.indexOf('ct-footer') >= 0);
+  assert('template has ct-btn-primary', comp.template.indexOf('ct-btn-primary') >= 0);
+  assert('template has ct-btn-ghost', comp.template.indexOf('ct-btn-ghost') >= 0);
+
+  /* Jira panel template checks */
+  assert('template has ct-jira-body', comp.template.indexOf('ct-jira-body') >= 0);
+  assert('template has ct-proj-wrap', comp.template.indexOf('ct-proj-wrap') >= 0);
+  assert('template has ct-proj-input', comp.template.indexOf('ct-proj-input') >= 0);
+  assert('template has ct-proj-drop', comp.template.indexOf('ct-proj-drop') >= 0);
+  assert('template has ct-filter-row', comp.template.indexOf('ct-filter-row') >= 0);
+  assert('template has ct-or-divider', comp.template.indexOf('ct-or-divider') >= 0);
+  assert('template has ct-id-input', comp.template.indexOf('ct-id-input') >= 0);
+  assert('template has ct-ticket-list', comp.template.indexOf('ct-ticket-list') >= 0);
+  assert('template has ct-ticket-item', comp.template.indexOf('ct-ticket-item') >= 0);
+  assert('template has ct-sel-row', comp.template.indexOf('ct-sel-row') >= 0);
+
+  /* Tabler icon classes */
+  assert('template has ti-bulb icon', comp.template.indexOf('ti ti-bulb') >= 0);
+  assert('template has ti-checkbox icon', comp.template.indexOf('ti ti-checkbox') >= 0);
+  assert('template has ti-users icon', comp.template.indexOf('ti ti-users') >= 0);
+  assert('template has ti-brand-jira icon', comp.template.indexOf('ti ti-brand-jira') >= 0);
+  assert('template has ti-device-floppy icon', comp.template.indexOf('ti ti-device-floppy') >= 0);
+  assert('template has ti-download icon', comp.template.indexOf('ti ti-download') >= 0);
+  assert('template has ti-x close icon', comp.template.indexOf('ti ti-x') >= 0);
+  assert('template has ti-pencil icon', comp.template.indexOf('ti ti-pencil') >= 0);
+  assert('template has ti-database icon', comp.template.indexOf('ti ti-database') >= 0);
+  assert('template has ti-folder icon', comp.template.indexOf('ti ti-folder') >= 0);
+  assert('template has ti-book icon', comp.template.indexOf('ti ti-book') >= 0);
+  assert('template has ti-circle-check icon', comp.template.indexOf('ti ti-circle-check') >= 0);
+  assert('template has ti-folder-open icon', comp.template.indexOf('ti ti-folder-open') >= 0);
+  assert('template has ti-square icon', comp.template.indexOf('ti ti-square') >= 0);
+  assert('template has ti-square-check icon', comp.template.indexOf('ti ti-square-check') >= 0);
+  assert('template has ti-external-link icon', comp.template.indexOf('ti ti-external-link') >= 0);
+  assert('template has ti-user icon', comp.template.indexOf('ti ti-user') >= 0);
+  assert('template has ti-clock icon', comp.template.indexOf('ti ti-clock') >= 0);
+  assert('template has ti-tag icon', comp.template.indexOf('ti ti-tag') >= 0);
+
+  /* Mounted and Watch */
+  assert('capture-terminal has mounted hook', typeof comp.mounted === 'function');
+  assert('capture-terminal has watch.open', typeof comp.watch.open === 'function');
+
+  /* ES5 compliance checks */
+  var compStr = JSON.stringify(comp.methods);
+  assert('no arrow functions in methods', compStr.indexOf('=>') === -1);
+
+  /* No Set() usage -- selectedTicketIds should be array */
+  assert('selectedTicketIds is plain array (no Set)', Array.isArray(data.selectedTicketIds) && typeof data.selectedTicketIds.push === 'function');
+})();
+
+/* Test ct-* CSS classes exist in style.css (BL-137) */
+(function() {
+  var cssPath = path.join(__dirname, '..', 'style.css');
+  var cssContent = fs.readFileSync(cssPath, 'utf8');
+  var ctClasses = [
+    '.ct-header', '.ct-dot', '.ct-header-title', '.ct-session-badge', '.ct-close',
+    '.ct-type-bar', '.ct-chip', '.ct-chip--idea', '.ct-chip--task', '.ct-chip--meet', '.ct-chip--jira',
+    '.ct-capture-body', '.ct-field-label', '.ct-textarea',
+    '.ct-preview', '.ct-preview-label', '.ct-preview-row', '.ct-preview-key', '.ct-preview-value',
+    '.ct-jira-body', '.ct-proj-wrap', '.ct-proj-input', '.ct-proj-drop', '.ct-proj-opt',
+    '.ct-filter-row', '.ct-filter', '.ct-or-divider', '.ct-id-input',
+    '.ct-ticket-list', '.ct-ticket-item', '.ct-ticket-check', '.ct-card-body', '.ct-card-title',
+    '.ct-badge', '.ct-status-badge', '.ct-sel-row', '.ct-dest-row', '.ct-dest-chip',
+    '.ct-footer', '.ct-hint', '.ct-footer-actions', '.ct-btn-ghost', '.ct-btn-primary'
+  ];
+  for (var i = 0; i < ctClasses.length; i++) {
+    assert('style.css has ' + ctClasses[i], cssContent.indexOf(ctClasses[i]) >= 0);
+  }
+})();
+
 /* Summary */
 console.log('\n// SUMMARY: ' + passed + '/' + (passed + failed) + ' passed');
 if (failed > 0) {

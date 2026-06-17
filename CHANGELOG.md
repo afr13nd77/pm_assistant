@@ -5,6 +5,34 @@
 
 ---
 
+## 17.06.2026 — Capture Terminal Redesign (BL-137)
+
+### knowledge-engine 1.9.1
+- **API**: GET /api/v1/jira-search — поиск тикетов по проекту с фильтрами (type, status, max_results)
+- **_map_jira_issue()**: маппинг Jira issue → компактный JSON (key, summary, type, status, assignee, labels, priority, url)
+- **client.search()**: параметр `limit` для ограничения общего количества результатов (не только размер страницы)
+- **Фиксы**: JQL quoting для зарезервированных слов (GO, OR и т.д.), rstrip('/') в Jira URL
+- **Тесты**: 7 тестов для limit-пагинации, 7 тестов для jira-search endpoint
+
+### pm-bot 1.10.1
+- **ke_client**: jira_search() — HTTP-клиент к KE jira-search API
+- **vault_api**: GET /api/v1/jira/search — proxy endpoint с валидацией project key
+
+### web-ui 1.19.0
+- **capture-terminal** (components.js): новый Vue 3 компонент с двумя режимами:
+  - **Simple**: классический chat-style терминал (message bubbles) — без изменений
+  - **Extended**: card-based UI с type chips (Идея/Задача/Встреча), live preview, Jira Import
+- **Jira Import**: выбор проекта (dropdown с recent), фильтры по типу/статусу, мультиселект тикетов, batch import
+- **Settings**: toggle SIMPLE / EXTENDED (localStorage + server prefs)
+- **Toast уведомления**: ct-toast success/error с именем файла и автоисчезновением
+- **CSS**: ~670 строк ct-* стилей (style.css), light-theme overrides (style-light.css)
+- **Tabler Icons CDN**: подключён на board.html, ideas.html, overview.html
+- **Интеграция**: board.html (drawer), ideas.html (drawer), overview.html (inline) — замена inline HTML на компонент
+- **Багфикс**: editable-field domain dropdown — d.slug → d.name, placeholder option, guard против undefined value
+- **Тесты**: 212 новых тестов для capture-terminal
+
+---
+
 ## 15.06.2026 — Decay State Dashboard (BL-132)
 
 ### knowledge-engine 1.9.0

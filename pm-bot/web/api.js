@@ -70,6 +70,8 @@ var _jiraProjectsCacheTs = 0;
 var _jiraEpicsCaches = {};
 var _jiraIssueTypesCaches = {};
 var _JIRA_CACHE_TTL = 300000; // 5 minutes
+var _jiraSearchCache = {};
+var _JIRA_SEARCH_CACHE_TTL = 60000;
 
 var api = {
   /** GET /api/v1/ideas -- ideas sorted by date, optional domain filter */
@@ -235,6 +237,26 @@ var api = {
     }
     return apiFetch('/jira/projects/' + encodeURIComponent(projectKey) + '/issue-types').then(function(data) {
       _jiraIssueTypesCaches[projectKey] = { data: data, ts: Date.now() };
+      return data;
+    });
+  },
+
+  /** GET /api/v1/jira/search — search issues in a Jira project */
+  jiraSearch: function(projectKey, type, status, maxResults) {
+    maxResults = maxResults || 50;
+    var cacheKey = projectKey + '|' + (type || '') + '|' + (status || '') + '|' + maxResults;
+    var now = Date.now();
+    var cached = _jiraSearchCache[cacheKey];
+    if (cached && (now - cached.ts) < _JIRA_SEARCH_CACHE_TTL) {
+      console.log('[api] jiraSearch: returning cached data for', cacheKey);
+      return Promise.resolve(cached.data);
+    }
+    var path = '/jira/search?project=' + encodeURIComponent(projectKey)
+      + '&max_results=' + maxResults;
+    if (type) path += '&type=' + encodeURIComponent(type);
+    if (status) path += '&status=' + encodeURIComponent(status);
+    return apiFetch(path).then(function(data) {
+      _jiraSearchCache[cacheKey] = { data: data, ts: Date.now() };
       return data;
     });
   },

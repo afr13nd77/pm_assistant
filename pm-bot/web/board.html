@@ -6,6 +6,7 @@
   <title>PM Board — Board</title>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
   <script>
   (function() {
     try {
@@ -143,53 +144,13 @@
     </main>
     <div class="drawer-overlay" v-if="drawerOpen" @click="drawerOpen = false"></div>
     <div class="capture-drawer" :class="{ open: drawerOpen }">
-      <div class="capture-panel" style="border: none;">
-        <div class="capture-header">
-          <span class="capture-header-dot"></span> CAPTURE_TERMINAL
-          <span class="text-muted" style="margin-left: auto; cursor: pointer;" @click="drawerOpen = false">[×]</span>
-        </div>
-        <div class="capture-messages" ref="messagesRef">
-          <div class="msg msg-system">SESSION_STARTED {{ new Date().toLocaleDateString() }}</div>
-          <div class="msg msg-agent">
-            <div class="msg-label">AGENT_</div>
-            Готов к захвату. Выбери тип — IDEA, TASK или MEETING — и фиксируй.
-          </div>
-          <template v-for="(msg, i) in chatMessages" :key="i">
-            <div v-if="msg.role === 'user'" class="msg msg-user">
-              <div class="msg-label">USER_ [{{ msg.type.toUpperCase() }}]</div>
-              {{ msg.text }}
-            </div>
-            <div v-if="msg.role === 'agent'" class="msg msg-agent">
-              <div class="msg-label">AGENT_</div>
-              {{ msg.text }}
-            </div>
-            <div v-if="msg.role === 'error'" class="msg msg-agent text-magenta msg-error">
-              <div class="msg-label">ERROR_</div>
-              {{ msg.text }}
-            </div>
-          </template>
-          <div v-if="capturing" class="msg msg-system text-yellow">Processing...</div>
-        </div>
-        <div class="type-selector">
-          <button class="type-btn" :class="{'active-idea': captureType === 'idea'}" @click="captureType = 'idea'">IDEA</button>
-          <button class="type-btn" :class="{'active-task': captureType === 'task'}" @click="captureType = 'task'">TASK</button>
-          <button class="type-btn" :class="{'active-meeting': captureType === 'meeting'}" @click="captureType = 'meeting'">MEETING</button>
-          <button class="type-btn" :class="{'active-task': captureType === 'jira_import'}" @click="captureType = 'jira_import'">JIRA_IMPORT</button>
-        </div>
-        <textarea
-          class="cp-textarea"
-          v-model="captureText"
-          @keydown="handleKeydown"
-          :placeholder="captureType === 'jira_import' ? '// enter Jira key, e.g. GO-153' : '// type idea or task...'"
-          :disabled="capturing"
-        ></textarea>
-        <div class="capture-input-area">
-          <div class="send-row">
-            <span class="send-hint">Ctrl+Enter to send</span>
-            <cmd-button :label="captureType === 'jira_import' ? 'IMPORT' : 'CAPTURE'" color="cyan" :loading="capturing" @click="capture"></cmd-button>
-          </div>
-        </div>
-      </div>
+      <capture-terminal
+        layout="drawer"
+        :open="drawerOpen"
+        @close="drawerOpen = false"
+        @captured="onCaptured"
+        @imported="onImported"
+      ></capture-terminal>
     </div>
     <div class="drawer-overlay" v-if="taskDrawerOpen" @click="closeDrawer"></div>
     <task-drawer :open="taskDrawerOpen" :item="taskDrawerItem" @close="closeDrawer" @jira-created="onJiraCreated" @field-updated="onFieldUpdated"></task-drawer>
@@ -225,10 +186,6 @@
         var activeDomain = ref(null);  // null = "ALL"
         var loading = ref(false);
         var error = ref(null);
-        var captureType = ref('idea');
-        var captureText = ref('');
-        var capturing = ref(false);
-        var chatMessages = ref([]);
         var synthesizing = ref(false);
         var drawerOpen = ref(false);
         var taskDrawerOpen = ref(false);
@@ -386,54 +343,9 @@
           loadData();
         }
 
-        async function capture() {
-          if (!captureText.value.trim()) {
-            console.log('[board] capture — empty text, skipping');
-            return;
-          }
-          console.log('[board] capture — start, type:', captureType.value, 'text length:', captureText.value.length);
-          chatMessages.value.push({ role: 'user', type: captureType.value, text: captureText.value });
-          setTimeout(function() { var el = document.querySelector('.capture-messages'); if (el) el.scrollTop = el.scrollHeight; }, 50);
-          capturing.value = true;
-          try {
-            var result;
-            if (captureType.value === 'jira_import') {
-              result = await api.jiraImport(captureText.value.trim());
-              console.log('[board] jira_import — success, key:', result.key || 'unknown');
-              captureText.value = '';
-              var importMsg = 'Imported → ' + (result.key || '?') + ' (' + (result.domain || '?') + ', ' + (result.task_status || '?') + ')';
-              if (result.title) importMsg += '\n' + result.title;
-              chatMessages.value.push({ role: 'agent', text: importMsg });
-            } else {
-              result = await api.capture(captureType.value, captureText.value);
-              console.log('[board] capture — success, filename:', result.filename || 'unknown');
-              captureText.value = '';
-              chatMessages.value.push({ role: 'agent', text: 'Captured → ' + (result.filename || 'note created') });
-            }
-            setTimeout(function() { var el = document.querySelector('.capture-messages'); if (el) el.scrollTop = el.scrollHeight; }, 50);
-            // Invalidate domain cache and reload data to show new card
-            api.domains.invalidate();
-            await loadData();
-          } catch (err) {
-            console.error('[board] capture — error:', err.message);
-            chatMessages.value.push({ role: 'error', text: err.message });
-            setTimeout(function() { var el = document.querySelector('.capture-messages'); if (el) el.scrollTop = el.scrollHeight; }, 50);
-          } finally {
-            capturing.value = false;
-          }
-        }
-
         function showMore() {
           displayLimit.value += 50;
           console.log('[board] showMore — new limit:', displayLimit.value);
-        }
-
-        function handleKeydown(e) {
-          if (e.ctrlKey && e.key === 'Enter') {
-            console.log('[board] handleKeydown — Ctrl+Enter detected');
-            e.preventDefault();
-            capture();
-          }
         }
 
         async function synthesize() {
@@ -471,6 +383,16 @@
 
         function onFieldUpdated(key, val, resp) {
           console.log('[board] field updated via drawer:', key, '=', val);
+          loadData();
+        }
+
+        function onCaptured(ev) {
+          console.log('[board] onCaptured:', ev);
+          loadData();
+        }
+
+        function onImported(ev) {
+          console.log('[board] onImported:', ev);
           loadData();
         }
 
@@ -543,10 +465,6 @@
           activeDomain,
           loading,
           error,
-          captureType,
-          captureText,
-          capturing,
-          chatMessages,
           synthesizing,
           drawerOpen,
           taskDrawerOpen,
@@ -567,8 +485,6 @@
           loadData,
           loadDomains,
           selectDomain,
-          capture,
-          handleKeydown,
           showMore,
           synthesize,
           getCardType,
@@ -577,7 +493,9 @@
           closeDrawer,
           onJiraCreated,
           togglePin,
-          onFieldUpdated
+          onFieldUpdated,
+          onCaptured,
+          onImported
         };
       }
     });

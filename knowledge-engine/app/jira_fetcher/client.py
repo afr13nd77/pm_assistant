@@ -184,16 +184,20 @@ def search(
     jql: str,
     fields: list[str] | None = None,
     max_results: int = 100,
+    limit: int | None = None,
 ) -> list[dict]:
     """
     Search for Jira issues using JQL.
 
-    Fetches all matching issues using pagination (startAt loop).
+    Fetches matching issues using pagination (startAt loop).
 
     Args:
         jql: JQL query string.
         fields: List of field names to return. Defaults to a standard set.
         max_results: Number of issues to request per page.
+        limit: Maximum total number of issues to return. When set, pagination
+            stops as soon as enough issues are collected and the result is
+            truncated to exactly ``limit`` items.  ``None`` means fetch all.
 
     Returns:
         List of raw issue dicts from Jira (elements of the ``issues`` array).
@@ -202,7 +206,7 @@ def search(
         JiraClientError: On auth errors (401/403), config errors (missing env vars),
             or persistent network/server failures.
     """
-    logger.info("search: jql=%r fields=%s max_results=%d", jql, fields, max_results)
+    logger.info("search: jql=%r fields=%s max_results=%d limit=%s", jql, fields, max_results, limit)
 
     jira_url, jira_token = _get_config()
     headers = {"Authorization": f"Bearer {jira_token}"}
@@ -214,17 +218,24 @@ def search(
     start_at = 0
 
     while True:
+        # When a limit is set, request only as many issues as still needed
+        # so we don't over-fetch from Jira.
+        page_size = max_results
+        if limit is not None:
+            remaining = limit - len(all_issues)
+            page_size = min(max_results, remaining)
+
         params = {
             "jql": jql,
             "fields": fields_str,
-            "maxResults": max_results,
+            "maxResults": page_size,
             "startAt": start_at,
         }
 
         logger.info(
             "search: fetching page startAt=%d maxResults=%d url=%s",
             start_at,
-            max_results,
+            page_size,
             url,
         )
 
@@ -244,10 +255,19 @@ def search(
 
         all_issues.extend(issues)
 
+        # Stop if limit reached
+        if limit is not None and len(all_issues) >= limit:
+            break
+
         if start_at + count >= total:
             break
 
         start_at += count
+
+    # Truncate to exact limit if necessary (Jira may return more than
+    # requested on the last page).
+    if limit is not None:
+        all_issues = all_issues[:limit]
 
     logger.info("search: completed, %d issue(s) returned in total", len(all_issues))
     return all_issues

@@ -2082,3 +2082,115 @@ body {
 .body-editor-preview pre { background: rgba(0,0,0,0.03); }
 .body-editor-preview a { color: #b8860b; }
 .body-editor-error { color: #c62828; background: rgba(198, 40, 40, 0.06); }
+
+/* ================================================================
+   CAPTURE TERMINAL EXTENDED — light overrides (BL-137)
+   ================================================================ */
+
+/* ── Border-radius: 4px (matrix) → 8px (light) ── */
+.ct-textarea          { border-radius: 8px; }
+.ct-ticket-item       { border-radius: 8px; }
+.ct-proj-drop         { border-radius: 8px; }
+.ct-btn-primary       { border-radius: 8px; }
+.ct-btn-ghost         { border-radius: 8px; }
+.ct-preview           { border-radius: 8px; }
+.ct-proj-input        { border-radius: 8px; }
+.ct-id-input          { border-radius: 8px; }
+.ct-filter            { border-radius: 8px; }
+.ct-header            { border-radius: 8px 8px 0 0; }
+.ct-footer            { border-radius: 0 0 8px 8px; }
+.ct-toast             { border-radius: 8px; }
+
+/* ── Remove glow effects ── */
+.ct-chip--idea,
+.ct-chip--task,
+.ct-chip--meet,
+.ct-chip--jira {
+  box-shadow: none;
+  filter: none;
+}
+
+.ct-dot {
+  box-shadow: none;
+}
+
+/* ── Primary button — solid, no glow ── */
+.ct-btn-primary {
+  background: var(--cyan);
+  color: #FFFFFF;
+  box-shadow: none;
+  filter: none;
+}
+.ct-btn-primary:hover {
+  box-shadow: none;
+  filter: none;
+  opacity: 0.85;
+}
+.ct-btn-primary:disabled {
+  box-shadow: none;
+  filter: none;
+}
+
+/* ── Chip colors — soft pastels ── */
+.ct-chip--idea {
+  background: #eef4ff;
+  color: #2563eb;
+}
+.ct-chip--task {
+  background: #edfaf3;
+  color: #16a34a;
+}
+.ct-chip--meet {
+  background: #fef9ee;
+  color: #b45309;
+}
+.ct-chip--jira {
+  background: var(--surface);
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}
+
+/* ── Dropdown shadow — lighter ── */
+.ct-proj-drop {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+/* ── Ticket selected state ── */
+.ct-ticket-item--selected {
+  border-color: #fcd34d;
+  background: #fef9ee;
+}
+
+/* ── Toast ── */
+.ct-toast--success {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #6ee7b7;
+}
+.ct-toast--error {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+/* ── Preview tag ── */
+.ct-preview-tag {
+  background: #eef4ff;
+  color: #2563eb;
+}
+
+/* ── Dest chip ── */
+.ct-dest-chip {
+  background: #edfaf3;
+  color: #16a34a;
+}
+
+/* ── Badge overrides — soft colors ── */
+.ct-badge--success  { background: #edfaf3; color: #16a34a; }
+.ct-badge--danger   { background: #fef2f2; color: #dc2626; }
+.ct-badge--info     { background: #eef4ff; color: #2563eb; }
+
+.ct-label-chip--critical {
+  border-color: #fca5a5;
+  color: #dc2626;
+}

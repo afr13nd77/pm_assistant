@@ -203,6 +203,124 @@ class TestSearch:
 
 
 # ---------------------------------------------------------------------------
+# search() limit parameter tests
+# ---------------------------------------------------------------------------
+
+class TestSearchLimit:
+    """Tests for the ``limit`` parameter of search().
+
+    These tests mock ``_make_request`` directly so they don't depend on
+    low-level HTTP transport details.
+    """
+
+    def test_limit_none_fetches_all(self, monkeypatch):
+        """limit=None (default) fetches every page."""
+        monkeypatch.setenv("JIRA_URL", "https://jira.example.com")
+        monkeypatch.setenv("JIRA_TOKEN", "tok")
+
+        page1 = {"issues": _fake_issues(3, offset=0), "total": 5}
+        page2 = {"issues": _fake_issues(2, offset=3), "total": 5}
+
+        with patch("app.jira_fetcher.client._make_request", side_effect=[page1, page2]) as mock_req:
+            result = search("project = PROJ", max_results=3)
+
+        assert len(result) == 5
+        assert mock_req.call_count == 2
+
+    def test_limit_caps_total_returned(self, monkeypatch):
+        """limit=2 with total=5 → only 2 issues returned."""
+        monkeypatch.setenv("JIRA_URL", "https://jira.example.com")
+        monkeypatch.setenv("JIRA_TOKEN", "tok")
+
+        page1 = {"issues": _fake_issues(2, offset=0), "total": 5}
+
+        with patch("app.jira_fetcher.client._make_request", return_value=page1) as mock_req:
+            result = search("project = PROJ", max_results=100, limit=2)
+
+        assert len(result) == 2
+        # Only one HTTP request should have been made
+        assert mock_req.call_count == 1
+        # maxResults param should be min(100, 2) = 2
+        params_sent = mock_req.call_args[0][2]  # positional: url, headers, params
+        assert params_sent["maxResults"] == 2
+
+    def test_limit_stops_pagination_early(self, monkeypatch):
+        """limit=4 with total=10, page_size=3 → stops after 2 pages (3+1), returns 4."""
+        monkeypatch.setenv("JIRA_URL", "https://jira.example.com")
+        monkeypatch.setenv("JIRA_TOKEN", "tok")
+
+        page1 = {"issues": _fake_issues(3, offset=0), "total": 10}
+        page2 = {"issues": _fake_issues(3, offset=3), "total": 10}
+
+        with patch("app.jira_fetcher.client._make_request", side_effect=[page1, page2]) as mock_req:
+            result = search("project = PROJ", max_results=3, limit=4)
+
+        assert len(result) == 4
+        assert mock_req.call_count == 2
+        # Second page should request min(3, 4-3) = 1
+        second_call_params = mock_req.call_args_list[1][0][2]
+        assert second_call_params["maxResults"] == 1
+
+    def test_limit_truncates_last_page(self, monkeypatch):
+        """When Jira returns more than remaining on last page, result is truncated."""
+        monkeypatch.setenv("JIRA_URL", "https://jira.example.com")
+        monkeypatch.setenv("JIRA_TOKEN", "tok")
+
+        # Request 1 issue but Jira returns 3 (server may ignore maxResults)
+        page1 = {"issues": _fake_issues(3, offset=0), "total": 10}
+
+        with patch("app.jira_fetcher.client._make_request", return_value=page1):
+            result = search("project = PROJ", max_results=100, limit=1)
+
+        assert len(result) == 1
+        assert result[0]["key"] == "PROJ-0"
+
+    def test_limit_equal_to_total(self, monkeypatch):
+        """limit=5 with total=5 → all issues returned, no excess fetching."""
+        monkeypatch.setenv("JIRA_URL", "https://jira.example.com")
+        monkeypatch.setenv("JIRA_TOKEN", "tok")
+
+        page1 = {"issues": _fake_issues(5, offset=0), "total": 5}
+
+        with patch("app.jira_fetcher.client._make_request", return_value=page1) as mock_req:
+            result = search("project = PROJ", max_results=5, limit=5)
+
+        assert len(result) == 5
+        assert mock_req.call_count == 1
+
+    def test_limit_larger_than_total(self, monkeypatch):
+        """limit=100 with total=3 → returns all 3, no error."""
+        monkeypatch.setenv("JIRA_URL", "https://jira.example.com")
+        monkeypatch.setenv("JIRA_TOKEN", "tok")
+
+        page1 = {"issues": _fake_issues(3, offset=0), "total": 3}
+
+        with patch("app.jira_fetcher.client._make_request", return_value=page1) as mock_req:
+            result = search("project = PROJ", max_results=100, limit=100)
+
+        assert len(result) == 3
+        assert mock_req.call_count == 1
+
+    def test_limit_with_small_page_size(self, monkeypatch):
+        """limit=5, max_results=2 → fetches 3 pages (2+2+1), returns 5."""
+        monkeypatch.setenv("JIRA_URL", "https://jira.example.com")
+        monkeypatch.setenv("JIRA_TOKEN", "tok")
+
+        page1 = {"issues": _fake_issues(2, offset=0), "total": 100}
+        page2 = {"issues": _fake_issues(2, offset=2), "total": 100}
+        page3 = {"issues": _fake_issues(1, offset=4), "total": 100}
+
+        with patch("app.jira_fetcher.client._make_request", side_effect=[page1, page2, page3]) as mock_req:
+            result = search("project = PROJ", max_results=2, limit=5)
+
+        assert len(result) == 5
+        assert mock_req.call_count == 3
+        # Third page should request min(2, 5-4) = 1
+        third_call_params = mock_req.call_args_list[2][0][2]
+        assert third_call_params["maxResults"] == 1
+
+
+# ---------------------------------------------------------------------------
 # get_issue() tests
 # ---------------------------------------------------------------------------
 
