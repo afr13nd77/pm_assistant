@@ -1,7 +1,7 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.10.0 / knowledge-engine 1.9.0 / idea-pipeline 1.1.2 / web-ui 1.17.0
-**Обновлён:** 16.06.2026 (BL-60)
+**Версии:** pm-bot 1.10.0 / knowledge-engine 1.9.0 / idea-pipeline 1.1.2 / web-ui 1.18.0
+**Обновлён:** 17.06.2026 (BL-61, BL-64, BL-135)
 
 ---
 
@@ -132,6 +132,9 @@
 | BL-101 | ✅ DD.MM.YYYY даты | web-ui | Единый формат дат DD.MM.YYYY на всех страницах и компонентах (cards, drawer, timeline, roadmap, dashboard, report) |
 | BL-102 | ✅ Board: классификация задач | web-ui | Классификация по jira_key (Jira vs internal), типы из frontmatter (BACKEND, FRONTEND, TESTING, RESEARCH, DESIGN), IDEA-* отфильтрованы с доски, fallback-тип NOTE → TASK |
 | BL-60 | ✅ Keyword Search | web-ui | Полнотекстовый поиск по vault: overlay Ctrl+K, debounce 300ms, фильтры по типу, artifact_id matching (+10 score) |
+| BL-61 | ✅ Inline Editing | web-ui | Click-to-edit полей (status, domain, priority, tags, tier) в drawer'ах + body editor (split view markdown/preview). PATCH /artifact/{filename}/field и /body endpoints |
+| BL-64 | ✅ Scroll-to-Card Highlight | web-ui | ?highlight=filename → авто-скролл + cyan/gold pulse анимация на карточке. Интеграция с поиском Ctrl+K |
+| BL-135 | ✅ Forgotten Gems Popup | web-ui | Popup деталей артефакта на decay.html: метаданные + rendered Markdown body через marked.js |
 
 ### 5.2 Идеи
 
@@ -139,13 +142,10 @@
 |---|:---|:---|:---|
 | BL-58 | Web UI для knowledge-файлов | web-ui | Просмотр клиппингов и knowledge-файлов (упомянуто в Out of Scope ingest-clippings) |
 | BL-59 | Mermaid Diagrams | web-ui | Рендеринг Mermaid-диаграмм в body PRD/Epic |
-| BL-61 | Inline Editing | web-ui | Редактирование полей артефактов прямо из board/drawer |
 | BL-62 | Bulk Operations | web-ui | Мультивыбор карточек на доске для массовых действий |
 | BL-63 | Syntax Highlighting | web-ui | highlight.js для блоков кода в body артефактов |
-| BL-64 | highlight=IDEA-NNNN | web-ui | Поддержка ?highlight= параметра в ideas.html (авто-скролл к идее из напоминания) |
 | BL-65 | Time Machine | web-ui | Таймлайн фичи: IDEA -> Jira task -> PR -> release. Визуализация пути от заметки до прода |
 | BL-100 | Board: фильтрация по типу задачи | web-ui | Фильтр-табы по типу (JIRA_TASK, JIRA_BUG, MEETING_SUMMARY, NOTE и т.д.) на board.html. Режим «И»: при выборе нескольких типов показываются только задачи, соответствующие всем выбранным |
-| BL-135 | Decay: popup деталей Forgotten Gems | web-ui | На decay.html при клике на элемент в списке Forgotten Gems открывать всплывающее окно с деталями артефакта (по аналогии с popup на ideas.html). Показать: название, домен, relevance, tier, дату последнего обращения, body/описание |
 | BL-136 | Vault Health на dashboard | web-ui | Перенести информацию о здоровье хранилища на dashboard.html. Визуализация — карточка в стиле остальных элементов страницы (score, грейд, тренд). При клике — popup с детализацией по категориям штрафов (broken links, orphans, dead ends и т.д.) |
 
 ---

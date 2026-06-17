@@ -157,7 +157,7 @@ pm_assistant/
 | **pm-bot** | 1.10.0 | 2026-06-15 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. |
 | **knowledge-engine** | 1.9.0 | 2026-06-15 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (19 эндпоинтов). Импорты из shared/. |
 | **idea-pipeline** | 1.1.2 | 2026-06-14 | Orchestrator: Analyst → PM → Decomposer. Импорты vault_paths и file_writer из shared/. |
-| **web-ui** | 1.16.0 | 2026-06-15 | Dual-theme SPA дашборд. Decay State Dashboard: bubble scatter, donut, projection slider, domain bars, forgotten gems (BL-132) |
+| **web-ui** | 1.18.0 | 2026-06-17 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135) |
 | **инфраструктура** | 1.0.0 | 2026-06-11 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120) |
 | **shared** | 0.1.0 | 2026-06-15 | Общий модуль: llm_client (Ollama timeout ×5), file_writer, vault_paths, domain_config, frontmatter_utils, settings. Единый источник для всех компонентов |
 
