@@ -203,7 +203,7 @@ def process_meeting(transcript: str) -> str:
     """Поток 2: извлекает решения и action items из транскрипта."""
     prompt = _load_prompt("meeting")
     try:
-        response_text = llm_client.call_with_fallback(
+        response_text = llm_client.call_transcription(
             operation="meeting",
             messages=[{"role": "user", "content": f"{prompt}\n\n---\n{transcript}"}],
             max_tokens=2000,

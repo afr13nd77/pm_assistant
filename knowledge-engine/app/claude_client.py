@@ -68,12 +68,20 @@ def _call_claude(user_content: str, max_tokens: int, operation: str) -> str:
             logger.info("_call_claude: %s (attempt %d)", operation, attempt + 1)
             start = time.time()
 
-            result = llm_client.call_with_fallback(
-                operation=operation,
-                messages=[{"role": "user", "content": user_content}],
-                max_tokens=max_tokens,
-                timeout=timeout,
-            )
+            if operation in ("meeting_protocol", "meeting"):
+                result = llm_client.call_transcription(
+                    operation=operation,
+                    messages=[{"role": "user", "content": user_content}],
+                    max_tokens=max_tokens,
+                    timeout=timeout,
+                )
+            else:
+                result = llm_client.call_with_fallback(
+                    operation=operation,
+                    messages=[{"role": "user", "content": user_content}],
+                    max_tokens=max_tokens,
+                    timeout=timeout,
+                )
 
             elapsed = time.time() - start
             logger.info("_call_claude: %s OK, %d chars in %.1fs", operation, len(result), elapsed)

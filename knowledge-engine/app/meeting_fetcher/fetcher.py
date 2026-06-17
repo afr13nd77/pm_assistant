@@ -197,6 +197,43 @@ def _build_fetcher_log_entry(
         raise
 
 
+def _inject_source_file(protocol_md: str, raw_rel_path: str) -> str:
+    """Inject source_file into frontmatter and update footer with wikilink."""
+    logger.info(
+        "_inject_source_file: injecting source_file=%s", raw_rel_path,
+    )
+    result = protocol_md
+
+    # 1. Inject into frontmatter — find closing --- delimiter
+    fm_match = re.match(r"(---\s*\n.*?\n)(---)", result, re.DOTALL)
+    if fm_match:
+        fm_body = fm_match.group(1)
+        fm_close = fm_match.group(2)
+        rest = result[fm_match.end():]
+        result = f"{fm_body}source_file: {raw_rel_path}\n{fm_close}{rest}"
+        logger.info("_inject_source_file: frontmatter injected")
+    else:
+        logger.warning(
+            "_inject_source_file: frontmatter not found, skipping injection"
+        )
+
+    # 2. Update footer line with wikilink
+    old_footer = "*Источник: транскрипт Яндекс Телемост*"
+    new_footer = (
+        f"*Источник: транскрипт Яндекс Телемост "
+        f"— [[{raw_rel_path}|исходный файл]]*"
+    )
+    if old_footer in result:
+        result = result.replace(old_footer, new_footer, 1)
+        logger.info("_inject_source_file: footer updated with wikilink")
+    else:
+        logger.warning(
+            "_inject_source_file: footer line not found, skipping footer update"
+        )
+
+    return result
+
+
 def save_raw_fallback(vault_path: str, attachment: EmailAttachment) -> Path:
     """Save raw transcript as fallback when Claude processing fails.
 
@@ -446,6 +483,17 @@ def fetch_new_meetings(
                 len(protocol_md),
             )
 
+            # 5b-bis. Inject source_file into protocol (BL-133, non-fatal)
+            try:
+                raw_rel = str(raw_path.relative_to(Path(vault_path))).replace("\\", "/")
+                protocol_md = _inject_source_file(protocol_md, raw_rel)
+            except Exception as src_err:
+                logger.warning(
+                    "fetch_new_meetings: source_file injection failed "
+                    "(non-fatal): %s",
+                    src_err,
+                )
+
             # 5c. Classification
             protocol_type = extract_type(protocol_md)
             logger.info(
@@ -485,33 +533,32 @@ def fetch_new_meetings(
                 "fetch_new_meetings: protocol written to %s", target_path.name
             )
 
-            # 5f-bis. Jira key sync — only for daily protocols (non-fatal)
+            # 5f-bis. Jira key sync — all protocol types (non-fatal)
             jira_sync_detail = {}
-            if protocol_type == "daily":
-                try:
-                    from ..jira_key_sync import patch_daily_links, sync_daily_jira_keys
-                    jira_sync_detail = sync_daily_jira_keys(
-                        protocol_md, vault_path
-                    )
-                    logger.info(
-                        "fetch_new_meetings: jira_key_sync keys=%d missing=%d "
-                        "imported=%d failed=%d",
-                        len(jira_sync_detail.get("keys", [])),
-                        len(jira_sync_detail.get("missing", [])),
-                        len(jira_sync_detail.get("imported", [])),
-                        len(jira_sync_detail.get("failed", [])),
-                    )
-                    patch_daily_links(
-                        str(target_path),
-                        jira_sync_detail.get("keys_map", {}),
-                    )
-                except Exception as jira_err:
-                    logger.warning(
-                        "fetch_new_meetings: jira_key_sync failed for %s "
-                        "(non-fatal): %s",
-                        target_path.name,
-                        jira_err,
-                    )
+            try:
+                from ..jira_key_sync import sync_jira_keys, patch_jira_links
+                jira_sync_detail = sync_jira_keys(
+                    protocol_md, vault_path
+                )
+                logger.info(
+                    "fetch_new_meetings: jira_key_sync keys=%d missing=%d "
+                    "imported=%d failed=%d",
+                    len(jira_sync_detail.get("keys", [])),
+                    len(jira_sync_detail.get("missing", [])),
+                    len(jira_sync_detail.get("imported", [])),
+                    len(jira_sync_detail.get("failed", [])),
+                )
+                patch_jira_links(
+                    str(target_path),
+                    jira_sync_detail.get("keys_map", {}),
+                )
+            except Exception as jira_err:
+                logger.warning(
+                    "fetch_new_meetings: jira_key_sync failed for %s "
+                    "(non-fatal): %s",
+                    target_path.name,
+                    jira_err,
+                )
 
             # 5g. Enrichment (non-fatal)
             links_found = 0
@@ -560,7 +607,7 @@ def fetch_new_meetings(
                 "file": str(target_path),
                 "type": protocol_type,
                 "links_found": links_found,
-                "jira_sync": jira_sync_detail if protocol_type == "daily" else {},
+                "jira_sync": jira_sync_detail,
             }
             details.append(detail)
 
@@ -596,7 +643,7 @@ def fetch_new_meetings(
                     f"Папка: {target_folder}/\n"
                     f"Связей найдено: {links_found}"
                 )
-                if protocol_type == "daily" and jira_sync_detail.get("keys"):
+                if jira_sync_detail.get("keys"):
                     keys_str = ", ".join(jira_sync_detail["keys"])
                     notify_text += f"\n📋 Задачи: {keys_str}"
                     imported = jira_sync_detail.get("imported", [])

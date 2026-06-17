@@ -5,6 +5,36 @@
 
 ---
 
+## 17.06.2026 — Meeting Protocol Enrichment (BL-133, BL-134) + OpenRouter (BL-138)
+
+### knowledge-engine 1.10.0
+- **fetcher.py**: `_inject_source_file()` — инжекция `source_file:` в frontmatter + wikilink `[[raw/...|исходный файл]]` в footer протокола (BL-133)
+- **fetcher.py**: Jira sync теперь работает для ВСЕХ типов протоколов (sync, review, planning, other), не только daily (BL-134)
+- **jira_key_sync.py**: переименование `sync_daily_jira_keys` → `sync_jira_keys`, `patch_daily_links` → `patch_jira_links` + backward-compatible alias (BL-134)
+- **claude_client.py**: операции meeting/meeting_protocol используют `call_transcription()` вместо `call_with_fallback()` (BL-138)
+- **Тесты**: 25 unit-тестов (test_meeting_enrich.py: inject source file, jira key aliases, module API)
+
+### shared 0.2.0
+- **openrouter_client.py**: HTTP-клиент для OpenRouter API (OpenAI Chat Completions формат). 6 моделей: Qwen3 32B/30B-A3B/235B-A22B, Gemini 2.5 Flash, DeepSeek V3, Llama 4 Maverick (BL-138)
+- **llm_client.py**: `call_transcription()` — выбор провайдера для транскрибаций. Fallback chain: OpenRouter → Ollama → Claude API (BL-138)
+- **Тесты**: 14 unit-тестов (test_openrouter.py: call, test_connection, models; test_llm_transcription.py: fallback chain)
+
+### pm-bot 1.11.0
+- **vault_api.py**: 3 новых endpoint'а — GET /openrouter-key-status, GET /openrouter-models, POST /test-openrouter (BL-138)
+- **vault_api.py**: UserPrefs расширен полями `transcription_provider`, `openrouter_model` с валидацией (BL-138)
+- **claude_client.py**: process_meeting() использует `call_transcription()` (BL-138)
+- **api.js**: методы testOpenRouter(), openrouterKeyStatus(), openrouterModels() (BL-138)
+- **Тесты**: 20 unit-тестов (test_openrouter_api.py: key status, models, test connection, user prefs)
+
+### web-ui 1.20.0
+- **settings.html**: секция TRANSCRIPTION PROVIDER — toggle DEFAULT/OPENROUTER, API key status indicator, model dropdown, TEST CONNECTION (BL-138)
+
+### инфраструктура
+- **docker-compose.yml**: OPENROUTER_API_KEY передаётся в pm-bot и knowledge-engine (BL-138)
+- **.env.example**: OPENROUTER_API_KEY (optional) (BL-138)
+
+---
+
 ## 17.06.2026 — Capture Terminal Redesign (BL-137)
 
 ### knowledge-engine 1.9.1

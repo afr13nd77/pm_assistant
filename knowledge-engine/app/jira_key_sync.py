@@ -1,7 +1,7 @@
-"""Extract Jira issue keys from daily protocol text, find which ones are
+"""Extract Jira issue keys from protocol text, find which ones are
 missing from the vault, and batch-import them via the jira-import CLI.
 
-Used by the daily-protocol pipeline to ensure every Jira key mentioned in
+Used by the protocol pipeline to ensure every Jira key mentioned in
 a protocol has a corresponding artifact in the vault.
 """
 
@@ -169,24 +169,24 @@ def import_missing_keys(keys: list[str]) -> dict:
     return {"imported": imported, "failed": failed}
 
 
-def sync_daily_jira_keys(content: str, vault_path: str) -> dict:
+def sync_jira_keys(content: str, vault_path: str) -> dict:
     """Orchestrate extraction, vault lookup, and import of Jira keys.
 
     Returns a summary dict with ``keys``, ``missing``, ``imported``,
     and ``failed`` lists.
     """
     logger.info(
-        "sync_daily_jira_keys: starting, content_len=%d", len(content),
+        "sync_jira_keys: starting, content_len=%d", len(content),
     )
 
     try:
         keys = extract_jira_keys(content)
     except Exception as exc:
-        logger.error("sync_daily_jira_keys: extract_jira_keys failed: %s", exc)
+        logger.error("sync_jira_keys: extract_jira_keys failed: %s", exc)
         raise
 
     if not keys:
-        logger.info("sync_daily_jira_keys: no keys found, returning early")
+        logger.info("sync_jira_keys: no keys found, returning early")
         return {
             "keys": [], "missing": [], "imported": [], "failed": [],
             "keys_map": {},
@@ -195,7 +195,7 @@ def sync_daily_jira_keys(content: str, vault_path: str) -> dict:
     try:
         missing, found_map = find_missing_in_vault(keys, vault_path)
     except Exception as exc:
-        logger.error("sync_daily_jira_keys: find_missing_in_vault failed: %s", exc)
+        logger.error("sync_jira_keys: find_missing_in_vault failed: %s", exc)
         raise
 
     imported: list[dict] = []
@@ -207,14 +207,14 @@ def sync_daily_jira_keys(content: str, vault_path: str) -> dict:
             imported = result["imported"]
             failed = result["failed"]
         except Exception as exc:
-            logger.error("sync_daily_jira_keys: import_missing_keys failed: %s", exc)
+            logger.error("sync_jira_keys: import_missing_keys failed: %s", exc)
             raise
         for item in imported:
             domain = item.get("domain", "general")
             art_type = item.get("artifact_type", "tasks")
             found_map[item["key"]] = f"wiki/domains/{domain}/{art_type}/{item['key']}"
     else:
-        logger.info("sync_daily_jira_keys: no missing keys, skipping import")
+        logger.info("sync_jira_keys: no missing keys, skipping import")
 
     summary = {
         "keys": sorted(keys),
@@ -224,7 +224,7 @@ def sync_daily_jira_keys(content: str, vault_path: str) -> dict:
         "keys_map": found_map,
     }
     logger.info(
-        "sync_daily_jira_keys: completed: keys=%d, missing=%d, imported=%d, failed=%d",
+        "sync_jira_keys: completed: keys=%d, missing=%d, imported=%d, failed=%d",
         len(keys),
         len(missing),
         len(imported),
@@ -233,23 +233,26 @@ def sync_daily_jira_keys(content: str, vault_path: str) -> dict:
     return summary
 
 
-def patch_daily_links(filepath: str, keys_map: dict[str, str]) -> None:
-    """Replace plain Jira keys with Obsidian wiki-links in the saved daily file.
+sync_daily_jira_keys = sync_jira_keys
+
+
+def patch_jira_links(filepath: str, keys_map: dict[str, str]) -> None:
+    """Replace plain Jira keys with Obsidian wiki-links in the saved file.
 
     Only patches lines in the ``## Упомянутые задачи`` section to avoid
     touching keys in other sections (Action Items, Блокеры, etc.).
     Modifies the wiki copy only — raw/ stays immutable.
     """
     if not keys_map:
-        logger.info("patch_daily_links: empty keys_map, skipping")
+        logger.info("patch_jira_links: empty keys_map, skipping")
         return
 
     path = Path(filepath)
     if not path.exists():
-        logger.warning("patch_daily_links: file not found: %s", filepath)
+        logger.warning("patch_jira_links: file not found: %s", filepath)
         return
 
-    logger.info("patch_daily_links: patching %d keys in %s", len(keys_map), path.name)
+    logger.info("patch_jira_links: patching %d keys in %s", len(keys_map), path.name)
 
     content = path.read_text(encoding="utf-8")
     lines = content.split("\n")
@@ -272,6 +275,9 @@ def patch_daily_links(filepath: str, keys_map: dict[str, str]) -> None:
 
     if patched:
         path.write_text("\n".join(lines), encoding="utf-8")
-        logger.info("patch_daily_links: patched %d links in %s", patched, path.name)
+        logger.info("patch_jira_links: patched %d links in %s", patched, path.name)
     else:
-        logger.info("patch_daily_links: no lines matched, file unchanged")
+        logger.info("patch_jira_links: no lines matched, file unchanged")
+
+
+patch_daily_links = patch_jira_links

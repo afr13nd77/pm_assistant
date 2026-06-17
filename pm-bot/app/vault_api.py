@@ -2300,6 +2300,7 @@ def save_settings(settings: SettingsModel):
 _VALID_REFRESH_MODES = frozenset({"auto", "manual"})
 _VALID_THEMES = frozenset({"matrix", "light"})
 _VALID_LLM_PROVIDERS = frozenset({"claude", "ollama", "hybrid"})
+_VALID_TRANSCRIPTION_PROVIDERS = frozenset({"default", "openrouter"})
 _DEFAULT_USER_PREFS = {
     "refresh_mode": "auto",
     "theme": "matrix",
@@ -2307,6 +2308,8 @@ _DEFAULT_USER_PREFS = {
     "ollama_url": "",
     "ollama_model": "qwen3.5:latest",
     "jira_sync_notify": True,
+    "transcription_provider": "default",
+    "openrouter_model": "qwen/qwen3-32b",
 }
 
 
@@ -2317,6 +2320,8 @@ class UserPrefs(BaseModel):
     ollama_url: str = ""
     ollama_model: str = "qwen3.5:latest"
     jira_sync_notify: bool = True
+    transcription_provider: str = "default"
+    openrouter_model: str = "qwen/qwen3-32b"
 
 
 def _read_user_prefs() -> dict:
@@ -2366,6 +2371,10 @@ def get_user_prefs():
         prefs["ollama_model"] = "qwen3.5:latest"
     if "jira_sync_notify" not in prefs:
         prefs["jira_sync_notify"] = True
+    if "transcription_provider" not in prefs:
+        prefs["transcription_provider"] = "default"
+    if "openrouter_model" not in prefs:
+        prefs["openrouter_model"] = "qwen/qwen3-32b"
     logger.info("GET /api/v1/user-prefs — returning refresh_mode=%s theme=%s llm_provider=%s", prefs["refresh_mode"], prefs["theme"], prefs["llm_provider"])
     return prefs
 
@@ -2391,6 +2400,12 @@ def put_user_prefs(body: UserPrefs):
             status_code=422,
             detail=f"llm_provider must be one of: {', '.join(sorted(_VALID_LLM_PROVIDERS))}"
         )
+    if body.transcription_provider not in _VALID_TRANSCRIPTION_PROVIDERS:
+        logger.warning("PUT /api/v1/user-prefs — invalid transcription_provider: %s", body.transcription_provider)
+        raise HTTPException(
+            status_code=422,
+            detail=f"transcription_provider must be one of: {', '.join(sorted(_VALID_TRANSCRIPTION_PROVIDERS))}"
+        )
     prefs = body.model_dump()
     try:
         _write_user_prefs(prefs)
@@ -2406,7 +2421,9 @@ def put_user_prefs(body: UserPrefs):
     logger.info("PUT /api/v1/user-prefs — saved successfully")
     return {"status": "ok", "refresh_mode": body.refresh_mode, "theme": body.theme,
             "llm_provider": body.llm_provider, "ollama_url": body.ollama_url,
-            "ollama_model": body.ollama_model, "jira_sync_notify": body.jira_sync_notify}
+            "ollama_model": body.ollama_model, "jira_sync_notify": body.jira_sync_notify,
+            "transcription_provider": body.transcription_provider,
+            "openrouter_model": body.openrouter_model}
 
 
 # ---------------------------------------------------------------------------
@@ -2448,6 +2465,48 @@ def test_ollama(body: TestOllamaRequest):
 
     logger.info("POST /api/v1/test-ollama — success, version=%s, models=%s", version, model_names)
     return {"status": "ok", "ollama_version": version, "models": model_names}
+
+
+# ---------------------------------------------------------------------------
+# OpenRouter integration
+# ---------------------------------------------------------------------------
+
+
+class TestOpenRouterRequest(BaseModel):
+    model: str = "qwen/qwen3-32b"
+
+
+@app.get("/api/v1/openrouter-key-status")
+def openrouter_key_status():
+    logger.info("GET /api/v1/openrouter-key-status — start")
+    has_key = bool(os.getenv("OPENROUTER_API_KEY"))
+    logger.info("GET /api/v1/openrouter-key-status — has_key=%s", has_key)
+    return {"has_key": has_key}
+
+
+@app.post("/api/v1/test-openrouter")
+def test_openrouter(body: TestOpenRouterRequest):
+    logger.info("POST /api/v1/test-openrouter — model=%s", body.model)
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        logger.warning("POST /api/v1/test-openrouter — OPENROUTER_API_KEY not set")
+        return {"status": "error", "detail": "OPENROUTER_API_KEY is not set in environment"}
+    try:
+        from shared.openrouter_client import test_connection
+        result = test_connection(api_key, body.model)
+        logger.info("POST /api/v1/test-openrouter — result=%s", result.get("status"))
+        return result
+    except Exception as exc:
+        logger.error("POST /api/v1/test-openrouter — error: %s", exc)
+        return {"status": "error", "detail": str(exc)}
+
+
+@app.get("/api/v1/openrouter-models")
+def openrouter_models():
+    logger.info("GET /api/v1/openrouter-models — start")
+    from shared.openrouter_client import AVAILABLE_MODELS
+    logger.info("GET /api/v1/openrouter-models — returning %d models", len(AVAILABLE_MODELS))
+    return {"models": AVAILABLE_MODELS}
 
 
 # ---------------------------------------------------------------------------

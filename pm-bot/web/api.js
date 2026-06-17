@@ -381,6 +381,25 @@ var api = {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({body: body})
     });
+  },
+
+  /** POST /api/v1/test-openrouter -- test OpenRouter connection */
+  testOpenRouter: function(model) {
+    return apiFetch('/test-openrouter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: model })
+    });
+  },
+
+  /** GET /api/v1/openrouter-key-status -- check if API key is set */
+  openrouterKeyStatus: function() {
+    return apiFetch('/openrouter-key-status');
+  },
+
+  /** GET /api/v1/openrouter-models -- list available OpenRouter models */
+  openrouterModels: function() {
+    return apiFetch('/openrouter-models');
   }
 };
 

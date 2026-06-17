@@ -191,6 +191,48 @@
           </div>
         </div>
 
+        <!-- Transcription Provider section -->
+        <div class="settings-section">
+          <div class="settings-section-title">// TRANSCRIPTION PROVIDER</div>
+          <div class="field-group">
+            <div class="field-label">TRANSCRIPTION_PROVIDER</div>
+            <div class="toggle-row">
+              <button class="toggle-btn" :class="{ active: transcriptionProvider === 'default' }"
+                      @click="setTranscriptionProvider('default')">DEFAULT</button>
+              <button class="toggle-btn" :class="{ active: transcriptionProvider === 'openrouter' }"
+                      @click="setTranscriptionProvider('openrouter')">OPENROUTER</button>
+            </div>
+            <div class="field-note">DEFAULT: use current LLM Provider for transcriptions. OPENROUTER: use OpenRouter API with selected model.</div>
+          </div>
+          <div v-if="transcriptionProvider === 'openrouter'" class="ollama-fields">
+            <div class="field-group">
+              <div class="field-label">API_KEY_STATUS</div>
+              <div style="font-size: 11px; margin-top: 4px;">
+                <span v-if="openrouterKeyStatus && openrouterKeyStatus.has_key" style="color: #4caf50;">&#9679; OPENROUTER_API_KEY is set in .env</span>
+                <span v-else style="color: #f44336;">&#9679; OPENROUTER_API_KEY is NOT set in .env</span>
+              </div>
+            </div>
+            <div class="field-group">
+              <div class="field-label">OPENROUTER_MODEL</div>
+              <select class="field-select" v-model="openrouterModel" @change="saveOpenRouterModel" style="width: 300px;">
+                <option v-for="m in openrouterModels" :key="m.id" :value="m.id">{{ m.name }}</option>
+              </select>
+            </div>
+            <div class="ollama-test-row">
+              <button class="cmd-btn cmd-btn-cyan" :disabled="openrouterTesting"
+                      @click="testOpenRouterConnection()">
+                {{ openrouterTesting ? '...' : 'TEST CONNECTION' }}
+              </button>
+              <span v-if="openrouterStatus && openrouterStatus.status === 'ok'" class="ollama-status ok">
+                Connected &mdash; {{ openrouterStatus.model_name }} available
+              </span>
+              <span v-if="openrouterStatus && openrouterStatus.status === 'error'" class="ollama-status err">
+                Error &mdash; {{ openrouterStatus.detail }}
+              </span>
+            </div>
+          </div>
+        </div>
+
         <!-- Vault section -->
         <div class="settings-section">
           <div class="settings-section-title">// VAULT</div>
@@ -331,6 +373,12 @@
       var llmSaving = ref(false);
       var jiraSyncNotify = ref(true);
       var captureMode = ref('simple');
+      var transcriptionProvider = ref('default');
+      var openrouterModel = ref('qwen/qwen3-32b');
+      var openrouterModels = ref([]);
+      var openrouterKeyStatus = ref(null);
+      var openrouterStatus = ref(null);
+      var openrouterTesting = ref(false);
       var searchOpen = ref(false);
 
       function buildPrefsPayload() {
@@ -341,7 +389,9 @@
           ollama_url: ollamaUrl.value,
           ollama_model: ollamaModel.value,
           jira_sync_notify: jiraSyncNotify.value,
-          capture_mode: captureMode.value
+          capture_mode: captureMode.value,
+          transcription_provider: transcriptionProvider.value,
+          openrouter_model: openrouterModel.value
         };
       }
 
@@ -520,6 +570,56 @@
         }
       }
 
+      function setTranscriptionProvider(provider) {
+        console.log('[settings] setTranscriptionProvider:', provider);
+        transcriptionProvider.value = provider;
+        saveLlmPrefs();
+        if (provider === 'openrouter') {
+          loadOpenRouterKeyStatus();
+          loadOpenRouterModels();
+        }
+      }
+
+      function loadOpenRouterModels() {
+        console.log('[settings] loadOpenRouterModels');
+        api.openrouterModels().then(function(data) {
+          openrouterModels.value = data.models || [];
+          console.log('[settings] loaded', openrouterModels.value.length, 'OpenRouter models');
+        }).catch(function(err) {
+          console.error('[settings] loadOpenRouterModels error:', err.message);
+        });
+      }
+
+      function loadOpenRouterKeyStatus() {
+        console.log('[settings] loadOpenRouterKeyStatus');
+        api.openrouterKeyStatus().then(function(data) {
+          openrouterKeyStatus.value = data;
+          console.log('[settings] openrouter key status:', data.has_key);
+        }).catch(function(err) {
+          console.error('[settings] loadOpenRouterKeyStatus error:', err.message);
+        });
+      }
+
+      function testOpenRouterConnection() {
+        console.log('[settings] testOpenRouterConnection, model:', openrouterModel.value);
+        openrouterTesting.value = true;
+        openrouterStatus.value = null;
+        api.testOpenRouter(openrouterModel.value).then(function(data) {
+          console.log('[settings] testOpenRouter result:', data);
+          openrouterStatus.value = data;
+          openrouterTesting.value = false;
+        }).catch(function(err) {
+          console.error('[settings] testOpenRouter error:', err.message);
+          openrouterStatus.value = { status: 'error', detail: err.message || 'Unknown error' };
+          openrouterTesting.value = false;
+        });
+      }
+
+      function saveOpenRouterModel() {
+        console.log('[settings] saveOpenRouterModel:', openrouterModel.value);
+        saveLlmPrefs();
+      }
+
       onMounted(function() {
         console.log('[settings] component mounted, loading settings');
         loadSettings();
@@ -534,10 +634,16 @@
           jiraSyncNotify.value = prefs.jira_sync_notify !== false;
           captureMode.value = prefs.capture_mode || 'simple';
           try { localStorage.setItem('pm_capture_mode', captureMode.value); } catch(e) {}
-          console.log('[settings] prefs loaded: refresh=%s theme=%s llm=%s capture=%s', refreshMode.value, currentTheme.value, llmProvider.value, captureMode.value);
+          transcriptionProvider.value = prefs.transcription_provider || 'default';
+          openrouterModel.value = prefs.openrouter_model || 'qwen/qwen3-32b';
+          console.log('[settings] prefs loaded: refresh=%s theme=%s llm=%s capture=%s transcription=%s', refreshMode.value, currentTheme.value, llmProvider.value, captureMode.value, transcriptionProvider.value);
           applyPageTheme(currentTheme.value);
           if (llmProvider.value !== 'claude' && ollamaUrl.value) {
             testOllamaConnection();
+          }
+          if (transcriptionProvider.value === 'openrouter') {
+            loadOpenRouterKeyStatus();
+            loadOpenRouterModels();
           }
         }).catch(function(err) {
           console.error('[settings] getUserPrefs error:', err.message);
@@ -584,6 +690,17 @@
         captureMode: captureMode,
         setCaptureMode: setCaptureMode,
         buildPrefsPayload: buildPrefsPayload,
+        transcriptionProvider: transcriptionProvider,
+        openrouterModel: openrouterModel,
+        openrouterModels: openrouterModels,
+        openrouterKeyStatus: openrouterKeyStatus,
+        openrouterStatus: openrouterStatus,
+        openrouterTesting: openrouterTesting,
+        setTranscriptionProvider: setTranscriptionProvider,
+        loadOpenRouterModels: loadOpenRouterModels,
+        loadOpenRouterKeyStatus: loadOpenRouterKeyStatus,
+        testOpenRouterConnection: testOpenRouterConnection,
+        saveOpenRouterModel: saveOpenRouterModel,
       };
     }
   });
