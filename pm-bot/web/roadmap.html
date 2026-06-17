@@ -343,6 +343,19 @@
             var data = await api.epics(activeDomain.value);
             epics.value = data;
             console.log('[roadmap] loadEpics: loaded ' + data.length + ' epics');
+            var hlParam = new URLSearchParams(window.location.search).get('highlight');
+            if (hlParam) {
+              displayLimit.value = 9999;
+              Vue.nextTick(function() {
+                var el = document.querySelector('[data-filename="' + CSS.escape(hlParam) + '"]');
+                console.log('[search] highlight card:', hlParam, el ? 'found' : 'not found');
+                if (!el) return;
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.classList.add('highlight-pulse');
+                setTimeout(function() { el.classList.remove('highlight-pulse'); }, 3000);
+                history.replaceState(null, '', window.location.pathname + window.location.hash);
+              });
+            }
           } catch (err) {
             console.error('[roadmap] loadEpics: error', err.message);
             error.value = 'Failed to load epics: ' + err.message;

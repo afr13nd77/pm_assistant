@@ -257,7 +257,7 @@
       </div>
     </div>
     <div class="drawer-overlay" v-if="ideaDrawerOpen" @click="closeDrawer"></div>
-    <idea-drawer :open="ideaDrawerOpen" :item="ideaDrawerItem" @close="closeDrawer"></idea-drawer>
+    <idea-drawer :open="ideaDrawerOpen" :item="ideaDrawerItem" @close="closeDrawer" @field-updated="onFieldUpdated"></idea-drawer>
   </div>
 
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
@@ -392,6 +392,19 @@
             var data = await api.ideas(activeDomain.value);
             ideas.value = data || [];
             console.log('[ideas] loadData — success, ideas:', ideas.value.length);
+            var hlParam = new URLSearchParams(window.location.search).get('highlight');
+            if (hlParam) {
+              displayLimit.value = 9999;
+              Vue.nextTick(function() {
+                var el = document.querySelector('[data-filename="' + CSS.escape(hlParam) + '"]');
+                console.log('[search] highlight card:', hlParam, el ? 'found' : 'not found');
+                if (!el) return;
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.classList.add('highlight-pulse');
+                setTimeout(function() { el.classList.remove('highlight-pulse'); }, 3000);
+                history.replaceState(null, '', window.location.pathname + window.location.hash);
+              });
+            }
           } catch (err) {
             console.error('[ideas] loadData — error:', err.message);
             error.value = 'Failed to load data: ' + err.message;
@@ -603,6 +616,11 @@
           };
         }
 
+        function onFieldUpdated(key, val, resp) {
+          console.log('[ideas] field updated via drawer:', key, '=', val);
+          loadData();
+        }
+
         async function togglePin(item) {
           console.log('[ideas] togglePin:', item.filename, 'current tier:', item.tier);
           var newTier = item.tier === 'core' ? 'active' : 'core';
@@ -675,7 +693,8 @@
           capture, handleKeydown,
           dragItem, dragSourceStatus, toasts, warningModal,
           onDragStart, onDragOver, onDragLeave, onDragEnd, onDrop,
-          executeStatusChange, showToast, showWarningModal, togglePin
+          executeStatusChange, showToast, showWarningModal, togglePin,
+          onFieldUpdated
         };
       }
     });

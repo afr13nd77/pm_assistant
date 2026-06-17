@@ -87,6 +87,7 @@
             :jira-key="item.jira_key || ''"
             :tier="item.tier || 'active'"
             :filepath="item.filepath || ''"
+            :filename="item.filename || ''"
             @click="openDrawer(item)"
             @pin="togglePin(item)"
           ></note-card>
@@ -108,6 +109,7 @@
             :jira-key="item.jira_key || ''"
             :tier="item.tier || 'active'"
             :filepath="item.filepath || ''"
+            :filename="item.filename || ''"
             @click="openDrawer(item)"
             @pin="togglePin(item)"
           ></note-card>
@@ -129,6 +131,7 @@
             :jira-key="item.jira_key || ''"
             :tier="item.tier || 'active'"
             :filepath="item.filepath || ''"
+            :filename="item.filename || ''"
             @click="openDrawer(item)"
             @pin="togglePin(item)"
           ></note-card>
@@ -189,7 +192,7 @@
       </div>
     </div>
     <div class="drawer-overlay" v-if="taskDrawerOpen" @click="closeDrawer"></div>
-    <task-drawer :open="taskDrawerOpen" :item="taskDrawerItem" @close="closeDrawer" @jira-created="onJiraCreated"></task-drawer>
+    <task-drawer :open="taskDrawerOpen" :item="taskDrawerItem" @close="closeDrawer" @jira-created="onJiraCreated" @field-updated="onFieldUpdated"></task-drawer>
   </div>
 
   <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
@@ -356,6 +359,19 @@
             });
             tasks.value = results[1] || [];
             console.log('[board] loadData — success, notes:', ideas.value.length, '(filtered from', allNotes.length + '), tasks:', tasks.value.length);
+            var hlParam = new URLSearchParams(window.location.search).get('highlight');
+            if (hlParam) {
+              displayLimit.value = 9999;
+              Vue.nextTick(function() {
+                var el = document.querySelector('[data-filename="' + CSS.escape(hlParam) + '"]');
+                console.log('[search] highlight card:', hlParam, el ? 'found' : 'not found');
+                if (!el) return;
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.classList.add('highlight-pulse');
+                setTimeout(function() { el.classList.remove('highlight-pulse'); }, 3000);
+                history.replaceState(null, '', window.location.pathname + window.location.hash);
+              });
+            }
           } catch (err) {
             console.error('[board] loadData — error:', err.message);
             error.value = 'Failed to load data: ' + err.message;
@@ -450,6 +466,11 @@
 
         function onJiraCreated(event) {
           console.log('[board] jira created:', event);
+          loadData();
+        }
+
+        function onFieldUpdated(key, val, resp) {
+          console.log('[board] field updated via drawer:', key, '=', val);
           loadData();
         }
 
@@ -555,7 +576,8 @@
           openDrawer,
           closeDrawer,
           onJiraCreated,
-          togglePin
+          togglePin,
+          onFieldUpdated
         };
       }
     });

@@ -181,7 +181,8 @@ function registerComponents(app) {
       status:   { type: String, default: '' },
       jiraKey:  { type: String, default: '' },
       tier:     { type: String, default: 'active' },
-      filepath: { type: String, default: '' }
+      filepath: { type: String, default: '' },
+      filename: { type: String, default: '' }
     },
     emits: ['click', 'pin'],
     computed: {
@@ -242,7 +243,7 @@ function registerComponents(app) {
       fmtDate: fmtDate
     },
     template: '\
-      <div class="card-clip" :class="[clipCut, clipBorderClass]" @click="$emit(\'click\')">\
+      <div class="card-clip" :class="[clipCut, clipBorderClass]" :data-filename="filename" @click="$emit(\'click\')">\
         <div class="card-accent" :class="\'card-accent-\' + accentColor"></div>\
         <svg class="card-corner-svg" :class="\'card-corner-\' + accentColor" viewBox="0 0 16 16">\
           <polyline points="14,2 2,2 2,14" fill="none" stroke="currentColor" stroke-width="1.5"/>\
@@ -340,7 +341,7 @@ function registerComponents(app) {
       }
     },
     template: '\
-      <div class="card-clip" :class="[clipCut, clipBorderClass]" @click="$emit(\'click\')">\
+      <div class="card-clip" :class="[clipCut, clipBorderClass]" :data-filename="id" @click="$emit(\'click\')">\
         <div class="card-accent" :class="\'card-accent-\' + clipAccent"></div>\
         <svg class="card-corner-svg" :class="\'card-corner-\' + clipAccent" viewBox="0 0 16 16">\
           <polyline points="14,2 2,2 2,14" fill="none" stroke="currentColor" stroke-width="1.5"/>\
@@ -405,7 +406,7 @@ function registerComponents(app) {
       fmtDate: fmtDate
     },
     template: '\
-      <div class="card-clip card-cut-br card-cut-cyan" draggable="true" @click="$emit(\'click\')" @dragstart="$emit(\'dragstart\', $event)">\
+      <div class="card-clip card-cut-br card-cut-cyan" :data-filename="filename" draggable="true" @click="$emit(\'click\')" @dragstart="$emit(\'dragstart\', $event)">\
         <div class="card-accent card-accent-cyan"></div>\
         <svg class="card-corner-svg card-corner-cyan" viewBox="0 0 16 16">\
           <polyline points="14,2 2,2 2,14" fill="none" stroke="currentColor" stroke-width="1.5"/>\
@@ -516,6 +517,225 @@ function registerComponents(app) {
   });
 
   /* ========================================
+     editable-field -- inline click-to-edit for frontmatter fields
+     Props:
+       label    (string): field display label
+       value    (string): current value
+       options  (array|null): dropdown options; null = free text input
+       filename (string): artifact filename (e.g. 'IDEA-123.md')
+       fieldKey (string): frontmatter key (e.g. 'status', 'domain')
+     Emits: updated(key, newValue, response)
+     ======================================== */
+  app.component('editable-field', {
+    props: {
+      label:    { type: String, default: '' },
+      value:    { type: String, default: '' },
+      options:  { type: Array, default: null },
+      filename: { type: String, default: '' },
+      fieldKey: { type: String, default: '' }
+    },
+    emits: ['updated'],
+    data: function() {
+      return {
+        editing: false,
+        editValue: '',
+        saving: false,
+        feedbackClass: '',
+        errorMsg: ''
+      };
+    },
+    methods: {
+      startEdit: function() {
+        this.editValue = this.value || '';
+        this.editing = true;
+        this.errorMsg = '';
+        this.feedbackClass = '';
+        var self = this;
+        this.$nextTick(function() {
+          var el = self.$refs.editInput || self.$refs.editSelect;
+          if (el) el.focus();
+        });
+      },
+      save: function() {
+        if (this.editValue === this.value) {
+          this.editing = false;
+          return;
+        }
+        this.saving = true;
+        this.feedbackClass = 'editable-saving';
+        var self = this;
+        api.updateField(this.filename, this.fieldKey, this.editValue)
+          .then(function(resp) {
+            self.saving = false;
+            self.editing = false;
+            self.feedbackClass = 'editable-success';
+            self.$emit('updated', self.fieldKey, self.editValue, resp);
+            setTimeout(function() { self.feedbackClass = ''; }, 1500);
+          })
+          .catch(function(err) {
+            self.saving = false;
+            self.feedbackClass = 'editable-error';
+            self.errorMsg = (err && err.message) || 'Save failed';
+            setTimeout(function() { self.feedbackClass = ''; self.errorMsg = ''; }, 3000);
+          });
+      },
+      cancel: function() {
+        this.editing = false;
+        this.editValue = '';
+        this.errorMsg = '';
+        this.feedbackClass = '';
+      },
+      onKeydown: function(e) {
+        if (e.key === 'Enter') this.save();
+        if (e.key === 'Escape') this.cancel();
+      }
+    },
+    watch: {
+      value: function(newVal) {
+        if (!this.editing) {
+          this.editValue = newVal || '';
+        }
+      }
+    },
+    template: '\
+      <span v-if="!editing" :class="[\'editable-value\', feedbackClass]" @click="startEdit" :title="\'Click to edit \' + label">\
+        <slot>{{ value || \'—\' }}</slot>\
+        <span class="edit-icon">✎</span>\
+      </span>\
+      <span v-else :class="feedbackClass" style="display:inline-flex;align-items:center;gap:4px;">\
+        <select v-if="options" ref="editSelect" class="editable-select" v-model="editValue" @change="save" @keydown="onKeydown" :disabled="saving">\
+          <option v-for="opt in options" :key="opt" :value="opt">{{ opt }}</option>\
+        </select>\
+        <input v-else ref="editInput" class="editable-input" v-model="editValue" @keydown="onKeydown" @blur="cancel" :disabled="saving" />\
+        <span v-if="errorMsg" style="color:#e53935;font-size:11px;">{{ errorMsg }}</span>\
+      </span>'
+  });
+
+  /* ========================================
+     body-editor -- fullscreen popup with split Markdown editor
+     Props:
+       open     (boolean): whether editor is visible
+       filename (string): artifact filename
+       body     (string): current body Markdown
+       title    (string): title for the editor header
+     Emits: close, saved(newBody, response)
+     ======================================== */
+  app.component('body-editor', {
+    props: {
+      open:     { type: Boolean, default: false },
+      filename: { type: String, default: '' },
+      body:     { type: String, default: '' },
+      title:    { type: String, default: '' }
+    },
+    emits: ['close', 'saved'],
+    data: function() {
+      return {
+        editBody: '',
+        saving: false,
+        errorMsg: '',
+        dirty: false
+      };
+    },
+    computed: {
+      preview: function() {
+        if (typeof marked !== 'undefined' && marked.parse) {
+          try {
+            var renderer = new marked.Renderer();
+            renderer.link = function(href, title, text) {
+              if (typeof href === 'object') { text = href.text; title = href.title; href = href.href; }
+              return '<a href="' + href + '" target="_blank" rel="noopener noreferrer"' + (title ? ' title="' + title + '"' : '') + '>' + (text || href) + '</a>';
+            };
+            return marked.parse(this.editBody, { renderer: renderer });
+          } catch(e) { return this.editBody; }
+        }
+        return this.editBody.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+      }
+    },
+    methods: {
+      save: function() {
+        if (this.saving) return;
+        this.saving = true;
+        this.errorMsg = '';
+        var self = this;
+        api.updateBody(this.filename, this.editBody)
+          .then(function(resp) {
+            self.saving = false;
+            self.dirty = false;
+            self.$emit('saved', self.editBody, resp);
+            self.$emit('close');
+          })
+          .catch(function(err) {
+            self.saving = false;
+            self.errorMsg = (err && err.message) || 'Save failed';
+          });
+      },
+      tryClose: function() {
+        if (this.dirty) {
+          if (!confirm('Отменить изменения?')) return;
+        }
+        this.$emit('close');
+      },
+      onKeydown: function(e) {
+        if (e.ctrlKey && e.key === 's') {
+          e.preventDefault();
+          this.save();
+        }
+        if (e.key === 'Escape') {
+          this.tryClose();
+        }
+      },
+      onOverlayClick: function(e) {
+        if (e.target === e.currentTarget) {
+          this.tryClose();
+        }
+      }
+    },
+    watch: {
+      open: function(val) {
+        var self = this;
+        if (val) {
+          this.editBody = this.body || '';
+          this.dirty = false;
+          this.errorMsg = '';
+          this.saving = false;
+          this._keyHandler = function(e) { self.onKeydown(e); };
+          document.addEventListener('keydown', this._keyHandler);
+        } else {
+          if (this._keyHandler) {
+            document.removeEventListener('keydown', this._keyHandler);
+            this._keyHandler = null;
+          }
+        }
+      }
+    },
+    beforeUnmount: function() {
+      if (this._keyHandler) {
+        document.removeEventListener('keydown', this._keyHandler);
+      }
+    },
+    template: '\
+      <div v-if="open" class="body-editor-overlay" @click="onOverlayClick">\
+        <div class="body-editor-panel">\
+          <div class="body-editor-header">\
+            <span class="body-editor-title">EDIT: {{ title || filename }}</span>\
+            <div class="body-editor-actions">\
+              <button class="body-editor-btn" @click="tryClose" :disabled="saving">CANCEL</button>\
+              <button class="body-editor-btn body-editor-btn-save" @click="save" :disabled="saving">\
+                {{ saving ? \'SAVING...\' : \'SAVE\' }}\
+              </button>\
+            </div>\
+          </div>\
+          <div v-if="saving" class="body-editor-saving-bar"></div>\
+          <div v-if="errorMsg" class="body-editor-error">{{ errorMsg }}</div>\
+          <div class="body-editor-split">\
+            <textarea class="body-editor-textarea" v-model="editBody" @input="dirty = true" placeholder="Markdown body..."></textarea>\
+            <div class="body-editor-preview" v-html="preview"></div>\
+          </div>\
+        </div>\
+      </div>'
+  });
+
+  /* ========================================
      TaskDrawer -- slide-in panel for task/idea details
      Props:
        open (boolean): whether drawer is visible
@@ -527,7 +747,13 @@ function registerComponents(app) {
       open: { type: Boolean, default: false },
       item: { type: Object, default: null }
     },
-    emits: ['close', 'jira-created'],
+    emits: ['close', 'jira-created', 'field-updated'],
+    data: function() {
+      return {
+        domains: [],
+        bodyEditorOpen: false
+      };
+    },
     computed: {
       drawerClass: function() {
         return this.open ? 'task-drawer open' : 'task-drawer';
@@ -569,6 +795,27 @@ function registerComponents(app) {
           this.item.jira_url = event.jira_url;
         }
         this.$emit('jira-created', event);
+      },
+      onFieldUpdated: function(key, val, resp) {
+        console.log('[task-drawer] field updated:', key, '=', val);
+        if (this.item) { this.item[key] = val; }
+        this.$emit('field-updated', key, val, resp);
+      },
+      onBodySaved: function(newBody, resp) {
+        console.log('[task-drawer] body saved, length:', newBody.length);
+        if (this.item) { this.item.body = newBody; }
+        this.bodyEditorOpen = false;
+        this.$emit('field-updated', 'body', newBody, resp);
+      }
+    },
+    watch: {
+      open: function(val) {
+        if (val && this.domains.length === 0) {
+          var self = this;
+          api.domains().then(function(list) {
+            self.domains = list.map(function(d) { return d.slug; });
+          }).catch(function() {});
+        }
       }
     },
     template: '\
@@ -586,13 +833,25 @@ function registerComponents(app) {
               <span class="task-drawer-meta-label">date:</span>\
               <span class="task-drawer-meta-value">{{ fmtDate(item.date) || "—" }}</span>\
               <span class="task-drawer-meta-label">status:</span>\
-              <span class="task-drawer-meta-value"><span :class="statusClass">{{ (item.status || "—").toUpperCase() }}</span></span>\
+              <span class="task-drawer-meta-value">\
+                <editable-field label="status" :value="item.status || \'\'" field-key="status" :options="[\'todo\',\'in-progress\',\'in-review\',\'in-testing\',\'done\',\'cancelled\']" :filename="item.filename || \'\'" @updated="onFieldUpdated">\
+                  <span :class="statusClass">{{ (item.status || \'—\').toUpperCase() }}</span>\
+                </editable-field>\
+              </span>\
               <span class="task-drawer-meta-label" v-if="item.type">type:</span>\
               <span class="task-drawer-meta-value" v-if="item.type">{{ item.type.toUpperCase() }}</span>\
-              <span class="task-drawer-meta-label" v-if="item.domain">domain:</span>\
-              <span class="task-drawer-meta-value text-cyan" v-if="item.domain">{{ item.domain.toUpperCase() }}</span>\
-              <span class="task-drawer-meta-label" v-if="item.priority">priority:</span>\
-              <span class="task-drawer-meta-value" v-if="item.priority">{{ item.priority.toUpperCase() }}</span>\
+              <span class="task-drawer-meta-label">domain:</span>\
+              <span class="task-drawer-meta-value">\
+                <editable-field label="domain" :value="item.domain || \'\'" field-key="domain" :options="domains" :filename="item.filename || \'\'" @updated="onFieldUpdated">\
+                  <span class="text-cyan">{{ (item.domain || \'—\').toUpperCase() }}</span>\
+                </editable-field>\
+              </span>\
+              <span class="task-drawer-meta-label">priority:</span>\
+              <span class="task-drawer-meta-value">\
+                <editable-field label="priority" :value="item.priority || \'\'" field-key="priority" :options="[\'critical\',\'high\',\'medium\',\'low\']" :filename="item.filename || \'\'" @updated="onFieldUpdated">\
+                  {{ (item.priority || \'—\').toUpperCase() }}\
+                </editable-field>\
+              </span>\
               <span class="task-drawer-meta-label" v-if="item.story_points">story_points:</span>\
               <span class="task-drawer-meta-value" v-if="item.story_points">{{ item.story_points }}</span>\
               <span class="task-drawer-meta-label" v-if="item.jira_key">jira_key:</span>\
@@ -605,10 +864,12 @@ function registerComponents(app) {
               <span v-for="tag in itemTags" :key="tag" :class="\'tag tag-\' + tag.toLowerCase() + \' mr-xs\'">{{ tag.toUpperCase() }}</span>\
             </div>\
           </div>\
-          <div class="task-drawer-section" v-if="item.body">\
-            <div class="task-drawer-section-title">BODY</div>\
-            <div class="task-drawer-content" v-html="renderMdSafe(item.body)"></div>\
+          <div class="task-drawer-section">\
+            <div class="task-drawer-section-title">BODY <button class="cmd-btn cmd-btn-sm" style="margin-left:8px;font-size:11px;" @click="bodyEditorOpen = true">EDIT BODY</button></div>\
+            <div class="task-drawer-content" v-if="item.body" v-html="renderMdSafe(item.body)"></div>\
+            <div v-else style="color:var(--text-muted,#888);font-size:12px;">No body content</div>\
           </div>\
+          <body-editor :open="bodyEditorOpen" :filename="item.filename || \'\'" :body="item.body || \'\'" :title="item.jira_key || item.filename || \'\'" @close="bodyEditorOpen = false" @saved="onBodySaved"></body-editor>\
           <jira-create-section\
             :filename="item.filename || \'\'"\
             :current-type="item.type || \'Task\'"\
@@ -635,7 +896,13 @@ function registerComponents(app) {
       open: { type: Boolean, default: false },
       item: { type: Object, default: null }
     },
-    emits: ['close'],
+    emits: ['close', 'field-updated'],
+    data: function() {
+      return {
+        domains: [],
+        bodyEditorOpen: false
+      };
+    },
     computed: {
       drawerClass: function() {
         return this.open ? 'task-drawer open' : 'task-drawer';
@@ -669,6 +936,33 @@ function registerComponents(app) {
           return marked.parse(text);
         }
         return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+      },
+      onFieldUpdated: function(key, val, resp) {
+        console.log('[idea-drawer] field updated:', key, '=', val);
+        if (this.item) {
+          this.item[key] = val;
+          if (resp && resp.readiness != null) this.item.readiness = resp.readiness;
+        }
+        this.$emit('field-updated', key, val, resp);
+      },
+      onBodySaved: function(newBody, resp) {
+        console.log('[idea-drawer] body saved, length:', newBody.length);
+        if (this.item) {
+          this.item.body = newBody;
+          if (resp && resp.readiness != null) this.item.readiness = resp.readiness;
+        }
+        this.bodyEditorOpen = false;
+        this.$emit('field-updated', 'body', newBody, resp);
+      }
+    },
+    watch: {
+      open: function(val) {
+        if (val && this.domains.length === 0) {
+          var self = this;
+          api.domains().then(function(list) {
+            self.domains = list.map(function(d) { return d.slug; });
+          }).catch(function() {});
+        }
       }
     },
     template: '\
@@ -688,9 +982,17 @@ function registerComponents(app) {
               <span class="task-drawer-meta-label">date:</span>\
               <span class="task-drawer-meta-value">{{ fmtDate(item.date) || \'—\' }}</span>\
               <span class="task-drawer-meta-label">status:</span>\
-              <span class="task-drawer-meta-value"><span :class="statusClass">{{ (item.status || \'—\').toUpperCase() }}</span></span>\
-              <span class="task-drawer-meta-label" v-if="item.domain">domain:</span>\
-              <span class="task-drawer-meta-value text-cyan" v-if="item.domain">{{ item.domain.toUpperCase() }}</span>\
+              <span class="task-drawer-meta-value">\
+                <editable-field label="status" :value="item.status || \'\'" field-key="status" :options="[\'Новая\',\'Проверка гипотезы\',\'Готова к производству\',\'Отсев\']" :filename="item.filename || \'\'" @updated="onFieldUpdated">\
+                  <span :class="statusClass">{{ (item.status || \'—\').toUpperCase() }}</span>\
+                </editable-field>\
+              </span>\
+              <span class="task-drawer-meta-label">domain:</span>\
+              <span class="task-drawer-meta-value">\
+                <editable-field label="domain" :value="item.domain || \'\'" field-key="domain" :options="domains" :filename="item.filename || \'\'" @updated="onFieldUpdated">\
+                  <span class="text-cyan">{{ (item.domain || \'—\').toUpperCase() }}</span>\
+                </editable-field>\
+              </span>\
               <span class="task-drawer-meta-label">readiness:</span>\
               <span class="task-drawer-meta-value">{{ (item.readiness != null ? item.readiness : 0) }}%</span>\
             </div>\
@@ -701,10 +1003,12 @@ function registerComponents(app) {
               <span v-for="tag in itemTags" :key="tag" :class="\'tag tag-\' + tag.toLowerCase() + \' mr-xs\'">{{ tag.toUpperCase() }}</span>\
             </div>\
           </div>\
-          <div class="task-drawer-section" v-if="item.body">\
-            <div class="task-drawer-section-title">BODY</div>\
-            <div class="task-drawer-content" v-html="renderMdSafe(item.body)"></div>\
+          <div class="task-drawer-section">\
+            <div class="task-drawer-section-title">BODY <button class="cmd-btn cmd-btn-sm" style="margin-left:8px;font-size:11px;" @click="bodyEditorOpen = true">EDIT BODY</button></div>\
+            <div class="task-drawer-content" v-if="item.body" v-html="renderMdSafe(item.body)"></div>\
+            <div v-else style="color:var(--text-muted,#888);font-size:12px;">No body content</div>\
           </div>\
+          <body-editor :open="bodyEditorOpen" :filename="item.filename || \'\'" :body="item.body || \'\'" :title="item.id || item.filename || \'\'" @close="bodyEditorOpen = false" @saved="onBodySaved"></body-editor>\
         </div>\
       </div>'
   });
@@ -1197,7 +1501,10 @@ function registerComponents(app) {
         }
       },
       navigate: function(result) {
-        window.location.href = result.url;
+        var filename = result.path.split('/').pop();
+        console.log('[search] navigate to', result.url, 'highlight:', filename);
+        var sep = result.url.indexOf('?') === -1 ? '?' : '&';
+        window.location.href = result.url + sep + 'highlight=' + encodeURIComponent(filename);
         this.$emit('close');
       },
       setFilter: function(filter) {

@@ -102,6 +102,19 @@
         <p>Тиры: active ≤7д · warm ≤21д · cold ≤60д · archive >60д · core — защищён от decay.</p>
         <p>Формула: strength = 1 + ln(access_count), relevance = max(0.05, 1.0 − (rate/strength) × days).</p>
       </div>
+
+      <!-- Gem detail popup (BL-135) -->
+      <div id="gem-popup-overlay" class="gem-popup-overlay" style="display:none;" onclick="closeGemPopup(event)">
+        <div class="gem-popup-panel" onclick="event.stopPropagation()">
+          <div class="gem-popup-header">
+            <span class="gem-popup-title" id="gem-popup-title">DETAIL</span>
+            <button class="gem-popup-close" onclick="closeGemPopup()">[×]</button>
+          </div>
+          <div class="gem-popup-body" id="gem-popup-body">
+            <div class="gem-popup-loading">Загрузка...</div>
+          </div>
+        </div>
+      </div>
     </div>
 
   </main>
@@ -131,6 +144,7 @@
   registerComponents(app);
   app.mount('#app');
 </script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
 <script src="decay.js"></script>
 </body>
 </html>

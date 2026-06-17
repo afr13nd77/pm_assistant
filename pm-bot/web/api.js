@@ -333,10 +333,32 @@ var api = {
     return apiFetch('/decay/snapshot');
   },
 
+  /** GET /api/v1/artifact?path=<filepath> -- single artifact details */
+  artifact: function(filepath) {
+    return apiFetch('/artifact?path=' + encodeURIComponent(filepath));
+  },
+
   /** GET /api/v1/search?q=<query>&limit=<N> -- full-text search across vault */
   search: function(query, limit) {
     limit = limit || 20;
     return apiFetch('/search?q=' + encodeURIComponent(query) + '&limit=' + limit);
+  },
+
+  /** PATCH /api/v1/artifact/{filename}/field — update single frontmatter field */
+  updateField: function(filename, key, value) {
+    return apiFetch('/artifact/' + encodeURIComponent(filename) + '/field', {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({key: key, value: value})
+    });
+  },
+  /** PATCH /api/v1/artifact/{filename}/body — update markdown body */
+  updateBody: function(filename, body) {
+    return apiFetch('/artifact/' + encodeURIComponent(filename) + '/body', {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({body: body})
+    });
   }
 };
 

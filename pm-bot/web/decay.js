@@ -381,7 +381,7 @@ function renderForgottenGems() {
   container.innerHTML = gems.map(function(g) {
     // Domain abbreviation (first 2 chars uppercase)
     var abbr = (g.domain || '??').substring(0, 2).toUpperCase();
-    return '<div class="decay-gem-card">'
+    return '<div class="decay-gem-card" style="cursor:pointer;" onclick="openGemPopup(\'' + g.filepath.replace(/'/g, "\\'") + '\')">'
       + '<div class="decay-gem-icon" style="background:' + TIER_COLORS[g.tier] + '20;color:' + TIER_COLORS[g.tier] + ';">' + abbr + '</div>'
       + '<div class="decay-gem-info">'
       + '<p class="decay-gem-title">' + (g.title || g.type + ' · ' + g.domain) + '</p>'
@@ -393,6 +393,96 @@ function renderForgottenGems() {
   }).join('');
 
   console.log('[decay] gems rendered:', gems.length);
+}
+
+// ================================================================
+// Gem detail popup (BL-135)
+// ================================================================
+async function openGemPopup(filepath) {
+  console.log('[decay] openGemPopup:', filepath);
+  var overlay = document.getElementById('gem-popup-overlay');
+  var bodyEl = document.getElementById('gem-popup-body');
+  var titleEl = document.getElementById('gem-popup-title');
+
+  // Show popup with loading
+  overlay.style.display = 'flex';
+  bodyEl.innerHTML = '<div class="gem-popup-loading">Загрузка...</div>';
+  titleEl.textContent = 'DETAIL';
+
+  // Add Esc listener
+  document.addEventListener('keydown', _gemPopupEsc);
+
+  try {
+    var data = await api.artifact(filepath);
+    console.log('[decay] artifact loaded:', data.filename, data.title);
+
+    titleEl.textContent = data.id || data.filename || 'DETAIL';
+
+    var html = '<div class="gem-popup-meta">';
+    html += '<div class="gem-popup-meta-row"><span class="gem-popup-label">title:</span><span class="gem-popup-value">' + escapeHtml(data.title || '—') + '</span></div>';
+    html += '<div class="gem-popup-meta-row"><span class="gem-popup-label">date:</span><span class="gem-popup-value">' + (data.date || '—') + '</span></div>';
+    html += '<div class="gem-popup-meta-row"><span class="gem-popup-label">domain:</span><span class="gem-popup-value gem-popup-accent">' + (data.domain || '—').toUpperCase() + '</span></div>';
+    html += '<div class="gem-popup-meta-row"><span class="gem-popup-label">status:</span><span class="gem-popup-value">' + (data.status || '—') + '</span></div>';
+
+    // Find decay info from _items
+    var decayItem = _items.find(function(i) { return i.filepath === filepath; });
+    if (decayItem) {
+      html += '<div class="gem-popup-meta-row"><span class="gem-popup-label">tier:</span><span class="gem-popup-value" style="color:' + TIER_COLORS[decayItem.tier] + ';">' + decayItem.tier + '</span></div>';
+      html += '<div class="gem-popup-meta-row"><span class="gem-popup-label">relevance:</span><span class="gem-popup-value">' + decayItem.relevance.toFixed(2) + '</span></div>';
+      html += '<div class="gem-popup-meta-row"><span class="gem-popup-label">last access:</span><span class="gem-popup-value">' + decayItem.days_since_access + ' дней назад</span></div>';
+      html += '<div class="gem-popup-meta-row"><span class="gem-popup-label">accesses:</span><span class="gem-popup-value">×' + decayItem.access_count + '</span></div>';
+    }
+    html += '</div>';
+
+    // Tags
+    var tags = data.tags || [];
+    if (tags.length) {
+      html += '<div class="gem-popup-tags">';
+      tags.forEach(function(t) {
+        html += '<span class="tag tag-sm mr-xs">' + escapeHtml(t) + '</span>';
+      });
+      html += '</div>';
+    }
+
+    // Body (Markdown)
+    if (data.body) {
+      html += '<div class="gem-popup-divider"></div>';
+      html += '<div class="gem-popup-content">';
+      if (typeof marked !== 'undefined' && marked.parse) {
+        var renderer = new marked.Renderer();
+        renderer.link = function(href, title, text) {
+          if (typeof href === 'object') { text = href.text; title = href.title; href = href.href; }
+          var t = title ? ' title="' + escapeHtml(title) + '"' : '';
+          return '<a href="' + escapeHtml(href) + '" target="_blank" rel="noopener noreferrer"' + t + '>' + (text || href) + '</a>';
+        };
+        html += marked.parse(data.body, { renderer: renderer });
+      } else {
+        html += '<pre>' + escapeHtml(data.body) + '</pre>';
+      }
+      html += '</div>';
+    }
+
+    bodyEl.innerHTML = html;
+  } catch (err) {
+    console.error('[decay] artifact load error:', err.message);
+    bodyEl.innerHTML = '<div class="gem-popup-error">Ошибка загрузки: ' + escapeHtml(err.message) + '</div>';
+  }
+}
+
+function closeGemPopup(event) {
+  if (event && event.target && !event.target.classList.contains('gem-popup-overlay')) return;
+  var overlay = document.getElementById('gem-popup-overlay');
+  overlay.style.display = 'none';
+  document.removeEventListener('keydown', _gemPopupEsc);
+  console.log('[decay] gem popup closed');
+}
+
+function _gemPopupEsc(e) {
+  if (e.key === 'Escape') closeGemPopup();
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // ================================================================
