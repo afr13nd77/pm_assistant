@@ -267,11 +267,14 @@ def patch_jira_links(filepath: str, keys_map: dict[str, str]) -> None:
             break
         if in_section:
             for key, rel_path in keys_map.items():
-                plain = f"- {key}"
-                if line.strip() == plain:
-                    lines[i] = f"- [[{rel_path}|{key}]]"
-                    patched += 1
-                    break
+                stripped = line.strip()
+                prefix = f"- {key}"
+                if stripped.startswith(prefix):
+                    after = stripped[len(prefix):]
+                    if after == "" or after[0] in (" ", "(", ",", ";", ":"):
+                        lines[i] = line.replace(key, f"[[{rel_path}|{key}]]", 1)
+                        patched += 1
+                        break
 
     if patched:
         path.write_text("\n".join(lines), encoding="utf-8")

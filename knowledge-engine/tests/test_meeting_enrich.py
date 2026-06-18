@@ -119,11 +119,12 @@ class TestInjectSourceFile:
         result = _inject_source_file(md, self._PATH)
         assert f"source_file: {self._PATH}" in result
 
-    def test_no_footer_no_wikilink(self):
-        """Without a footer line, no wikilink appears in the output."""
+    def test_no_footer_appends_wikilink(self):
+        """Without a footer line, wikilink is appended at the end."""
         md = "---\ntags: [meeting]\n---\n\nContent without footer"
         result = _inject_source_file(md, self._PATH)
-        assert "исходный файл" not in result
+        assert "исходный файл" in result
+        assert result.rstrip().endswith("*")
 
     # --- path handling ---
 

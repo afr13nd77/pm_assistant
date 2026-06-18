@@ -227,8 +227,10 @@ def _inject_source_file(protocol_md: str, raw_rel_path: str) -> str:
         result = result.replace(old_footer, new_footer, 1)
         logger.info("_inject_source_file: footer updated with wikilink")
     else:
-        logger.warning(
-            "_inject_source_file: footer line not found, skipping footer update"
+        source_line = f"\n---\n*Источник: [[{raw_rel_path}|исходный файл]]*\n"
+        result = result.rstrip() + source_line
+        logger.info(
+            "_inject_source_file: footer appended (pattern not found in LLM output)"
         )
 
     return result
