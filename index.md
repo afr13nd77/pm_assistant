@@ -1,5 +1,7 @@
 # PM Assistant — Project Index
 
+Платформа управления знаниями продакт-менеджера OTA-компании. Монорепо из 4 компонентов: pm-bot (Telegram-бот + Web UI + Vault API), knowledge-engine (обогащение, синтез, Jira, email-fetch), idea-pipeline (оркестратор Analyst→PM→Decomposer), web-ui (SPA-дашборд). Гибридная LLM-архитектура: Claude API + Ollama + OpenRouter. Данные в Obsidian vault как структурированные .md файлы.
+
 ## Монорепо структура
 
 ```

@@ -1,16 +1,26 @@
-# PM Bot — CLAUDE.md
+# PM Assistant — CLAUDE.md
 
 Инструкции для Claude Code при работе с этим проектом.
 
 ## Что это за проект
 
-Telegram-бот для автоматизации рабочих заметок продакт-менеджера OTA-компании.
-Бот принимает сообщения → обрабатывает через Claude API → пишет структурированные `.md` файлы в Obsidian vault.
+Платформа управления знаниями продакт-менеджера OTA-компании. Монорепо из 4 компонентов:
+- **pm-bot** — Telegram-бот для capture идей + Web UI дашборд (10 страниц) + Vault API (FastAPI)
+- **knowledge-engine** — обогащение, синтез идей, интеграция Jira, импорт встреч из email (HTTP API)
+- **idea-pipeline** — оркестратор проработки идей (Analyst → PM → Decomposer)
+- **web-ui** — SPA-дашборд на Vue 3 + vanilla JS (overview, ideas, board, roadmap, timeline, decay, settings)
 
-Три потока:
-1. **Идеи** — текст из Telegram → `Inbox/` в Obsidian
-2. **Транскрипты встреч** — `.txt` из Яндекс Телемост → `Meetings/` в Obsidian
-3. **Jira-тикеты** — описание задачи → черновик в `Tasks/Drafts/` в Obsidian
+Данные хранятся в Obsidian vault как структурированные `.md` файлы с frontmatter.
+
+Основные потоки:
+1. **Capture идей** — Telegram/Web → Claude/Ollama/OpenRouter → vault (raw/inbound/ideas/)
+2. **Встречи** — watchdog транскриптов + email IMAP fetch → Claude → Meetings/
+3. **Jira-интеграция** — sync каждые 3ч, import, create (Bearer PAT auth)
+4. **Обогащение & синтез** — Knowledge Engine (keyword matching, таглинги, кластеризация)
+5. **Idea Pipeline** — Analyst analysis → PRD → Epic + Tasks (JSON)
+6. **Daily-протоколы** — cron сборка, Telegram alert на отсутствие
+
+Гибридная LLM-архитектура: Claude API + Ollama (local inference) + OpenRouter (транскрибация)
 
 ## Стек
 
