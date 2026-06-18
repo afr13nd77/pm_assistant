@@ -5,6 +5,15 @@
 
 ---
 
+## 18.06.2026 — Багфиксы BL-133, BL-134
+
+### knowledge-engine 1.10.1
+- **jira_key_sync.py**: `patch_jira_links()` — замена exact match (`==`) на startswith + word boundary. Теперь патчит Jira-ключи с комментариями: `- GO-153 (описание)` → `- [[.../GO-153|GO-153]] (описание)` (BUG-016)
+- **fetcher.py**: `_inject_source_file()` — fallback при отсутствии footer паттерна: append `---` + wikilink в конец протокола (BUG-017)
+- **Тесты**: `test_no_footer_no_wikilink` → `test_no_footer_appends_wikilink` — обновлён под новое поведение
+
+---
+
 ## 17.06.2026 — Meeting Protocol Enrichment (BL-133, BL-134) + OpenRouter (BL-138)
 
 ### knowledge-engine 1.10.0
