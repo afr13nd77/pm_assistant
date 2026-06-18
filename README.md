@@ -10,7 +10,7 @@ PM Assistant — программная реализация методолог�
 
 Серверная часть — 4 микросервиса (**pm-bot**, **knowledge-engine**, **idea-pipeline**, **ke-cron**), развернутые в **Docker-контейнере** на локальном сервере.
 
-Для обработки естественного языка используется **гибридная LLM-архитектура**: локальный **Ollama** (модель QWEN 3.5) для рутинных задач с автоматическим fallback на **Claude API** для сложных операций (синтез, pipeline, enrichment). Голосовые сообщения транскрибируются локально через **faster-whisper** (модель small, CPU).
+Для обработки естественного языка используется **гибридная LLM-архитектура**: локальный **Ollama** (модель QWEN 3.5) для рутинных задач с автоматическим fallback на **Claude API** для сложных операций (синтез, pipeline, enrichment). Для транскрибаций доступен **OpenRouter** (QWEN3-32B и другие модели) с fallback chain OpenRouter → Ollama → Claude API. Голосовые сообщения транскрибируются локально через **faster-whisper** (модель small, CPU).
 
 Регулярные аналитические задачи (утренний дайджест, ежедневный статус разработки, еженедельный отчёт, анализ рынка и конкурентов) выполняются через **Claude Desktop Cowork** — scheduled tasks, настроенные на работу с vault Obsidian. Ночная обработка очереди raw-файлов — через headless Claude Code.
 
@@ -107,11 +107,13 @@ Vault подключен к **Яндекс.Диск** и автоматичес�
 |---|---|---|---|
 | **Ollama** (локальный) | QWEN 3.5 | Рутинные задачи: классификация, извлечение ключевых слов, простая структуризация | По умолчанию для задач, не требующих глубокого анализа |
 | **Claude API** (облачный) | claude-sonnet-4-6 | Сложные задачи: синтез, enrichment, pipeline (анализ + PRD + декомпозиция), еженедельные отчёты | Для задач, требующих глубокого понимания контекста |
+| **OpenRouter** (облачный) | QWEN3-32B (и 5 других) | Транскрибации: обработка протоколов встреч | Настраивается в Settings как Transcription Provider |
 
 Стратегия выбора:
 - В режиме **Hybrid** (по умолчанию) — система автоматически выбирает провайдера в зависимости от типа задачи. Если Ollama недоступен или возвращает некачественный результат — автоматический fallback на Claude API
 - В режиме **Claude** — все запросы через Claude API
 - В режиме **Ollama** — все запросы через локальный Ollama
+- В настройках **Transcription Provider** — можно выбрать OpenRouter для обработки транскрибаций встреч (fallback: Ollama → Claude API)
 
 Переключение режима — через Web UI (Settings) или переменные окружения.
 
@@ -187,7 +189,7 @@ Jira-статусы не нормализуются — Jira является и
 
 ## Компоненты
 
-### pm-bot (v1.7.7)
+### pm-bot (v1.11.0)
 
 Telegram-бот + Vault API + Web UI сервер. Точка входа для всех взаимодействий.
 
@@ -195,13 +197,14 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 
 - Telegram-хендлеры: /idea, /jira, /daily, /synthesize, /jira_sync, /jira_import, /jira_create, /pipeline, /domain, /lint, /status, /test_enrichment, текст, голос
 - Claude API / Ollama / Hybrid — гибридная LLM-архитектура с fallback (Ollama: Qwen 3.5)
+- OpenRouter API для транскрибаций (6 моделей, fallback chain)
 - Speech-to-Text (faster-whisper)
 - Vault API (FastAPI, порт 8000) с in-memory TTL cache (30s)
 - Web UI static server (порт 8080)
 - APScheduler: weekly report (Mon 09:00), enrichment reminders (daily)
 - SQLite: дедупликация enrichment-напоминаний (cooldown 24ч)
 
-### knowledge-engine (v1.6.4)
+### knowledge-engine (v1.10.0)
 
 Сервис обогащения и синтеза знаний.
 
@@ -213,6 +216,8 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 - Jira import: импорт единичного тикета по ключу
 - Jira create: создание тикетов из vault
 - Meeting fetcher: IMAP клиент -> classify -> wiki -> enrich -> notify
+- Meeting protocol enrichment: source_file в frontmatter + wikilink на raw-файл в footer (BL-133)
+- Jira key sync для всех типов протоколов (BL-134)
 - Vault index: сканирование, in-memory индекс, keyword + tag matching
 - Linter: проверка frontmatter, структуры, битых ссылок, валидация статусов идей
 - Status migrator: миграция legacy-статусов в канонический словарь (4 статуса)
@@ -220,7 +225,7 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 - Domain manager: scaffold, index, activity log
 - Watchdog: auto-enrichment при появлении файлов в raw/inbound/
 
-### idea-pipeline (v1.1.0)
+### idea-pipeline (v1.1.2)
 
 Оркестратор проработки идей через цепочку AI-агентов.
 
@@ -244,9 +249,21 @@ Cron-контейнер для периодических задач:
 - Lint: ежедневно 03:00
 - Vault health: ежедневно 04:00
 
+### shared (v0.2.0)
+
+Общий модуль, единый источник для pm-bot, knowledge-engine и idea-pipeline.
+
+- llm_client: фабрика LLM-клиентов, маршрутизация по операциям, call_transcription (fallback chain)
+- openrouter_client: HTTP-клиент для OpenRouter API (6 моделей)
+- file_writer: file_lock, atomic_write, locked_append
+- vault_paths: 25 функций для путей vault
+- domain_config: загрузка/сохранение domain-config.yaml
+- frontmatter_utils: чтение/запись YAML frontmatter
+- settings: загрузка settings.yaml, dot-notation
+
 ---
 
-## Web UI (v1.15.6)
+## Web UI (v1.20.0)
 
 SPA-дашборд на Vue 3 + vanilla JS. Статические HTML-страницы, данные через Vault API.
 
@@ -259,7 +276,9 @@ SPA-дашборд на Vue 3 + vanilla JS. Статические HTML-стра
 | roadmap.html | Roadmap: эпики с прогрессом, колонки Backlog/Todo/In Progress/Done |
 | timeline.html | Таймлайн фич |
 | report.html | Просмотр еженедельных отчетов (Markdown -> HTML через marked.js) |
-| settings.html | Настройки: тема, refresh mode, LLM Provider (Claude/Ollama/Hybrid + Test Connection), prompts, Jira sync |
+| settings.html | Настройки: тема, refresh mode, LLM Provider (Claude/Ollama/Hybrid), Transcription Provider (Default/OpenRouter), prompts, Jira sync |
+| decay.html | Decay state dashboard: bubble scatter, tier distribution, projection, domain bars, forgotten gems |
+| about.html | О сервисе: версии компонентов, история изменений |
 
 Dual-theme: MATRIX (dark, glow/neon) и LIGHT (cream, warm). Переключение в settings, хранение серверное.
 
@@ -290,6 +309,7 @@ Drag-n-drop правила: readiness 100% для перехода в «Гото
 | Python | 3.12 | все |
 | python-telegram-bot | 21.5 | pm-bot |
 | anthropic | >=0.40.0 | pm-bot, knowledge-engine, idea-pipeline |
+| requests | >=2.31.0 | shared (openrouter_client) |
 | FastAPI | >=0.111.0 | pm-bot, idea-pipeline |
 | uvicorn | >=0.30.0 | pm-bot, idea-pipeline |
 | watchdog | 4.0.1 / 6.0.0 | pm-bot, knowledge-engine |
@@ -310,7 +330,7 @@ Drag-n-drop правила: readiness 100% для перехода в «Гото
 | Контейнер | Роль | Порты |
 |---|---|---|
 | pm-bot | Telegram polling + Vault API + Web UI | 8000 (API), 8080 (Web) |
-| knowledge-engine | Watchdog на raw/inbound/ для auto-enrichment | — |
+| knowledge-engine | HTTP API (:8001) + Watchdog на raw/inbound/ для auto-enrichment | 8001 (API) |
 | idea-pipeline | Оркестратор AI-агентов | 8100 |
 | ke-cron | Синтез (09:00) + Jira sync (каждые 3ч) | — |
 
@@ -361,6 +381,7 @@ python -m app.main
 | JIRA_TOKEN | да | KE | Personal Access Token |
 | OLLAMA_URL | нет | pm-bot, KE | URL Ollama-сервера |
 | OLLAMA_MODEL | нет | pm-bot, KE | Модель Ollama (default: qwen3.5:latest) |
+| OPENROUTER_API_KEY | нет | pm-bot, KE | Ключ OpenRouter API для транскрибаций |
 | STT_ENABLED | нет | pm-bot | Включить STT/Whisper (default: 1) |
 
 Полный список переменных — в index.md.
@@ -455,12 +476,12 @@ API возвращает `trend_7d` и `trend_30d` — история score за
 
 ## Статистика проекта
 
-- 67 реализованных фичи
+- 85 реализованных фичей
 - 24 исправленных бага
-- 29 идей в бэклоге
-- 129 пунктов бэклога всего
+- 27 идей в бэклоге
+- 139 пунктов бэклога всего
 
-Разработка ведется с 07.05.2026. Текущие версии: pm-bot 1.7.7, knowledge-engine 1.6.4, idea-pipeline 1.1.0, web-ui 1.15.6.
+Разработка ведется с 07.05.2026. Текущие версии: pm-bot 1.11.0, knowledge-engine 1.10.0, idea-pipeline 1.1.2, web-ui 1.20.0, shared 0.2.0.
 
 ---
 
