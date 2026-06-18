@@ -2301,6 +2301,7 @@ _VALID_REFRESH_MODES = frozenset({"auto", "manual"})
 _VALID_THEMES = frozenset({"matrix", "light"})
 _VALID_LLM_PROVIDERS = frozenset({"claude", "ollama", "hybrid"})
 _VALID_TRANSCRIPTION_PROVIDERS = frozenset({"default", "openrouter"})
+_VALID_CAPTURE_MODES = frozenset({"simple", "extended"})
 _DEFAULT_USER_PREFS = {
     "refresh_mode": "auto",
     "theme": "matrix",
@@ -2310,6 +2311,7 @@ _DEFAULT_USER_PREFS = {
     "jira_sync_notify": True,
     "transcription_provider": "default",
     "openrouter_model": "qwen/qwen3-32b",
+    "capture_mode": "simple",
 }
 
 
@@ -2322,6 +2324,7 @@ class UserPrefs(BaseModel):
     jira_sync_notify: bool = True
     transcription_provider: str = "default"
     openrouter_model: str = "qwen/qwen3-32b"
+    capture_mode: str = "simple"
 
 
 def _read_user_prefs() -> dict:
@@ -2375,13 +2378,15 @@ def get_user_prefs():
         prefs["transcription_provider"] = "default"
     if "openrouter_model" not in prefs:
         prefs["openrouter_model"] = "qwen/qwen3-32b"
+    if prefs.get("capture_mode") not in _VALID_CAPTURE_MODES:
+        prefs["capture_mode"] = "simple"
     logger.info("GET /api/v1/user-prefs — returning refresh_mode=%s theme=%s llm_provider=%s", prefs["refresh_mode"], prefs["theme"], prefs["llm_provider"])
     return prefs
 
 
 @app.put("/api/v1/user-prefs")
 def put_user_prefs(body: UserPrefs):
-    logger.info("PUT /api/v1/user-prefs — start, refresh_mode=%s theme=%s", body.refresh_mode, body.theme)
+    logger.info("PUT /api/v1/user-prefs — start, refresh_mode=%s theme=%s capture_mode=%s", body.refresh_mode, body.theme, body.capture_mode)
     if body.refresh_mode not in _VALID_REFRESH_MODES:
         logger.warning("PUT /api/v1/user-prefs — invalid refresh_mode: %s", body.refresh_mode)
         raise HTTPException(
@@ -2406,6 +2411,12 @@ def put_user_prefs(body: UserPrefs):
             status_code=422,
             detail=f"transcription_provider must be one of: {', '.join(sorted(_VALID_TRANSCRIPTION_PROVIDERS))}"
         )
+    if body.capture_mode not in _VALID_CAPTURE_MODES:
+        logger.warning("PUT /api/v1/user-prefs — invalid capture_mode: %s", body.capture_mode)
+        raise HTTPException(
+            status_code=422,
+            detail=f"capture_mode must be one of: {', '.join(sorted(_VALID_CAPTURE_MODES))}"
+        )
     prefs = body.model_dump()
     try:
         _write_user_prefs(prefs)
@@ -2423,7 +2434,8 @@ def put_user_prefs(body: UserPrefs):
             "llm_provider": body.llm_provider, "ollama_url": body.ollama_url,
             "ollama_model": body.ollama_model, "jira_sync_notify": body.jira_sync_notify,
             "transcription_provider": body.transcription_provider,
-            "openrouter_model": body.openrouter_model}
+            "openrouter_model": body.openrouter_model,
+            "capture_mode": body.capture_mode}
 
 
 # ---------------------------------------------------------------------------
