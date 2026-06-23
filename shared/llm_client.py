@@ -7,16 +7,37 @@ import anthropic
 
 logger = logging.getLogger(__name__)
 
-# Operations routed to Ollama in hybrid mode
-_HYBRID_OLLAMA_OPS = frozenset({
-    "idea", "daily", "jira_ticket", "meeting",
-})
+_OPERATION_GROUPS: dict[str, str] = {
+    # Capture: less critical operations, free models give acceptable results
+    "idea": "capture",
+    "daily": "capture",
+    "jira_ticket": "capture",
+
+    # Transcription: meeting audio/text processing
+    "meeting": "transcription",
+    "meeting_protocol": "transcription",
+
+    # Analysis: quality-critical operations
+    "enrich": "analysis",
+    "synthesize": "analysis",
+    "report": "analysis",
+    "pipeline": "analysis",
+}
+
+_DEFAULT_FALLBACK: dict[str, list[str]] = {
+    "capture": ["claude"],
+    "transcription": ["claude"],
+    "analysis": ["claude"],
+}
 
 _DEFAULT_LLM_PREFS = {
     "llm_provider": "claude",
     "ollama_url": "",
     "ollama_model": "qwen3.5:latest",
 }
+
+_OLLAMA_TIMEOUT_MULTIPLIER = 5
+_OPENROUTER_DEFAULT_TIMEOUT = 120
 
 _cached_prefs: dict | None = None
 _cached_mtime: float = 0.0
@@ -72,7 +93,7 @@ def get_client(operation: str) -> tuple[anthropic.Anthropic, str, dict]:
     if provider == "ollama" and ollama_url:
         use_ollama = True
     elif provider == "hybrid" and ollama_url:
-        use_ollama = operation in _HYBRID_OLLAMA_OPS
+        use_ollama = operation in {"idea", "daily", "jira_ticket", "meeting"}
 
     if use_ollama:
         logger.info("get_client: operation=%s, provider=ollama, url=%s, model=%s",
@@ -87,6 +108,272 @@ def get_client(operation: str) -> tuple[anthropic.Anthropic, str, dict]:
     return client, "claude-sonnet-4-6", {}
 
 
+def _migrate_legacy_prefs(prefs: dict) -> dict:
+    """Compute fallback chains from legacy fields if new fields are absent.
+
+    Does NOT write to file -- in-memory only.
+    """
+    if (
+        "capture_fallback" in prefs
+        and "transcription_fallback" in prefs
+        and "analysis_fallback" in prefs
+    ):
+        logger.debug("_migrate_legacy_prefs: new fields present, no migration needed")
+        return prefs
+
+    provider = prefs.get("llm_provider", "claude")
+    transcription = prefs.get("transcription_provider", "default")
+
+    if "capture_fallback" not in prefs:
+        if provider in ("ollama", "hybrid"):
+            prefs["capture_fallback"] = ["ollama", "claude"]
+        else:
+            prefs["capture_fallback"] = ["claude"]
+
+    if "transcription_fallback" not in prefs:
+        if transcription == "openrouter":
+            prefs["transcription_fallback"] = ["openrouter", "ollama", "claude"]
+        elif provider in ("ollama", "hybrid"):
+            prefs["transcription_fallback"] = ["ollama", "claude"]
+        else:
+            prefs["transcription_fallback"] = ["claude"]
+
+    if "analysis_fallback" not in prefs:
+        if provider == "ollama":
+            prefs["analysis_fallback"] = ["ollama", "claude"]
+        else:
+            prefs["analysis_fallback"] = ["claude"]
+
+    logger.info(
+        "_migrate_legacy_prefs: migrated from legacy fields "
+        "(llm_provider=%s, transcription_provider=%s)",
+        provider, transcription,
+    )
+    return prefs
+
+
+def _resolve_group(operation: str) -> str:
+    """Determine the group for an operation. Unknown operations default to analysis."""
+    group = _OPERATION_GROUPS.get(operation, "analysis")
+    logger.debug("_resolve_group: operation=%s -> group=%s", operation, group)
+    return group
+
+
+def _resolve_chain(group: str, prefs: dict) -> list[str]:
+    """Get the fallback chain for a group from prefs."""
+    key = f"{group}_fallback"
+    chain = prefs.get(key, _DEFAULT_FALLBACK.get(group, ["claude"]))
+
+    if not isinstance(chain, list) or len(chain) == 0:
+        logger.warning("_resolve_chain: invalid chain for %s, using default", group)
+        chain = ["claude"]
+
+    valid = [p for p in chain if p in ("claude", "ollama", "openrouter")]
+    if not valid:
+        logger.warning(
+            "_resolve_chain: no valid providers in chain for %s, falling back to claude",
+            group,
+        )
+        valid = ["claude"]
+
+    logger.info("_resolve_chain: group=%s, chain=%s", group, valid)
+    return valid
+
+
+def _is_provider_available(provider: str, prefs: dict) -> bool:
+    """Check whether a provider is configured (has required URL/key)."""
+    if provider == "claude":
+        available = bool(os.getenv("CLAUDE_API_KEY"))
+        if not available:
+            logger.warning("_is_provider_available: claude skipped (CLAUDE_API_KEY not set)")
+        return available
+
+    if provider == "ollama":
+        available = bool(prefs.get("ollama_url", ""))
+        if not available:
+            logger.info("_is_provider_available: ollama skipped (ollama_url not configured)")
+        return available
+
+    if provider == "openrouter":
+        available = bool(os.getenv("OPENROUTER_API_KEY"))
+        if not available:
+            logger.info("_is_provider_available: openrouter skipped (OPENROUTER_API_KEY not set)")
+        return available
+
+    logger.warning("_is_provider_available: unknown provider '%s', skipping", provider)
+    return False
+
+
+def _call_claude(
+    messages: list[dict],
+    max_tokens: int,
+    system: str | None,
+    timeout: int | None,
+) -> str:
+    """Call Claude API via Anthropic SDK."""
+    api_key = os.getenv("CLAUDE_API_KEY")
+    client = anthropic.Anthropic(api_key=api_key)
+    kwargs: dict = {
+        "model": "claude-sonnet-4-6",
+        "max_tokens": max_tokens,
+        "messages": messages,
+    }
+    if system:
+        kwargs["system"] = system
+    if timeout:
+        kwargs["timeout"] = timeout
+
+    logger.info("_call_claude: model=claude-sonnet-4-6, max_tokens=%d", max_tokens)
+    response = client.messages.create(**kwargs)
+    result = response.content[0].text
+    logger.info("_call_claude: success, output_len=%d", len(result))
+    return result
+
+
+def _call_ollama(
+    prefs: dict,
+    messages: list[dict],
+    max_tokens: int,
+    system: str | None,
+    timeout: int | None,
+) -> str:
+    """Call Ollama via Anthropic-compatible API."""
+    ollama_url = prefs.get("ollama_url", "")
+    ollama_model = prefs.get("ollama_model", "qwen3.5:latest")
+
+    client = anthropic.Anthropic(base_url=ollama_url, api_key="ollama")
+    ollama_timeout = (timeout or 60) * _OLLAMA_TIMEOUT_MULTIPLIER
+
+    kwargs: dict = {
+        "model": ollama_model,
+        "max_tokens": max_tokens,
+        "messages": messages,
+        "thinking": {"type": "disabled"},
+    }
+    if system:
+        kwargs["system"] = system
+    kwargs["timeout"] = ollama_timeout
+
+    logger.info("_call_ollama: model=%s, timeout=%d", ollama_model, ollama_timeout)
+    response = client.messages.create(**kwargs)
+    result = response.content[0].text
+    logger.info("_call_ollama: success, output_len=%d", len(result))
+    return result
+
+
+def _call_openrouter(
+    prefs: dict,
+    messages: list[dict],
+    max_tokens: int,
+    system: str | None,
+    timeout: int | None,
+) -> str:
+    """Call OpenRouter via shared.openrouter_client."""
+    from shared import openrouter_client
+
+    openrouter_model = prefs.get("openrouter_model", "qwen/qwen3-32b")
+
+    or_messages = list(messages)
+    if system:
+        or_messages.insert(0, {"role": "system", "content": system})
+
+    or_timeout = timeout or _OPENROUTER_DEFAULT_TIMEOUT
+    logger.info("_call_openrouter: model=%s, timeout=%d", openrouter_model, or_timeout)
+
+    result = openrouter_client.call(
+        messages=or_messages,
+        model=openrouter_model,
+        max_tokens=max_tokens,
+        timeout=or_timeout,
+    )
+    logger.info("_call_openrouter: success, output_len=%d", len(result))
+    return result
+
+
+def _call_provider(
+    provider: str,
+    prefs: dict,
+    messages: list[dict],
+    max_tokens: int,
+    system: str | None,
+    timeout: int | None,
+) -> str:
+    """Dispatch a call to a specific provider. Raises on error."""
+    if provider == "claude":
+        return _call_claude(messages, max_tokens, system, timeout)
+
+    if provider == "ollama":
+        return _call_ollama(prefs, messages, max_tokens, system, timeout)
+
+    if provider == "openrouter":
+        return _call_openrouter(prefs, messages, max_tokens, system, timeout)
+
+    raise ValueError(f"Unknown provider: {provider}")
+
+
+def call(
+    operation: str,
+    messages: list[dict],
+    max_tokens: int,
+    system: str | None = None,
+    timeout: int | None = None,
+) -> str:
+    """Unified entry point for LLM calls with configurable fallback chain.
+
+    1. Determines the operation group (capture/transcription/analysis)
+    2. Reads the fallback chain for the group from prefs
+    3. Iterates providers, skipping unavailable ones
+    4. On error, falls back to the next provider
+    5. If all providers fail, raises RuntimeError
+    """
+    prefs = _load_llm_prefs()
+    prefs = _migrate_legacy_prefs(prefs)
+
+    group = _resolve_group(operation)
+    chain = _resolve_chain(group, prefs)
+
+    logger.info("call: operation=%s, group=%s, chain=%s", operation, group, chain)
+
+    errors: list[tuple[str, Exception]] = []
+
+    for i, provider in enumerate(chain):
+        if not _is_provider_available(provider, prefs):
+            logger.info("call: skipping %s (not available), operation=%s", provider, operation)
+            continue
+
+        try:
+            logger.info(
+                "call: trying provider=%s (%d/%d), operation=%s",
+                provider, i + 1, len(chain), operation,
+            )
+            result = _call_provider(provider, prefs, messages, max_tokens, system, timeout)
+            logger.info(
+                "call: success, operation=%s, provider=%s, output_len=%d",
+                operation, provider, len(result),
+            )
+            return result
+
+        except Exception as exc:
+            errors.append((provider, exc))
+            remaining = [p for p in chain[i + 1:] if _is_provider_available(p, prefs)]
+            if remaining:
+                logger.warning(
+                    "call: %s failed for operation=%s: %s. Falling back to %s",
+                    provider, operation, exc, remaining[0],
+                )
+            else:
+                logger.error(
+                    "call: %s failed for operation=%s: %s. No more providers in chain.",
+                    provider, operation, exc,
+                )
+
+    error_summary = "; ".join(f"{p}: {e}" for p, e in errors)
+    raise RuntimeError(
+        f"All providers failed for operation={operation} "
+        f"(group={group}, chain={chain}): {error_summary}"
+    )
+
+
 def call_with_fallback(
     operation: str,
     messages: list[dict],
@@ -94,68 +381,9 @@ def call_with_fallback(
     system: str | None = None,
     timeout: int | None = None,
 ) -> str:
-    """Call LLM with automatic fallback from Ollama to Claude API on failure."""
-    client, model, extra_kwargs = get_client(operation)
-
-    is_ollama = model != "claude-sonnet-4-6"
-    ollama_timeout = timeout * 5 if (is_ollama and timeout) else timeout
-    if is_ollama and timeout:
-        logger.info("call_with_fallback: Ollama timeout adjusted: %ds → %ds", timeout, ollama_timeout)
-
-    kwargs: dict = {
-        "model": model,
-        "max_tokens": max_tokens,
-        "messages": messages,
-        **extra_kwargs,
-    }
-    if system:
-        kwargs["system"] = system
-    if ollama_timeout:
-        kwargs["timeout"] = ollama_timeout
-
-    try:
-        logger.info("call_with_fallback: calling model=%s, operation=%s", model, operation)
-        response = client.messages.create(**kwargs)
-        result = response.content[0].text
-        logger.info("call_with_fallback: success, operation=%s, model=%s, output_len=%d",
-                     operation, model, len(result))
-        return result
-    except Exception as exc:
-        # Only fallback if we were using Ollama
-        if model != "claude-sonnet-4-6":
-            logger.warning(
-                "call_with_fallback: Ollama failed for operation=%s, error=%s. Falling back to Claude API",
-                operation, exc,
-            )
-            api_key = os.getenv("CLAUDE_API_KEY")
-            if not api_key:
-                logger.error("call_with_fallback: CLAUDE_API_KEY not set, cannot fallback")
-                raise
-
-            fallback_client = anthropic.Anthropic(api_key=api_key)
-            fallback_kwargs: dict = {
-                "model": "claude-sonnet-4-6",
-                "max_tokens": max_tokens,
-                "messages": messages,
-            }
-            if system:
-                fallback_kwargs["system"] = system
-            if timeout:
-                fallback_kwargs["timeout"] = timeout
-
-            try:
-                response = fallback_client.messages.create(**fallback_kwargs)
-                result = response.content[0].text
-                logger.info("call_with_fallback: fallback success, operation=%s, output_len=%d",
-                             operation, len(result))
-                return result
-            except Exception as fallback_exc:
-                logger.error("call_with_fallback: fallback also failed, operation=%s, error=%s",
-                              operation, fallback_exc)
-                raise
-
-        logger.error("call_with_fallback: Claude API failed, operation=%s, error=%s", operation, exc)
-        raise
+    """DEPRECATED: use call(). Kept for backward compatibility."""
+    logger.debug("call_with_fallback: delegating to call(), operation=%s", operation)
+    return call(operation, messages, max_tokens, system, timeout)
 
 
 def call_transcription(
@@ -165,118 +393,6 @@ def call_transcription(
     system: str | None = None,
     timeout: int | None = None,
 ) -> str:
-    """Call LLM for transcription with OpenRouter -> Ollama -> Claude fallback chain."""
-    prefs = _load_llm_prefs()
-    transcription_provider = prefs.get("transcription_provider", "default")
-
-    if transcription_provider != "openrouter":
-        logger.info(
-            "call_transcription: provider=default, delegating to call_with_fallback"
-        )
-        return call_with_fallback(operation, messages, max_tokens, system, timeout)
-
-    # --- OpenRouter attempt ---
-    openrouter_model = prefs.get("openrouter_model", "qwen/qwen3-32b")
-
-    try:
-        from shared import openrouter_client
-
-        api_key = os.getenv("OPENROUTER_API_KEY")
-        if not api_key:
-            logger.warning(
-                "call_transcription: OPENROUTER_API_KEY not set, "
-                "falling back to default provider"
-            )
-            return call_with_fallback(operation, messages, max_tokens, system, timeout)
-
-        openrouter_messages = list(messages)
-        if system:
-            openrouter_messages.insert(0, {"role": "system", "content": system})
-
-        or_timeout = timeout or 120
-        logger.info(
-            "call_transcription: trying OpenRouter, model=%s, timeout=%d",
-            openrouter_model, or_timeout,
-        )
-
-        result = openrouter_client.call(
-            messages=openrouter_messages,
-            model=openrouter_model,
-            max_tokens=max_tokens,
-            timeout=or_timeout,
-        )
-        logger.info(
-            "call_transcription: OpenRouter success, operation=%s, output_len=%d",
-            operation, len(result),
-        )
-        return result
-
-    except Exception as or_exc:
-        logger.warning(
-            "call_transcription: OpenRouter failed for operation=%s: %s. "
-            "Falling back to Ollama/Claude",
-            operation, or_exc,
-        )
-
-    # --- Ollama attempt (if configured) ---
-    ollama_url = prefs.get("ollama_url", "")
-    if ollama_url:
-        try:
-            ollama_model = prefs.get("ollama_model", "qwen3.5:latest")
-            ollama_client = anthropic.Anthropic(base_url=ollama_url, api_key="ollama")
-
-            ollama_timeout = (timeout or 60) * 5
-            kwargs: dict = {
-                "model": ollama_model,
-                "max_tokens": max_tokens,
-                "messages": messages,
-                "thinking": {"type": "disabled"},
-            }
-            if system:
-                kwargs["system"] = system
-            kwargs["timeout"] = ollama_timeout
-
-            logger.info(
-                "call_transcription: trying Ollama fallback, model=%s, timeout=%d",
-                ollama_model, ollama_timeout,
-            )
-            response = ollama_client.messages.create(**kwargs)
-            result = response.content[0].text
-            logger.info(
-                "call_transcription: Ollama fallback success, operation=%s, output_len=%d",
-                operation, len(result),
-            )
-            return result
-
-        except Exception as ollama_exc:
-            logger.warning(
-                "call_transcription: Ollama fallback also failed for operation=%s: %s. "
-                "Falling back to Claude API",
-                operation, ollama_exc,
-            )
-
-    # --- Claude API final fallback ---
-    logger.info("call_transcription: final fallback to Claude API")
-    api_key_claude = os.getenv("CLAUDE_API_KEY")
-    if not api_key_claude:
-        logger.error("call_transcription: CLAUDE_API_KEY not set, cannot fallback")
-        raise RuntimeError("All transcription providers failed and CLAUDE_API_KEY is not set")
-
-    claude_client = anthropic.Anthropic(api_key=api_key_claude)
-    claude_kwargs: dict = {
-        "model": "claude-sonnet-4-6",
-        "max_tokens": max_tokens,
-        "messages": messages,
-    }
-    if system:
-        claude_kwargs["system"] = system
-    if timeout:
-        claude_kwargs["timeout"] = timeout
-
-    response = claude_client.messages.create(**claude_kwargs)
-    result = response.content[0].text
-    logger.info(
-        "call_transcription: Claude fallback success, operation=%s, output_len=%d",
-        operation, len(result),
-    )
-    return result
+    """DEPRECATED: use call(). Kept for backward compatibility."""
+    logger.debug("call_transcription: delegating to call(), operation=%s", operation)
+    return call(operation, messages, max_tokens, system, timeout)

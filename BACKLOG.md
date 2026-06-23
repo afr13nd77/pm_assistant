@@ -1,7 +1,7 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.11.0 / knowledge-engine 1.10.0 / idea-pipeline 1.1.2 / web-ui 1.20.0 / shared 0.2.0
-**Обновлён:** 17.06.2026 (BL-133, BL-134, BL-138)
+**Версии:** pm-bot 1.12.0 / knowledge-engine 1.11.0 / idea-pipeline 1.1.2 / web-ui 1.21.0 / shared 0.3.0
+**Обновлён:** 23.06.2026 (BL-140, BL-141)
 
 ---
 
@@ -162,6 +162,8 @@
 | BL-68 | ✅ Configurable models per agent | idea-pipeline | pipeline.yaml: модель для каждого агента (Analyst, PM, Decomposer) |
 | BL-69 | ✅ LLM client factory | pm-bot, knowledge-engine | llm_client.py: фабрика клиентов, маршрутизация по операциям |
 | BL-138 | ✅ OpenRouter для транскрибаций | pm-bot, knowledge-engine, shared, web-ui | openrouter_client.py (shared/), call_transcription() в llm_client.py — fallback chain OpenRouter → Ollama → Claude API. Settings UI: toggle DEFAULT/OPENROUTER, model dropdown (6 моделей), test connection. Endpoints: /openrouter-key-status, /openrouter-models, /test-openrouter. Env: OPENROUTER_API_KEY |
+| BL-140 | ✅ OpenRouter для enrichment протоколов | knowledge-engine, shared | Унификация LLM-вызовов: call_with_fallback() + call_transcription() → единый call() с настраиваемыми fallback-цепочками. Enrichment протоколов маршрутизируется через те же цепочки, что и транскрибация |
+| BL-141 | ✅ Настраиваемые fallback-цепочки провайдеров | shared, pm-bot, web-ui, knowledge-engine | OpenRouter как альтернатива для capture. 3 группы операций (Capture, Transcription, Analysis) с per-group fallback-цепочкой. Drag-and-drop в Settings UI. Обратная совместимость с legacy prefs. 21 unit-тест |
 
 ### 6.2 Идеи
 
@@ -172,7 +174,6 @@
 | BL-72 | idea-pipeline через Ollama | idea-pipeline | Сейчас всегда Claude API (упомянуто в Out of Scope ollama-hybrid) |
 | BL-73 | Multi-Agent Shared Vault | pm-bot | Расширить на команду PM-ов, агент находит пересечения и конфликты идей между участниками |
 | BL-139 | Перенос идеи при смене домена | web-ui, knowledge-engine | При смене домена идеи через Web UI (editable-field domain) — физически перемещать файл из wiki/domains/старый/ideas/ в wiki/domains/новый/ideas/. Обновлять log.md и index.md обоих доменов. Сейчас меняется только frontmatter, файл остаётся в старой папке |
-| BL-140 | OpenRouter для enrichment протоколов | knowledge-engine | Расширить scope OpenRouter (BL-138) на enrichment протоколов встреч в KE (process_meeting_transcript). Сейчас BL-138 покрывает только transcription |
 
 ---
 
@@ -295,8 +296,8 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 85 | BL-01..BL-08, BL-11..BL-18, BL-25..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138 |
+| ✅ Реализовано | 87 | BL-01..BL-08, BL-11..BL-18, BL-25..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141 |
 | ✅ Баги исправлены | 24 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129 |
-| Идея | 27 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-24, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139..BL-140 |
+| Идея | 26 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-24, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **139** | |
+| **Итого** | **140** | |

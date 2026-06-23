@@ -86,6 +86,133 @@
       opacity: 0.75;
     }
     .llm-info-panel strong { color: var(--text-body); font-weight: 500; }
+
+    /* Provider config blocks */
+    .provider-config-block {
+      margin-bottom: 20px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-left: 2px solid var(--cyan);
+    }
+    .provider-config-header {
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      color: var(--cyan);
+      margin-bottom: 10px;
+      font-weight: 500;
+    }
+
+    /* Fallback group cards */
+    .fallback-group-card {
+      margin-bottom: 16px;
+      padding: 12px;
+      border: 1px solid var(--border);
+    }
+    .fallback-group-header {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .fallback-group-name {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      color: var(--cyan);
+      font-weight: 500;
+    }
+    .fallback-group-ops {
+      font-size: 9px;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
+    /* Fallback chain items */
+    .fallback-chain {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .fallback-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      cursor: grab;
+      transition: border-color 0.15s, background 0.15s;
+      user-select: none;
+    }
+    .fallback-item:hover {
+      border-color: var(--border-hover);
+    }
+    .fallback-item--solo {
+      cursor: default;
+      opacity: 0.7;
+    }
+    .fallback-item-handle {
+      color: var(--text-muted);
+      font-size: 14px;
+      cursor: grab;
+      width: 16px;
+      text-align: center;
+    }
+    .fallback-item-index {
+      font-size: 9px;
+      color: var(--text-muted);
+      width: 14px;
+      text-align: center;
+    }
+    .fallback-item-name {
+      font-size: 11px;
+      color: var(--text-body);
+      flex: 1;
+      letter-spacing: 0.05em;
+    }
+    .fallback-item-remove {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 14px;
+      cursor: pointer;
+      padding: 0 4px;
+      line-height: 1;
+    }
+    .fallback-item-remove:hover {
+      color: #f44336;
+    }
+
+    /* Drag-and-drop visual feedback */
+    .fallback-item.drag-over-above {
+      border-top: 2px solid var(--cyan);
+      margin-top: -1px;
+    }
+    .fallback-item.drag-over-below {
+      border-bottom: 2px solid var(--cyan);
+      margin-bottom: -1px;
+    }
+
+    /* Add provider buttons */
+    .fallback-add-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .cmd-btn-small {
+      font-family: var(--font);
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      padding: 3px 10px;
+      background: transparent;
+      border: 1px dashed var(--border);
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .cmd-btn-small:hover {
+      border-color: var(--cyan);
+      color: var(--cyan);
+      border-style: solid;
+    }
   </style>
 </head>
 <body>
@@ -145,32 +272,24 @@
           </div>
         </div>
 
-        <!-- LLM Provider section -->
+        <!-- LLM Providers section (replaces LLM Provider + Transcription Provider) -->
         <div class="settings-section">
-          <div class="settings-section-title">// LLM PROVIDER</div>
-          <div class="field-group">
-            <div class="field-label">LLM_PROVIDER</div>
-            <div class="toggle-row">
-              <button class="toggle-btn toggle-btn-triple" :class="{ active: llmProvider === 'claude' }"
-                      @click="setLlmProvider('claude')">CLAUDE API</button>
-              <button class="toggle-btn toggle-btn-triple" :class="{ active: llmProvider === 'ollama' }"
-                      @click="setLlmProvider('ollama')">OLLAMA</button>
-              <button class="toggle-btn toggle-btn-triple" :class="{ active: llmProvider === 'hybrid' }"
-                      @click="setLlmProvider('hybrid')">HYBRID</button>
-            </div>
-          </div>
-          <div v-if="llmProvider !== 'claude'" class="ollama-fields">
+          <div class="settings-section-title">// LLM PROVIDERS</div>
+
+          <!-- Ollama connection settings -->
+          <div class="provider-config-block">
+            <div class="provider-config-header">OLLAMA</div>
             <div class="field-group">
               <div class="field-label">OLLAMA_URL</div>
               <input class="field-input" v-model="ollamaUrl"
                      placeholder="http://192.168.0.21:11434"
-                     @change="saveOllamaSettings">
+                     @change="saveProviderSettings">
             </div>
             <div class="field-group">
               <div class="field-label">OLLAMA_MODEL</div>
               <input class="field-input" v-model="ollamaModel"
                      placeholder="qwen3.5:latest" style="width: 250px;"
-                     @change="saveOllamaSettings">
+                     @change="saveProviderSettings">
             </div>
             <div class="ollama-test-row">
               <button class="cmd-btn cmd-btn-cyan" :disabled="ollamaTesting"
@@ -178,57 +297,96 @@
                 {{ ollamaTesting ? '...' : 'TEST CONNECTION' }}
               </button>
               <span v-if="ollamaStatus && ollamaStatus.status === 'ok'" class="ollama-status ok">
-                Connected &mdash; Ollama v{{ ollamaStatus.ollama_version }} &mdash; {{ ollamaStatus.models.join(', ') }}
+                Connected &mdash; Ollama v{{ ollamaStatus.ollama_version }}
               </span>
               <span v-if="ollamaStatus && ollamaStatus.status === 'error'" class="ollama-status err">
-                Connection failed &mdash; {{ ollamaStatus.detail }}
+                {{ ollamaStatus.detail }}
               </span>
             </div>
           </div>
-          <div v-if="llmProvider === 'hybrid'" class="llm-info-panel">
-            <strong>Ollama:</strong> daily, idea, jira, meeting<br>
-            <strong>Claude API:</strong> enrich, synthesize, report, pipeline
-          </div>
-        </div>
 
-        <!-- Transcription Provider section -->
-        <div class="settings-section">
-          <div class="settings-section-title">// TRANSCRIPTION PROVIDER</div>
-          <div class="field-group">
-            <div class="field-label">TRANSCRIPTION_PROVIDER</div>
-            <div class="toggle-row">
-              <button class="toggle-btn" :class="{ active: transcriptionProvider === 'default' }"
-                      @click="setTranscriptionProvider('default')">DEFAULT</button>
-              <button class="toggle-btn" :class="{ active: transcriptionProvider === 'openrouter' }"
-                      @click="setTranscriptionProvider('openrouter')">OPENROUTER</button>
+          <!-- OpenRouter connection settings -->
+          <div class="provider-config-block">
+            <div class="provider-config-header">OPENROUTER</div>
+            <div class="field-group">
+              <div class="field-label">OPENROUTER_MODEL</div>
+              <select class="field-select" v-model="openrouterModel"
+                      @change="saveProviderSettings" style="width: 300px;">
+                <option v-for="m in openrouterModels" :key="m.id" :value="m.id">
+                  {{ m.name }}
+                </option>
+              </select>
             </div>
-            <div class="field-note">DEFAULT: use current LLM Provider for transcriptions. OPENROUTER: use OpenRouter API with selected model.</div>
-          </div>
-          <div v-if="transcriptionProvider === 'openrouter'" class="ollama-fields">
             <div class="field-group">
               <div class="field-label">API_KEY_STATUS</div>
               <div style="font-size: 11px; margin-top: 4px;">
-                <span v-if="openrouterKeyStatus && openrouterKeyStatus.has_key" style="color: #4caf50;">&#9679; OPENROUTER_API_KEY is set in .env</span>
-                <span v-else style="color: #f44336;">&#9679; OPENROUTER_API_KEY is NOT set in .env</span>
+                <span v-if="openrouterKeyStatus && openrouterKeyStatus.has_key"
+                      style="color: #4caf50;">OPENROUTER_API_KEY is set in .env</span>
+                <span v-else style="color: #f44336;">OPENROUTER_API_KEY is NOT set</span>
               </div>
-            </div>
-            <div class="field-group">
-              <div class="field-label">OPENROUTER_MODEL</div>
-              <select class="field-select" v-model="openrouterModel" @change="saveOpenRouterModel" style="width: 300px;">
-                <option v-for="m in openrouterModels" :key="m.id" :value="m.id">{{ m.name }}</option>
-              </select>
             </div>
             <div class="ollama-test-row">
               <button class="cmd-btn cmd-btn-cyan" :disabled="openrouterTesting"
                       @click="testOpenRouterConnection()">
                 {{ openrouterTesting ? '...' : 'TEST CONNECTION' }}
               </button>
-              <span v-if="openrouterStatus && openrouterStatus.status === 'ok'" class="ollama-status ok">
+              <span v-if="openrouterStatus && openrouterStatus.status === 'ok'"
+                    class="ollama-status ok">
                 Connected &mdash; {{ openrouterStatus.model_name }} available
               </span>
-              <span v-if="openrouterStatus && openrouterStatus.status === 'error'" class="ollama-status err">
-                Error &mdash; {{ openrouterStatus.detail }}
+              <span v-if="openrouterStatus && openrouterStatus.status === 'error'"
+                    class="ollama-status err">
+                {{ openrouterStatus.detail }}
               </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Operation Groups with fallback chains -->
+        <div class="settings-section">
+          <div class="settings-section-title">// FALLBACK CHAINS</div>
+
+          <div v-for="group in operationGroups" :key="group.key"
+               class="fallback-group-card">
+            <div class="fallback-group-header">
+              <span class="fallback-group-name">{{ group.name }}</span>
+              <span class="fallback-group-ops">{{ group.operations.join(', ') }}</span>
+            </div>
+
+            <!-- Sortable fallback chain -->
+            <div class="fallback-chain"
+                 @dragover.prevent="handleDragOver($event, group.key)"
+                 @drop="handleDrop($event, group.key)">
+
+              <div v-for="(provider, idx) in group.chain" :key="provider + '-' + idx"
+                   class="fallback-item"
+                   :class="{
+                     'fallback-item--solo': group.chain.length === 1,
+                     'drag-over-above': dragState.group === group.key && dragState.targetIdx === idx && dragState.position === 'above',
+                     'drag-over-below': dragState.group === group.key && dragState.targetIdx === idx && dragState.position === 'below'
+                   }"
+                   :draggable="group.chain.length > 1 ? 'true' : 'false'"
+                   @dragstart="handleDragStart($event, group.key, idx)"
+                   @dragend="handleDragEnd">
+                <span class="fallback-item-handle"
+                      v-if="group.chain.length > 1">::</span>
+                <span class="fallback-item-index">{{ idx + 1 }}</span>
+                <span class="fallback-item-name">{{ providerDisplayName(provider) }}</span>
+                <button class="fallback-item-remove"
+                        v-if="group.chain.length > 1"
+                        @click="removeFromChain(group.key, idx)"
+                        title="Remove">&times;</button>
+              </div>
+            </div>
+
+            <!-- Available providers to add -->
+            <div class="fallback-add-row"
+                 v-if="availableProviders(group.key).length > 0">
+              <button v-for="p in availableProviders(group.key)" :key="p"
+                      class="cmd-btn cmd-btn-small"
+                      @click="addToChain(group.key, p)">
+                + {{ providerDisplayName(p) }}
+              </button>
             </div>
           </div>
         </div>
@@ -381,7 +539,41 @@
       var openrouterTesting = ref(false);
       var searchOpen = ref(false);
 
+      var operationGroups = ref([
+        {
+          key: 'capture',
+          name: 'CAPTURE',
+          operations: ['idea', 'daily', 'jira_ticket'],
+          chain: ['claude']
+        },
+        {
+          key: 'transcription',
+          name: 'TRANSCRIPTION',
+          operations: ['meeting', 'meeting_protocol'],
+          chain: ['claude']
+        },
+        {
+          key: 'analysis',
+          name: 'ANALYSIS',
+          operations: ['enrich', 'synthesize', 'report', 'pipeline'],
+          chain: ['claude']
+        }
+      ]);
+
+      var dragState = ref({
+        group: null,
+        sourceIdx: null,
+        targetIdx: null,
+        position: null
+      });
+
+      var allProviders = ['claude', 'ollama', 'openrouter'];
+
       function buildPrefsPayload() {
+        var captureChain = (findGroup('capture') || {}).chain || ['claude'];
+        var transcriptionChain = (findGroup('transcription') || {}).chain || ['claude'];
+        var analysisChain = (findGroup('analysis') || {}).chain || ['claude'];
+
         return {
           refresh_mode: refreshMode.value,
           theme: currentTheme.value,
@@ -391,7 +583,10 @@
           jira_sync_notify: jiraSyncNotify.value,
           capture_mode: captureMode.value,
           transcription_provider: transcriptionProvider.value,
-          openrouter_model: openrouterModel.value
+          openrouter_model: openrouterModel.value,
+          capture_fallback: captureChain,
+          transcription_fallback: transcriptionChain,
+          analysis_fallback: analysisChain
         };
       }
 
@@ -522,23 +717,121 @@
         try { localStorage.setItem('pm_capture_mode', mode); } catch(e) {}
       }
 
-      function setLlmProvider(provider) {
-        console.log('[settings] setLlmProvider:', provider);
-        llmProvider.value = provider;
-        saveLlmPrefs();
-        if (provider !== 'claude' && ollamaUrl.value) {
-          testOllamaConnection();
-        }
+      function providerDisplayName(provider) {
+        var names = {
+          'claude': 'Claude API',
+          'ollama': 'Ollama',
+          'openrouter': 'OpenRouter'
+        };
+        return names[provider] || provider;
       }
 
-      function saveLlmPrefs() {
-        console.log('[settings] saveLlmPrefs');
+      function findGroup(key) {
+        return operationGroups.value.find(function(g) { return g.key === key; });
+      }
+
+      function handleDragStart(event, groupKey, idx) {
+        console.log('[settings] dragStart:', groupKey, idx);
+        dragState.value = { group: groupKey, sourceIdx: idx, targetIdx: null, position: null };
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', groupKey + ':' + idx);
+      }
+
+      function handleDragOver(event, groupKey) {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+
+        var target = event.target.closest('.fallback-item');
+        if (!target) return;
+
+        var rect = target.getBoundingClientRect();
+        var midY = rect.top + rect.height / 2;
+        var position = event.clientY < midY ? 'above' : 'below';
+
+        var items = target.parentElement.querySelectorAll('.fallback-item');
+        var targetIdx = Array.from(items).indexOf(target);
+
+        dragState.value.targetIdx = targetIdx;
+        dragState.value.position = position;
+      }
+
+      function handleDrop(event, groupKey) {
+        event.preventDefault();
+        console.log('[settings] drop:', groupKey, dragState.value);
+
+        var state = dragState.value;
+        if (state.group !== groupKey || state.sourceIdx === null || state.targetIdx === null) {
+          handleDragEnd();
+          return;
+        }
+
+        var group = findGroup(groupKey);
+        if (!group) {
+          handleDragEnd();
+          return;
+        }
+
+        var chain = group.chain;
+        var sourceIdx = state.sourceIdx;
+        var targetIdx = state.targetIdx;
+
+        var newIdx = state.position === 'below' ? targetIdx + 1 : targetIdx;
+
+        if (newIdx === sourceIdx || newIdx === sourceIdx + 1) {
+          handleDragEnd();
+          return;
+        }
+
+        var item = chain.splice(sourceIdx, 1)[0];
+        if (newIdx > sourceIdx) newIdx--;
+        chain.splice(newIdx, 0, item);
+
+        console.log('[settings] chain reordered:', groupKey, chain);
+        handleDragEnd();
+        saveProviderSettings();
+      }
+
+      function handleDragEnd() {
+        dragState.value = { group: null, sourceIdx: null, targetIdx: null, position: null };
+      }
+
+      function removeFromChain(groupKey, idx) {
+        var group = findGroup(groupKey);
+        if (!group) return;
+        if (group.chain.length <= 1) {
+          console.log('[settings] cannot remove last provider from', groupKey);
+          return;
+        }
+        var removed = group.chain.splice(idx, 1)[0];
+        console.log('[settings] removed', removed, 'from', groupKey);
+        saveProviderSettings();
+      }
+
+      function addToChain(groupKey, provider) {
+        var group = findGroup(groupKey);
+        if (!group) return;
+        if (group.chain.indexOf(provider) !== -1) return;
+        group.chain.push(provider);
+        console.log('[settings] added', provider, 'to', groupKey);
+        saveProviderSettings();
+      }
+
+      function availableProviders(groupKey) {
+        var group = findGroup(groupKey);
+        if (!group) return [];
+        return allProviders.filter(function(p) {
+          return group.chain.indexOf(p) === -1;
+        });
+      }
+
+      function saveProviderSettings() {
+        console.log('[settings] saveProviderSettings');
         llmSaving.value = true;
         api.saveUserPrefs(buildPrefsPayload()).then(function() {
-          console.log('[settings] LLM prefs saved');
+          console.log('[settings] provider settings saved');
           llmSaving.value = false;
         }).catch(function(err) {
-          console.error('[settings] Failed to save LLM prefs:', err.message);
+          console.error('[settings] failed to save provider settings:', err.message);
           llmSaving.value = false;
         });
       }
@@ -564,7 +857,7 @@
 
       function saveOllamaSettings() {
         console.log('[settings] saveOllamaSettings');
-        saveLlmPrefs();
+        saveProviderSettings();
         if (ollamaUrl.value) {
           testOllamaConnection();
         }
@@ -573,7 +866,7 @@
       function setTranscriptionProvider(provider) {
         console.log('[settings] setTranscriptionProvider:', provider);
         transcriptionProvider.value = provider;
-        saveLlmPrefs();
+        saveProviderSettings();
         if (provider === 'openrouter') {
           loadOpenRouterKeyStatus();
           loadOpenRouterModels();
@@ -617,7 +910,7 @@
 
       function saveOpenRouterModel() {
         console.log('[settings] saveOpenRouterModel:', openrouterModel.value);
-        saveLlmPrefs();
+        saveProviderSettings();
       }
 
       onMounted(function() {
@@ -636,15 +929,25 @@
           try { localStorage.setItem('pm_capture_mode', captureMode.value); } catch(e) {}
           transcriptionProvider.value = prefs.transcription_provider || 'default';
           openrouterModel.value = prefs.openrouter_model || 'qwen/qwen3-32b';
+          // Load fallback chains
+          if (prefs.capture_fallback && Array.isArray(prefs.capture_fallback)) {
+            findGroup('capture').chain = prefs.capture_fallback;
+          }
+          if (prefs.transcription_fallback && Array.isArray(prefs.transcription_fallback)) {
+            findGroup('transcription').chain = prefs.transcription_fallback;
+          }
+          if (prefs.analysis_fallback && Array.isArray(prefs.analysis_fallback)) {
+            findGroup('analysis').chain = prefs.analysis_fallback;
+          }
+
           console.log('[settings] prefs loaded: refresh=%s theme=%s llm=%s capture=%s transcription=%s', refreshMode.value, currentTheme.value, llmProvider.value, captureMode.value, transcriptionProvider.value);
           applyPageTheme(currentTheme.value);
-          if (llmProvider.value !== 'claude' && ollamaUrl.value) {
+          if (ollamaUrl.value) {
             testOllamaConnection();
           }
-          if (transcriptionProvider.value === 'openrouter') {
-            loadOpenRouterKeyStatus();
-            loadOpenRouterModels();
-          }
+          // OpenRouter: load models and key always (provider may be in any group)
+          loadOpenRouterKeyStatus();
+          loadOpenRouterModels();
         }).catch(function(err) {
           console.error('[settings] getUserPrefs error:', err.message);
         });
@@ -682,7 +985,6 @@
         ollamaStatus: ollamaStatus,
         ollamaTesting: ollamaTesting,
         llmSaving: llmSaving,
-        setLlmProvider: setLlmProvider,
         testOllamaConnection: testOllamaConnection,
         saveOllamaSettings: saveOllamaSettings,
         jiraSyncNotify: jiraSyncNotify,
@@ -701,6 +1003,18 @@
         loadOpenRouterKeyStatus: loadOpenRouterKeyStatus,
         testOpenRouterConnection: testOpenRouterConnection,
         saveOpenRouterModel: saveOpenRouterModel,
+        operationGroups: operationGroups,
+        dragState: dragState,
+        providerDisplayName: providerDisplayName,
+        findGroup: findGroup,
+        handleDragStart: handleDragStart,
+        handleDragOver: handleDragOver,
+        handleDrop: handleDrop,
+        handleDragEnd: handleDragEnd,
+        removeFromChain: removeFromChain,
+        addToChain: addToChain,
+        availableProviders: availableProviders,
+        saveProviderSettings: saveProviderSettings,
       };
     }
   });

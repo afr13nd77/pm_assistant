@@ -20,7 +20,7 @@ pm_assistant/
 ├── shared/                         # общий модуль — единый источник для pm-bot, KE, idea-pipeline
 │   ├── __init__.py                 # __version__ = "0.1.0"
 │   ├── file_writer.py              # file_lock, atomic_write, locked_append, append_section
-│   ├── llm_client.py               # _load_llm_prefs, get_client, call_with_fallback (Ollama timeout ×5)
+│   ├── llm_client.py               # _load_llm_prefs, get_client, call (unified fallback chain), deprecated: call_with_fallback, call_transcription
 │   ├── openrouter_client.py        # HTTP client for OpenRouter API (6 models, call, test_connection)
 │   ├── vault_paths.py              # superset путей vault (25 функций)
 │   ├── domain_config.py            # загрузка/сохранение domain-config.yaml (13 функций)
@@ -29,6 +29,7 @@ pm_assistant/
 │   └── tests/                      # unit-тесты для shared/
 │       ├── test_settings.py        # 14 тестов
 │       ├── test_openrouter.py      # 9 тестов (call, test_connection, models)
+│       ├── test_llm_client.py     # 21 тестов (call, fallback chains, migration, resolve)
 │       └── test_llm_transcription.py  # 5 тестов (call_transcription fallback chain)
 │
 ├── docs/                           # спеки и дизайн-документы (корень монорепо)
@@ -86,7 +87,7 @@ pm_assistant/
 │       ├── decay.html              # decay state dashboard: bubble scatter, donut, projection, domain bars, gems
 │       ├── decay.js                # логика decay dashboard: Chart.js, проекция, gems (424 строки)
 │       ├── report.html             # просмотр отчётов (marked.js для MD)
-│       ├── settings.html           # настройки (theme, refresh mode, LLM Provider, Transcription Provider, prompts, Jira sync)
+│       ├── settings.html           # настройки (theme, refresh mode, LLM Providers с fallback chains drag-and-drop, prompts, Jira sync)
 │       ├── api.js                  # fetch-клиент к vault_api (cancellation, caching, user-prefs, decay snapshot)
 │       ├── components.js           # shared Vue 3 компоненты (sidebar, cards, drawer)
 │       ├── style.css               # базовая тема (flat)
@@ -162,12 +163,12 @@ pm_assistant/
 
 | Компонент | Версия | Последнее изменение | Описание |
 |---|---|---|---|
-| **pm-bot** | 1.11.0 | 2026-06-17 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. OpenRouter API endpoints (BL-138). |
-| **knowledge-engine** | 1.10.0 | 2026-06-17 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (19 эндпоинтов), jira-search endpoint. Импорты из shared/. Meeting protocol enrichment (BL-133, BL-134). |
+| **pm-bot** | 1.12.0 | 2026-06-23 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. Настраиваемые fallback-цепочки LLM-провайдеров в Settings UI (BL-140, BL-141). |
+| **knowledge-engine** | 1.11.0 | 2026-06-23 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (19 эндпоинтов), jira-search endpoint. Импорты из shared/. Унификация LLM-вызовов через call() (BL-140, BL-141). Meeting protocol enrichment (BL-133, BL-134). Багфиксы: patch_jira_links startswith (BUG-016), footer append fallback (BUG-017). |
 | **idea-pipeline** | 1.1.2 | 2026-06-14 | Orchestrator: Analyst → PM → Decomposer. Импорты vault_paths и file_writer из shared/. |
-| **web-ui** | 1.20.0 | 2026-06-17 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Transcription Provider settings (BL-138) |
+| **web-ui** | 1.21.0 | 2026-06-23 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141) |
 | **инфраструктура** | 1.0.0 | 2026-06-11 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120) |
-| **shared** | 0.2.0 | 2026-06-17 | Общий модуль: llm_client (Ollama timeout ×5, call_transcription), openrouter_client, file_writer, vault_paths, domain_config, frontmatter_utils, settings. Единый источник для всех компонентов |
+| **shared** | 0.3.0 | 2026-06-23 | Общий модуль: llm_client (call с настраиваемыми fallback-цепочками, Ollama timeout ×5, call_transcription), openrouter_client, file_writer, vault_paths, domain_config, frontmatter_utils, settings. Единый источник для всех компонентов. Единый call() с настраиваемыми fallback-цепочками (BL-140, BL-141). |
 
 Схема: semver `MAJOR.MINOR.PATCH`. MAJOR — ломающие изменения API/контрактов. MINOR — новый функционал. PATCH — багофиксы.
 

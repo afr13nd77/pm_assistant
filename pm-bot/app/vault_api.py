@@ -2302,6 +2302,7 @@ _VALID_THEMES = frozenset({"matrix", "light"})
 _VALID_LLM_PROVIDERS = frozenset({"claude", "ollama", "hybrid"})
 _VALID_TRANSCRIPTION_PROVIDERS = frozenset({"default", "openrouter"})
 _VALID_CAPTURE_MODES = frozenset({"simple", "extended"})
+_VALID_FALLBACK_PROVIDERS = frozenset({"claude", "ollama", "openrouter"})
 _DEFAULT_USER_PREFS = {
     "refresh_mode": "auto",
     "theme": "matrix",
@@ -2312,6 +2313,9 @@ _DEFAULT_USER_PREFS = {
     "transcription_provider": "default",
     "openrouter_model": "qwen/qwen3-32b",
     "capture_mode": "simple",
+    "capture_fallback": ["claude"],
+    "transcription_fallback": ["claude"],
+    "analysis_fallback": ["claude"],
 }
 
 
@@ -2325,6 +2329,9 @@ class UserPrefs(BaseModel):
     transcription_provider: str = "default"
     openrouter_model: str = "qwen/qwen3-32b"
     capture_mode: str = "simple"
+    capture_fallback: list[str] = ["claude"]
+    transcription_fallback: list[str] = ["claude"]
+    analysis_fallback: list[str] = ["claude"]
 
 
 def _read_user_prefs() -> dict:
@@ -2380,6 +2387,25 @@ def get_user_prefs():
         prefs["openrouter_model"] = "qwen/qwen3-32b"
     if prefs.get("capture_mode") not in _VALID_CAPTURE_MODES:
         prefs["capture_mode"] = "simple"
+    # --- fallback chains ---
+    if "capture_fallback" not in prefs:
+        prefs["capture_fallback"] = ["claude"]
+    if "transcription_fallback" not in prefs:
+        prefs["transcription_fallback"] = ["claude"]
+    if "analysis_fallback" not in prefs:
+        prefs["analysis_fallback"] = ["claude"]
+    for key in ("capture_fallback", "transcription_fallback", "analysis_fallback"):
+        val = prefs[key]
+        if not isinstance(val, list) or len(val) == 0:
+            logger.info("GET /api/v1/user-prefs — %s invalid (not list or empty), resetting to default", key)
+            prefs[key] = ["claude"]
+        else:
+            filtered = [p for p in val if p in _VALID_FALLBACK_PROVIDERS]
+            if not filtered:
+                logger.info("GET /api/v1/user-prefs — %s has no valid providers, resetting to default", key)
+                prefs[key] = ["claude"]
+            else:
+                prefs[key] = filtered
     logger.info("GET /api/v1/user-prefs — returning refresh_mode=%s theme=%s llm_provider=%s", prefs["refresh_mode"], prefs["theme"], prefs["llm_provider"])
     return prefs
 
@@ -2417,6 +2443,28 @@ def put_user_prefs(body: UserPrefs):
             status_code=422,
             detail=f"capture_mode must be one of: {', '.join(sorted(_VALID_CAPTURE_MODES))}"
         )
+    for key in ("capture_fallback", "transcription_fallback", "analysis_fallback"):
+        chain = getattr(body, key)
+        if not isinstance(chain, list) or len(chain) == 0:
+            logger.warning("PUT /api/v1/user-prefs — %s is empty or not a list, rejecting", key)
+            raise HTTPException(
+                status_code=422,
+                detail=f"{key} must be a non-empty list of providers: {', '.join(sorted(_VALID_FALLBACK_PROVIDERS))}"
+            )
+        invalid = [p for p in chain if p not in _VALID_FALLBACK_PROVIDERS]
+        if invalid:
+            logger.warning("PUT /api/v1/user-prefs — %s contains invalid providers: %s", key, invalid)
+            raise HTTPException(
+                status_code=422,
+                detail=f"{key} contains invalid providers: {', '.join(invalid)}. Valid: {', '.join(sorted(_VALID_FALLBACK_PROVIDERS))}"
+            )
+        if len(chain) != len(set(chain)):
+            logger.warning("PUT /api/v1/user-prefs — %s contains duplicate providers: %s", key, chain)
+            raise HTTPException(
+                status_code=422,
+                detail=f"{key} must not contain duplicate providers"
+            )
+        logger.info("PUT /api/v1/user-prefs — %s validated: %s", key, chain)
     prefs = body.model_dump()
     try:
         _write_user_prefs(prefs)
@@ -2435,7 +2483,10 @@ def put_user_prefs(body: UserPrefs):
             "ollama_model": body.ollama_model, "jira_sync_notify": body.jira_sync_notify,
             "transcription_provider": body.transcription_provider,
             "openrouter_model": body.openrouter_model,
-            "capture_mode": body.capture_mode}
+            "capture_mode": body.capture_mode,
+            "capture_fallback": body.capture_fallback,
+            "transcription_fallback": body.transcription_fallback,
+            "analysis_fallback": body.analysis_fallback}
 
 
 # ---------------------------------------------------------------------------

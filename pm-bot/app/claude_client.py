@@ -173,7 +173,7 @@ def process_idea(raw_text: str) -> dict:
     logger.info("process_idea: processing raw_text, len=%d", len(raw_text))
     prompt_with_text = _build_idea_prompt(raw_text)
     try:
-        response_text = llm_client.call_with_fallback(
+        response_text = llm_client.call(
             operation="idea",
             messages=[{"role": "user", "content": prompt_with_text}],
             max_tokens=1000,
@@ -203,7 +203,7 @@ def process_meeting(transcript: str) -> str:
     """Поток 2: извлекает решения и action items из транскрипта."""
     prompt = _load_prompt("meeting")
     try:
-        response_text = llm_client.call_transcription(
+        response_text = llm_client.call(
             operation="meeting",
             messages=[{"role": "user", "content": f"{prompt}\n\n---\n{transcript}"}],
             max_tokens=2000,
@@ -218,7 +218,7 @@ def process_jira_ticket(raw_text: str) -> str:
     """Поток 3: генерирует структурированный Jira-тикет."""
     prompt = _load_prompt("jira_ticket")
     try:
-        response_text = llm_client.call_with_fallback(
+        response_text = llm_client.call(
             operation="jira_ticket",
             messages=[{"role": "user", "content": f"{prompt}\n\n---\n{raw_text}"}],
             max_tokens=1500,
@@ -233,7 +233,7 @@ def process_daily(text: str) -> str:
     """Поток 4: структурирует ежедневную заметку в дневной лог."""
     prompt = _load_prompt("daily")
     try:
-        response_text = llm_client.call_with_fallback(
+        response_text = llm_client.call(
             operation="daily",
             messages=[{"role": "user", "content": f"{prompt}\n\n---\n{text}"}],
             max_tokens=1500,
