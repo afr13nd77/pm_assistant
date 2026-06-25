@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.meeting_fetcher.classifier import (
+    classify_type,
     extract_type,
     route_protocol,
     make_filename,
@@ -55,7 +56,7 @@ class TestExtractType:
         with caplog.at_level(logging.WARNING):
             result = extract_type(md)
         assert result == "sync"
-        assert "Unrecognized protocol type" in caplog.text
+        assert "unrecognized type" in caplog.text
 
     def test_type_with_whitespace_is_stripped(self):
         md = "---\ntype: '  daily  '\n---\n# Notes"
@@ -68,6 +69,106 @@ class TestExtractType:
     def test_no_frontmatter_falls_back_to_sync(self):
         md = "# Just a heading\nSome text without frontmatter."
         assert extract_type(md) == "sync"
+
+    def test_invalid_yaml_falls_back_to_regex(self, caplog):
+        """When YAML has invalid syntax, regex fallback extracts type."""
+        # "foo: bar: baz" triggers ScannerError in PyYAML
+        md = "---\ntype: daily\nfoo: bar: baz\n---\n# Notes"
+        with caplog.at_level(logging.WARNING):
+            result = extract_type(md)
+        assert result == "daily"
+        assert "YAML parse failed" in caplog.text
+
+    def test_invalid_yaml_no_type_falls_back_to_sync(self, caplog):
+        """When YAML is invalid and no type field exists, return 'sync'."""
+        md = "---\nfoo: bar: baz\n---\n# Notes"
+        with caplog.at_level(logging.WARNING):
+            result = extract_type(md)
+        assert result == "sync"
+        assert "YAML parse failed" in caplog.text
+
+    def test_invalid_yaml_regex_finds_quoted_type(self):
+        """Regex fallback strips quotes from type value."""
+        md = "---\ntype: 'review'\nbroken: [a: b]\n---\n# Notes"
+        result = extract_type(md)
+        assert result == "review"
+
+    def test_never_raises_on_any_input(self):
+        """extract_type must never raise, regardless of input."""
+        garbage_inputs = [
+            "",
+            "---\n---",
+            "no frontmatter at all",
+            "---\n\x00\x01\x02\n---",
+            "---\ntype: [nested: {bad: yaml}]\n---",
+        ]
+        for md in garbage_inputs:
+            result = extract_type(md)
+            assert isinstance(result, str)
+            assert result in {"daily", "sync", "review", "planning"}
+
+
+# ---------------------------------------------------------------------------
+# classify_type
+# ---------------------------------------------------------------------------
+
+
+class TestClassifyType:
+    """Tests for classify_type() — subject heuristic with LLM fallback."""
+
+    def test_subject_daily_overrides_llm_sync(self):
+        """Subject with 'daily' wins even when LLM says 'sync'."""
+        md = "---\ntype: sync\n---\n# Meeting notes"
+        result = classify_type(md, subject="Конспект встречи «R6 :: Daily» от 10.06.2026")
+        assert result == "daily"
+
+    def test_subject_daily_case_insensitive(self):
+        """'Daily' in subject is matched case-insensitively."""
+        md = "---\ntype: sync\n---\n# Notes"
+        assert classify_type(md, subject="Team DAILY standup") == "daily"
+        assert classify_type(md, subject="daily") == "daily"
+        assert classify_type(md, subject="DAILY") == "daily"
+
+    def test_subject_daily_word_boundary(self):
+        """'daily' must be a whole word — 'dailyreport' should not match."""
+        md = "---\ntype: sync\n---\n# Notes"
+        assert classify_type(md, subject="dailyreport review") == "sync"
+
+    def test_no_daily_in_subject_falls_back_to_llm(self):
+        """When subject has no 'daily', fallback to extract_type."""
+        md = "---\ntype: review\n---\n# Review notes"
+        result = classify_type(md, subject="Sprint Review 2026-06-10")
+        assert result == "review"
+
+    def test_empty_subject_falls_back_to_llm(self):
+        """Empty subject triggers LLM fallback."""
+        md = "---\ntype: planning\n---\n# Planning"
+        assert classify_type(md, subject="") == "planning"
+
+    def test_no_subject_arg_falls_back_to_llm(self):
+        """No subject argument at all triggers LLM fallback."""
+        md = "---\ntype: sync\n---\n# Sync meeting"
+        assert classify_type(md) == "sync"
+
+    def test_subject_none_coerced_falls_back_to_llm(self):
+        """Explicit empty string subject triggers fallback."""
+        md = "---\ntype: daily\n---\n# Daily standup"
+        # When subject is empty, should fall back to extract_type
+        assert classify_type(md, subject="") == "daily"  # from LLM
+
+    def test_logs_subject_match(self, caplog):
+        """Verify logging when subject heuristic matches."""
+        md = "---\ntype: sync\n---\n# Notes"
+        with caplog.at_level(logging.INFO):
+            classify_type(md, subject="R6 :: Daily standup")
+        assert "subject contains 'daily'" in caplog.text
+
+    def test_logs_fallback(self, caplog):
+        """Verify logging when falling back to extract_type."""
+        md = "---\ntype: sync\n---\n# Notes"
+        with caplog.at_level(logging.INFO):
+            classify_type(md, subject="Sprint planning")
+        assert "no 'daily' in subject" in caplog.text
 
 
 # ---------------------------------------------------------------------------

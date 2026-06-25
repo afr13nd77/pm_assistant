@@ -43,6 +43,8 @@ _SEPARATOR_RE = re.compile(r"[\s_]+")
 
 _MAX_SLUG_LEN = 50
 
+_TYPE_RE = re.compile(r"^type:\s*(.+)$", re.MULTILINE)
+
 
 def extract_type(protocol_md: str) -> str:
     """
@@ -50,25 +52,72 @@ def extract_type(protocol_md: str) -> str:
 
     Returns one of: daily, sync, review, planning.
     Falls back to 'sync' if type is missing or unrecognized.
+
+    Never raises — always returns a valid type string.
     """
     logger.info("Extracting protocol type from frontmatter")
+
+    raw_type = None
+
+    # 1. Try structured YAML parsing
     try:
         post = frontmatter.loads(protocol_md)
-        raw_type = post.metadata.get("type", "sync")
-        protocol_type = str(raw_type).strip().lower()
-
-        if protocol_type not in _VALID_TYPES:
-            logger.warning(
-                "Unrecognized protocol type '%s'; falling back to 'sync'",
-                raw_type,
-            )
-            return "sync"
-
-        logger.info("Extracted protocol type: '%s'", protocol_type)
-        return protocol_type
+        raw_type = post.metadata.get("type")
+        logger.info("extract_type: YAML parsed OK, type=%s", raw_type)
     except Exception as e:
-        logger.error("Failed to extract type from frontmatter: %s", e)
-        raise
+        logger.warning("extract_type: YAML parse failed (%s), trying regex fallback", e)
+
+    # 2. Fallback: regex on raw text
+    if raw_type is None:
+        match = _TYPE_RE.search(protocol_md)
+        if match:
+            raw_type = match.group(1).strip().strip("'\"")
+            logger.info("extract_type: regex fallback found type=%s", raw_type)
+        else:
+            logger.warning("extract_type: regex fallback found no type field")
+
+    # 3. Validate and return
+    if raw_type is None:
+        logger.warning("extract_type: no type found, falling back to 'sync'")
+        return "sync"
+
+    protocol_type = str(raw_type).strip().lower()
+
+    if protocol_type not in _VALID_TYPES:
+        logger.warning(
+            "extract_type: unrecognized type '%s', falling back to 'sync'",
+            raw_type,
+        )
+        return "sync"
+
+    logger.info("Extracted protocol type: '%s'", protocol_type)
+    return protocol_type
+
+
+_DAILY_SUBJECT_RE = re.compile(r'\bdaily\b', re.IGNORECASE)
+
+
+def classify_type(protocol_md: str, subject: str = "") -> str:
+    """Classify protocol type using subject heuristic with LLM fallback.
+
+    Priority: subject keyword match > LLM frontmatter > default 'sync'.
+
+    Args:
+        protocol_md: Full markdown content with YAML frontmatter.
+        subject: Email subject line (optional).
+
+    Returns:
+        One of: daily, sync, review, planning.
+    """
+    if subject and _DAILY_SUBJECT_RE.search(subject):
+        logger.info(
+            "classify_type: subject contains 'daily', type=daily (subject=%s)",
+            subject,
+        )
+        return "daily"
+
+    logger.info("classify_type: no 'daily' in subject, falling back to extract_type")
+    return extract_type(protocol_md)
 
 
 def route_protocol(protocol_type: str) -> str:

@@ -18,7 +18,7 @@ from shared.file_writer import atomic_write
 
 from .. import claude_client
 from ..enricher import enrich
-from .classifier import extract_type, make_daily_filename, make_filename, route_protocol
+from .classifier import classify_type, extract_type, make_daily_filename, make_filename, route_protocol
 from .imap_client import EmailAttachment, IMAPError, fetch_emails
 from .state import State
 
@@ -496,8 +496,8 @@ def fetch_new_meetings(
                     src_err,
                 )
 
-            # 5c. Classification
-            protocol_type = extract_type(protocol_md)
+            # 5c. Classification (subject heuristic first, LLM fallback)
+            protocol_type = classify_type(protocol_md, subject=attachment.subject)
             logger.info(
                 "fetch_new_meetings: classified as type='%s'", protocol_type
             )

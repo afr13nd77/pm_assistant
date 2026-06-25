@@ -11,16 +11,13 @@ import requests
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_MODEL = "qwen/qwen3-32b"
+DEFAULT_MODEL = "qwen/qwen3-next-80b-a3b-instruct:free"
 DEFAULT_TIMEOUT = 120
 
 AVAILABLE_MODELS: list[dict[str, str]] = [
-    {"id": "qwen/qwen3-32b", "name": "Qwen3 32B (free)"},
-    {"id": "qwen/qwen3-30b-a3b", "name": "Qwen3 30B-A3B (free)"},
-    {"id": "qwen/qwen3-235b-a22b", "name": "Qwen3 235B-A22B"},
-    {"id": "google/gemini-2.5-flash", "name": "Gemini 2.5 Flash"},
-    {"id": "deepseek/deepseek-chat-v3-0324", "name": "DeepSeek V3 0324"},
-    {"id": "meta-llama/llama-4-maverick", "name": "Llama 4 Maverick"},
+    {"id": "qwen/qwen3-next-80b-a3b-instruct:free", "name": "Qwen3 Next 80B A3B Instruct (free)"},
+    {"id": "openai/gpt-oss-120b:free", "name": "GPT-OSS 120B (free)"},
+    {"id": "openai/gpt-oss-20b:free", "name": "GPT-OSS 20B (free)"},
 ]
 
 
@@ -40,7 +37,7 @@ def _build_headers(api_key: str) -> dict[str, str]:
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://pm-assistant.local",
-        "X-Title": "PM Assistant",
+        "X-OpenRouter-Title": "PM Assistant",
     }
 
 
