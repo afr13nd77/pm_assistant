@@ -2194,3 +2194,25 @@ body {
   border-color: #fca5a5;
   color: #dc2626;
 }
+
+
+/* ============================================================
+   PLAYGROUND overrides (light theme)
+   ============================================================ */
+
+.pg-message-user {
+  background: rgba(0, 123, 255, 0.06);
+  border-left-color: var(--cyan);
+}
+
+.pg-message-content code {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.pg-message-content pre {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.pg-templates-list {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}

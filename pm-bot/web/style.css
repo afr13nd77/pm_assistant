@@ -2930,3 +2930,287 @@ html, body {
   background: var(--accent-cyan, #00e5ff);
   animation: editable-pulse 0.8s ease-in-out infinite;
 }
+
+
+/* ============================================================
+   PLAYGROUND (pg-*)
+   ============================================================ */
+
+.pg-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  flex-wrap: wrap;
+}
+
+.pg-provider-group {
+  display: flex;
+  gap: 0;
+}
+
+.pg-unavailable {
+  opacity: 0.4;
+  cursor: not-allowed !important;
+  text-decoration: line-through;
+}
+
+.pg-model-select {
+  min-width: 200px;
+}
+
+.pg-templates-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 50;
+  background: var(--card);
+  border: 1px solid var(--border);
+  min-width: 300px;
+  max-width: 400px;
+  margin-top: 4px;
+}
+
+.pg-template-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+
+.pg-template-item:last-child {
+  border-bottom: none;
+}
+
+.pg-template-item:hover {
+  background: var(--surface);
+}
+
+.pg-template-name {
+  font-size: 11px;
+  color: var(--cyan);
+  letter-spacing: 0.08em;
+  margin-bottom: 2px;
+}
+
+.pg-template-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.pg-chat-area {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  min-height: 400px;
+  max-height: calc(100vh - 320px);
+  overflow-y: auto;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.pg-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  line-height: 2;
+}
+
+.pg-message {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  position: relative;
+}
+
+.pg-message-user {
+  border-left: 2px solid var(--cyan);
+  background: rgba(0, 229, 255, 0.05);
+}
+
+.pg-message-assistant {
+  border-left: 2px solid var(--green);
+  background: transparent;
+}
+
+.pg-message-role {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.pg-message-content {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-body);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.pg-message-content p { margin-bottom: 8px; }
+.pg-message-content p:last-child { margin-bottom: 0; }
+.pg-message-content code {
+  background: rgba(255,255,255,0.06);
+  padding: 2px 5px;
+  font-size: 11px;
+}
+.pg-message-content pre {
+  background: rgba(0,0,0,0.3);
+  padding: 10px;
+  margin: 8px 0;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+}
+.pg-message-content pre code {
+  background: none;
+  padding: 0;
+}
+.pg-message-content ul, .pg-message-content ol {
+  margin: 6px 0 6px 20px;
+}
+
+.pg-message-meta {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+}
+
+.pg-message-error {
+  color: #f44336;
+  font-size: 11px;
+  padding: 8px 10px;
+  background: rgba(244, 67, 54, 0.08);
+  border: 1px solid rgba(244, 67, 54, 0.25);
+  margin-top: 4px;
+}
+
+.pg-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.pg-loading-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--cyan);
+  border-radius: 50%;
+  animation: pg-pulse 1s ease-in-out infinite;
+}
+
+@keyframes pg-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+.pg-input-area {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pg-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-body);
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 10px 12px;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s;
+  min-height: 60px;
+  box-sizing: border-box;
+}
+
+.pg-input:focus {
+  border-color: var(--cyan);
+}
+
+.pg-input:disabled {
+  opacity: 0.5;
+}
+
+.pg-input-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pg-input-hint {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* ============================================================
+   PLAYGROUND — pg-system-prompt
+   ============================================================ */
+
+.pg-system-prompt-section {
+  margin-bottom: 12px;
+}
+
+.pg-system-prompt-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  padding: 4px 0;
+  user-select: none;
+}
+
+.pg-system-prompt-toggle:hover {
+  color: var(--text-body);
+}
+
+.pg-system-prompt-toggle .arrow {
+  font-size: 8px;
+  transition: transform 0.15s;
+}
+
+.pg-system-prompt-toggle .arrow.open {
+  transform: rotate(90deg);
+}
+
+.pg-system-prompt-textarea {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-body);
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 8px 10px;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s;
+  min-height: 80px;
+  max-height: 200px;
+  box-sizing: border-box;
+  margin-top: 6px;
+}
+
+.pg-system-prompt-textarea:focus {
+  border-color: var(--cyan);
+}
+
+.pg-system-prompt-textarea::placeholder {
+  color: var(--text-muted);
+  font-size: 10px;
+}

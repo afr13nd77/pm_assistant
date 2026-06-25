@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ru" class="theme-matrix">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Board -- Playground</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+  <script>
+  (function() {
+    try {
+      var t = localStorage.getItem('pm_theme');
+      if (t === 'light') {
+        document.documentElement.className = 'theme-light';
+        document.getElementById('theme-css').href = 'style-light.css';
+      }
+    } catch(e) {}
+  })();
+  </script>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <app-sidebar active="playground" @search="searchOpen = true"></app-sidebar>
+    <search-overlay :open="searchOpen" @close="searchOpen = false"></search-overlay>
+    <main class="page-content">
+      <div class="scan-line"></div>
+      <div class="text-page-title">LLM PLAYGROUND</div>
+
+      <!-- Toolbar: provider buttons + model select + templates dropdown -->
+      <div class="pg-toolbar">
+        <div class="pg-provider-group">
+          <button v-for="p in providers" :key="p.id"
+                  class="toggle-btn"
+                  :class="{
+                    active: selectedProvider === p.id,
+                    'pg-unavailable': !p.available
+                  }"
+                  :disabled="!p.available || loading"
+                  :title="p.available ? p.name : p.reason"
+                  @click="selectProvider(p.id)">
+            {{ p.name }}
+          </button>
+        </div>
+        <select class="field-select pg-model-select"
+                v-model="selectedModel"
+                :disabled="!currentProviderData || !currentProviderData.available || loading">
+          <option v-for="m in currentModels" :key="m.id" :value="m.id">
+            {{ m.name }}
+          </option>
+        </select>
+        <div class="pg-templates-dropdown" style="position: relative;">
+          <button class="cmd-btn cmd-btn-muted" @click="templatesOpen = !templatesOpen">
+            TEMPLATES
+          </button>
+          <div v-if="templatesOpen" class="pg-templates-list">
+            <div v-for="t in templates" :key="t.id"
+                 class="pg-template-item"
+                 @click="applyTemplate(t)">
+              <div class="pg-template-name">{{ t.name }}</div>
+              <div class="pg-template-desc">{{ t.description }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat area -->
+      <div class="pg-chat-area" ref="chatArea">
+        <div v-if="messages.length === 0" class="pg-empty-state">
+          Выбери провайдера и начни чат.<br>
+          Или выбери шаблон для тестирования реальных PM-сценариев.
+        </div>
+        <div v-for="(msg, idx) in messages" :key="idx"
+             class="pg-message"
+             :class="'pg-message-' + msg.role">
+          <div class="pg-message-role">{{ msg.role === 'user' ? 'YOU' : 'ASSISTANT' }}</div>
+          <div class="pg-message-content" v-html="renderMarkdown(msg.content)"></div>
+          <div v-if="msg.meta" class="pg-message-meta">
+            <span>{{ msg.meta.elapsed }}s</span>
+            <span>{{ msg.meta.provider }} / {{ msg.meta.model }}</span>
+          </div>
+          <div v-if="msg.error" class="pg-message-error">
+            ERROR: {{ msg.error }}
+          </div>
+        </div>
+        <div v-if="loading" class="pg-loading">
+          <span class="pg-loading-dot"></span>
+          Ожидание ответа от {{ activeRequestProvider }}...
+        </div>
+      </div>
+
+      <!-- Input area -->
+      <div class="pg-input-area">
+        <textarea class="pg-input"
+                  v-model="userInput"
+                  placeholder="Введи сообщение..."
+                  @keydown.ctrl.enter="sendMessage"
+                  @keydown.meta.enter="sendMessage"
+                  :disabled="loading"
+                  rows="3"></textarea>
+        <div class="pg-input-actions">
+          <button class="cmd-btn cmd-btn-cyan" @click="sendMessage"
+                  :disabled="loading || !userInput.trim() || !canSend">
+            {{ loading ? '...' : 'SEND' }}
+          </button>
+          <button class="cmd-btn cmd-btn-muted" @click="clearChat"
+                  :disabled="messages.length === 0">
+            CLEAR
+          </button>
+          <span class="pg-input-hint">Ctrl+Enter to send</span>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="api.js"></script>
+  <script src="components.js"></script>
+  <script>
+  var createApp = Vue.createApp;
+  var ref = Vue.ref;
+  var computed = Vue.computed;
+  var onMounted = Vue.onMounted;
+  var nextTick = Vue.nextTick;
+
+  var app = createApp({
+    setup: function() {
+      var providers = ref([]);
+      var selectedProvider = ref('');
+      var selectedModel = ref('');
+      var messages = ref([]);
+      var userInput = ref('');
+      var loading = ref(false);
+      var templatesOpen = ref(false);
+      var searchOpen = ref(false);
+      var chatArea = ref(null);
+      var activeRequestProvider = ref('');
+
+      var currentProviderData = computed(function() {
+        return providers.value.find(function(p) { return p.id === selectedProvider.value; });
+      });
+
+      var currentModels = computed(function() {
+        return currentProviderData.value ? currentProviderData.value.models : [];
+      });
+
+      var canSend = computed(function() {
+        return selectedProvider.value &&
+          currentProviderData.value &&
+          currentProviderData.value.available;
+      });
+
+      var templates = ref([
+        {
+          id: 'capture',
+          name: 'Capture: Idea Analysis',
+          description: 'Analyze a product idea in OTA context',
+          content: 'Проанализируй идею для OTA-платформы бронирования жилья:\n\n"Добавить рекомендации похожих объектов на странице результатов поиска, основанные на поведении пользователя и характеристиках просмотренных объектов."\n\nОпиши:\n1. Проблему, которую решает\n2. Целевую аудиторию\n3. Ожидаемый эффект\n4. Риски и зависимости'
+        },
+        {
+          id: 'protocol',
+          name: 'Protocol: Meeting Summary',
+          description: 'Extract key decisions from a meeting transcript',
+          content: 'Выдели ключевые решения, action items и ответственных из транскрипта встречи:\n\n"Обсудили статус спринта. Поиск: Алексей доделает фильтры к пятнице. Словарь: нужно обновить маппинг типов объектов, Мария возьмет. Решили перенести релиз на следующую среду из-за блокера в CI. Договорились о ежедневном стендапе в 10:00."'
+        },
+        {
+          id: 'enrichment',
+          name: 'Enrichment: Tags & Domain',
+          description: 'Classify an idea into domain and add tags',
+          content: 'Определи домен и теги для следующей идеи в контексте OTA-платформы.\n\nДомены: search-engine, static-metadata, suggester, partner-search-engine, booking, payments, content, mobile-app.\n\nИдея: "Реализовать автоподстановку названий городов и объектов при вводе в поисковую строку, с учетом популярности и истории поиска пользователя."\n\nВерни:\n- domain: <slug>\n- tags: [список]\n- keywords: [список]\n- priority: P1/P2/P3\n- краткое обоснование выбора домена'
+        }
+      ]);
+
+      function loadProviders() {
+        api.playgroundProviders().then(function(data) {
+          providers.value = data.providers;
+          var firstAvailable = providers.value.find(function(p) { return p.available; });
+          if (firstAvailable) {
+            selectedProvider.value = firstAvailable.id;
+            selectedModel.value = firstAvailable.default_model;
+          }
+          console.log('[playground] providers loaded:', providers.value.length);
+        }).catch(function(err) {
+          console.error('[playground] loadProviders error:', err.message);
+        });
+      }
+
+      function selectProvider(id) {
+        var p = providers.value.find(function(p) { return p.id === id; });
+        if (!p || !p.available) return;
+        selectedProvider.value = id;
+        selectedModel.value = p.default_model;
+        console.log('[playground] selected provider:', id, 'model:', p.default_model);
+      }
+
+      function applyTemplate(template) {
+        userInput.value = template.content;
+        templatesOpen.value = false;
+        console.log('[playground] template applied:', template.id);
+      }
+
+      function sendMessage() {
+        var text = userInput.value.trim();
+        if (!text || loading.value || !canSend.value) return;
+
+        messages.value.push({ role: 'user', content: text });
+        userInput.value = '';
+        activeRequestProvider.value = selectedProvider.value;
+        loading.value = true;
+        nextTick().then(function() { scrollToBottom(); });
+
+        var apiMessages = messages.value
+          .filter(function(m) { return m.role === 'user' || (m.role === 'assistant' && !m.error); })
+          .map(function(m) { return { role: m.role, content: m.content }; });
+
+        api.playgroundChat({
+          provider: selectedProvider.value,
+          model: selectedModel.value,
+          messages: apiMessages,
+          max_tokens: 4096
+        }).then(function(result) {
+          messages.value.push({
+            role: 'assistant',
+            content: result.content,
+            meta: {
+              elapsed: result.elapsed_seconds.toFixed(1),
+              provider: result.provider,
+              model: result.model
+            }
+          });
+        }).catch(function(err) {
+          var errorText = err.message;
+          try {
+            var raw = err.message.replace(/^API error:\s*/, '').replace(/^\d+\s*/, '');
+            var errData = JSON.parse(raw);
+            errorText = errData.detail || errorText;
+          } catch (_) {}
+
+          messages.value.push({
+            role: 'assistant',
+            content: '',
+            error: errorText
+          });
+        }).finally(function() {
+          loading.value = false;
+          nextTick().then(function() { scrollToBottom(); });
+        });
+      }
+
+      function clearChat() {
+        messages.value = [];
+        console.log('[playground] chat cleared');
+      }
+
+      function renderMarkdown(text) {
+        if (!text) return '';
+        try {
+          return marked.parse(text);
+        } catch (e) {
+          return text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+      }
+
+      function scrollToBottom() {
+        if (chatArea.value) {
+          chatArea.value.scrollTop = chatArea.value.scrollHeight;
+        }
+      }
+
+      function handleKeydown(e) {
+        if (e.key === 'Escape') {
+          templatesOpen.value = false;
+        }
+      }
+
+      onMounted(function() {
+        loadProviders();
+        document.addEventListener('keydown', handleKeydown);
+      });
+
+      return {
+        providers: providers,
+        selectedProvider: selectedProvider,
+        selectedModel: selectedModel,
+        messages: messages,
+        userInput: userInput,
+        loading: loading,
+        templatesOpen: templatesOpen,
+        searchOpen: searchOpen,
+        chatArea: chatArea,
+        activeRequestProvider: activeRequestProvider,
+        currentProviderData: currentProviderData,
+        currentModels: currentModels,
+        canSend: canSend,
+        templates: templates,
+        selectProvider: selectProvider,
+        applyTemplate: applyTemplate,
+        sendMessage: sendMessage,
+        clearChat: clearChat,
+        renderMarkdown: renderMarkdown
+      };
+    }
+  });
+
+  registerComponents(app);
+  applyPageTheme().then(function() {
+    app.mount('#app');
+    console.log('[playground] app mounted');
+  });
+  </script>
+</body>
+</html>

@@ -136,7 +136,8 @@ function registerComponents(app) {
           { name: 'board', label: 'TASKS', href: 'board.html', icon: 'task_alt' },
           { name: 'report', label: 'REPORTS', href: 'report.html', icon: 'summarize' },
           { name: 'timeline', label: 'TIMELINE', href: 'timeline.html', icon: 'timeline' },
-          { name: 'decay', label: 'DECAY', href: 'decay.html', icon: 'psychology' }
+          { name: 'decay', label: 'DECAY', href: 'decay.html', icon: 'psychology' },
+          { name: 'playground', label: 'PLAYGROUND', href: 'playground.html', icon: 'smart_toy' }
         ];
       }
     },

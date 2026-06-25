@@ -1228,3 +1228,116 @@ class TestJiraSyncEndpoint:
         assert data["closed"] == 0
         assert data["errors"] == 0
         assert data["message"] == "Sync completed"
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/playground/providers
+# ---------------------------------------------------------------------------
+
+
+class TestPlaygroundProviders:
+    """Tests for GET /api/v1/playground/providers endpoint."""
+
+    def test_returns_all_three_providers(self, client):
+        """Should return claude, ollama, openrouter providers."""
+        prefs = {"ollama_url": "http://localhost:11434", "ollama_model": "qwen3.5:latest",
+                 "openrouter_model": "qwen/qwen3-32b"}
+        mock_models = [{"id": "model-a", "name": "Model A"}, {"id": "model-b", "name": "Model B"}]
+
+        with patch("shared.llm_client._is_provider_available", return_value=True), \
+             patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
+             patch("shared.openrouter_client.AVAILABLE_MODELS", mock_models):
+            resp = client.get("/api/v1/playground/providers")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "providers" in data
+        ids = [p["id"] for p in data["providers"]]
+        assert ids == ["claude", "ollama", "openrouter"]
+
+    def test_claude_unavailable_shows_reason(self, client):
+        """When Claude API key is not set, provider should be unavailable with reason."""
+        prefs = {"ollama_url": "", "ollama_model": "qwen3.5:latest",
+                 "openrouter_model": "qwen/qwen3-32b"}
+        mock_models = [{"id": "m1", "name": "M1"}]
+
+        def mock_available(provider, _prefs):
+            return False
+
+        with patch("shared.llm_client._is_provider_available", side_effect=mock_available), \
+             patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
+             patch("shared.openrouter_client.AVAILABLE_MODELS", mock_models):
+            resp = client.get("/api/v1/playground/providers")
+
+        assert resp.status_code == 200
+        providers = resp.json()["providers"]
+        claude = next(p for p in providers if p["id"] == "claude")
+        assert claude["available"] is False
+        assert "reason" in claude
+        assert "CLAUDE_API_KEY" in claude["reason"]
+
+    def test_ollama_available_includes_url(self, client):
+        """When Ollama is available, response should include url field."""
+        prefs = {"ollama_url": "http://localhost:11434", "ollama_model": "llama3:latest",
+                 "openrouter_model": "qwen/qwen3-32b"}
+        mock_models = []
+
+        def mock_available(provider, _prefs):
+            return provider == "ollama"
+
+        with patch("shared.llm_client._is_provider_available", side_effect=mock_available), \
+             patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
+             patch("shared.openrouter_client.AVAILABLE_MODELS", mock_models):
+            resp = client.get("/api/v1/playground/providers")
+
+        assert resp.status_code == 200
+        providers = resp.json()["providers"]
+        ollama = next(p for p in providers if p["id"] == "ollama")
+        assert ollama["available"] is True
+        assert ollama["url"] == "http://localhost:11434"
+        assert ollama["models"][0]["id"] == "llama3:latest"
+
+    def test_ollama_unavailable_no_models(self, client):
+        """When Ollama is unavailable, models list should be empty."""
+        prefs = {"ollama_url": "", "ollama_model": "qwen3.5:latest",
+                 "openrouter_model": "qwen/qwen3-32b"}
+        mock_models = []
+
+        def mock_available(provider, _prefs):
+            return False
+
+        with patch("shared.llm_client._is_provider_available", side_effect=mock_available), \
+             patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
+             patch("shared.openrouter_client.AVAILABLE_MODELS", mock_models):
+            resp = client.get("/api/v1/playground/providers")
+
+        assert resp.status_code == 200
+        providers = resp.json()["providers"]
+        ollama = next(p for p in providers if p["id"] == "ollama")
+        assert ollama["available"] is False
+        assert ollama["models"] == []
+        assert "reason" in ollama
+
+    def test_openrouter_models_list(self, client):
+        """OpenRouter should list all models from AVAILABLE_MODELS."""
+        prefs = {"ollama_url": "", "ollama_model": "qwen3.5:latest",
+                 "openrouter_model": "qwen/qwen3-32b"}
+        mock_models = [
+            {"id": "qwen/qwen3-32b", "name": "Qwen3 32B"},
+            {"id": "openai/gpt-4o", "name": "GPT-4o"},
+        ]
+
+        def mock_available(provider, _prefs):
+            return provider == "openrouter"
+
+        with patch("shared.llm_client._is_provider_available", side_effect=mock_available), \
+             patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
+             patch("shared.openrouter_client.AVAILABLE_MODELS", mock_models):
+            resp = client.get("/api/v1/playground/providers")
+
+        assert resp.status_code == 200
+        providers = resp.json()["providers"]
+        openrouter = next(p for p in providers if p["id"] == "openrouter")
+        assert openrouter["available"] is True
+        assert len(openrouter["models"]) == 2
+        assert openrouter["default_model"] == "qwen/qwen3-32b"

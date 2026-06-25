@@ -400,6 +400,20 @@ var api = {
   /** GET /api/v1/openrouter-models -- list available OpenRouter models */
   openrouterModels: function() {
     return apiFetch('/openrouter-models');
+  },
+
+  /** GET /api/v1/playground/providers -- list LLM providers with availability */
+  playgroundProviders: function() {
+    return apiFetch('/playground/providers');
+  },
+
+  /** POST /api/v1/playground/chat -- send chat message to specific provider */
+  playgroundChat: function(body) {
+    return apiFetch('/playground/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
   }
 };
 
