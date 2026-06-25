@@ -85,7 +85,7 @@ services:
       - JIRA_SYNC_CRON=${JIRA_SYNC_CRON:-0 */3 * * *}
     entrypoint: >
       sh -c "
-        env | grep -E '^(TZ|YANDEX_|CLAUDE_|BOT_|ALLOWED_|VAULT_|JIRA_|PYTHONUNBUFFERED)' >> /etc/environment &&
+        env | grep -E '^(TZ|YANDEX_|CLAUDE_|BOT_|ALLOWED_|VAULT_|JIRA_|OPENROUTER_|PYTHONUNBUFFERED)' >> /etc/environment &&
         echo '0 9 * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine synthesize --notify >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-synth &&
         echo '15 * * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine fetch-meetings --notify >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-fetch &&
         echo \"$JIRA_SYNC_CRON\"' root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine jira-sync --notify >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-jira &&
