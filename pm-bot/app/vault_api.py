@@ -1312,6 +1312,37 @@ def get_decisions(
     return results
 
 
+@app.get("/api/v1/meetings/{filename}")
+def get_meeting_by_filename(filename: str):
+    """Return the full content of a specific meeting protocol file."""
+    logger.info("GET /api/v1/meetings/%s — start", filename)
+
+    # --- Security validation ---
+    if not filename.endswith(".md"):
+        logger.error("GET /api/v1/meetings/%s — rejected: filename does not end with .md", filename)
+        raise HTTPException(status_code=400, detail="Filename must end with .md")
+
+    if "/" in filename or "\\" in filename:
+        logger.error("GET /api/v1/meetings/%s — rejected: path separators in filename", filename)
+        raise HTTPException(status_code=400, detail="Filename must not contain path separators")
+
+    folder = wiki_meetings()
+    filepath = folder / filename
+
+    if not filepath.exists():
+        logger.info("GET /api/v1/meetings/%s — file not found", filename)
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    try:
+        content = filepath.read_text(encoding="utf-8")
+        date = filepath.stem[:10] if len(filepath.stem) >= 10 else filepath.stem
+        logger.info("GET /api/v1/meetings/%s — returning meeting (%d chars)", filename, len(content))
+        return {"filename": filename, "content": content, "date": date}
+    except Exception as exc:
+        logger.error("GET /api/v1/meetings/%s — failed to read file: %s", filename, exc)
+        raise HTTPException(status_code=500, detail="Failed to read meeting")
+
+
 @app.get("/api/v1/tasks")
 def get_tasks(domain: str | None = Query(default=None)):
     """Read .md files from wiki/domains/*/tasks/.

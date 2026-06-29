@@ -373,7 +373,7 @@
 
         function openProtocol(d) {
           console.log('[decisions] openProtocol:', d.source_file);
-          window.location.href = 'board.html?highlight=' + encodeURIComponent(d.source_file);
+          window.location.href = 'meeting.html?file=' + encodeURIComponent(d.source_file);
         }
 
         onMounted(function() {

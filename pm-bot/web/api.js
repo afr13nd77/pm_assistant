@@ -100,6 +100,11 @@ var api = {
     return apiFetch('/decisions' + qs);
   },
 
+  /** GET /api/v1/meetings/:filename -- get specific meeting protocol */
+  meetingByFilename: function(filename) {
+    return apiFetch('/meetings/' + encodeURIComponent(filename));
+  },
+
   /** GET /api/v1/tasks -- task drafts from Tasks/Drafts/, optional domain filter */
   tasks: function(domain) {
     var path = '/tasks';

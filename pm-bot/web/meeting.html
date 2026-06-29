@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ru" class="theme-matrix">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Board — Meeting Protocol</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+  <script>
+  (function() {
+    try {
+      var t = localStorage.getItem('pm_theme');
+      if (t === 'light') {
+        document.documentElement.className = 'theme-light';
+        document.getElementById('theme-css').href = 'style-light.css';
+      }
+    } catch(e) {}
+  })();
+  </script>
+  <style>
+    .meeting-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .meeting-filename {
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+    }
+    .meeting-date {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .meeting-back {
+      font-size: 11px;
+      color: var(--cyan);
+      cursor: pointer;
+      letter-spacing: 0.08em;
+      border: 1px solid var(--border);
+      padding: 4px 12px;
+      background: transparent;
+      font-family: var(--font);
+      transition: border-color 0.15s;
+    }
+    .meeting-back:hover {
+      border-color: var(--cyan);
+    }
+    .meeting-content {
+      background: var(--card, rgba(0,0,0,0.3));
+      border: 1px solid var(--border);
+      padding: 24px;
+      font-size: 13px;
+      line-height: 1.8;
+      color: var(--text-body);
+    }
+    .meeting-content h1 {
+      font-size: 16px;
+      color: var(--cyan);
+      margin-bottom: 16px;
+      letter-spacing: 0.1em;
+    }
+    .meeting-content h2 {
+      font-size: 14px;
+      color: var(--cyan);
+      margin-top: 20px;
+      margin-bottom: 8px;
+      letter-spacing: 0.1em;
+    }
+    .meeting-content h3 {
+      font-size: 13px;
+      color: var(--yellow, var(--cyan));
+      margin-top: 16px;
+      margin-bottom: 6px;
+    }
+    .meeting-content ul, .meeting-content ol {
+      padding-left: 20px;
+    }
+    .meeting-content li {
+      padding: 2px 0;
+    }
+    .meeting-content strong {
+      color: var(--cyan);
+    }
+    .meeting-content blockquote {
+      border-left: 2px solid var(--border);
+      padding-left: 12px;
+      color: var(--text-muted);
+      margin: 8px 0;
+    }
+    .meeting-content code {
+      background: rgba(0,0,0,0.3);
+      padding: 1px 4px;
+      font-size: 12px;
+    }
+    .meeting-content hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 16px 0;
+    }
+    .meeting-content table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 8px 0;
+    }
+    .meeting-content th, .meeting-content td {
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      font-size: 12px;
+      text-align: left;
+    }
+    .meeting-content th {
+      color: var(--cyan);
+    }
+    .meeting-content a {
+      color: var(--cyan);
+      text-decoration: underline;
+    }
+    .meeting-error {
+      color: var(--red, #ff5555);
+      font-size: 12px;
+      padding: 16px;
+      border: 1px solid var(--red, #ff5555);
+    }
+  </style>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <app-sidebar @search="searchOpen = true"></app-sidebar>
+    <search-overlay :open="searchOpen" @close="searchOpen = false"></search-overlay>
+    <main class="page-content" style="position: relative; overflow: hidden;">
+      <div class="scan-line"></div>
+      <div class="page-header">
+        <div class="text-page-title">MEETING_PROTOCOL</div>
+      </div>
+
+      <div class="meeting-meta">
+        <button class="meeting-back" @click="goBack">← НАЗАД</button>
+        <span class="meeting-date" v-if="date">{{ fmtDate(date) }}</span>
+      </div>
+      <div class="meeting-filename" v-if="filename">{{ filename }}</div>
+
+      <!-- Loading -->
+      <div v-if="loading" class="loading" style="margin-top: 24px;">LOADING...</div>
+
+      <!-- Error -->
+      <div v-if="error" class="meeting-error">{{ error }}</div>
+
+      <!-- Content -->
+      <div v-if="!loading && !error && content" class="meeting-content" v-html="renderedContent"></div>
+
+      <!-- Not found -->
+      <div v-if="!loading && !error && !content && filename" class="empty-state">
+        Протокол не найден
+      </div>
+      <div v-if="!filename" class="empty-state">
+        Не указан файл протокола
+      </div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+  (function() {
+    var renderer = new marked.Renderer();
+    renderer.link = function(token) {
+      var href = token.href || '';
+      var title = token.title || '';
+      var text = token.text || '';
+      var titleAttr = title ? ' title="' + title + '"' : '';
+      return '<a href="' + href + '"' + titleAttr + ' target="_blank" rel="noopener">' + text + '</a>';
+    };
+    marked.use({ breaks: true, gfm: true, renderer: renderer });
+  })();
+  </script>
+  <script src="api.js"></script>
+  <script src="components.js"></script>
+  <script>
+    var createApp = Vue.createApp;
+    var ref = Vue.ref;
+    var computed = Vue.computed;
+    var onMounted = Vue.onMounted;
+
+    var app = createApp({
+      setup: function() {
+        var filename = ref('');
+        var content = ref('');
+        var date = ref('');
+        var loading = ref(false);
+        var error = ref(null);
+        var searchOpen = ref(false);
+
+        var renderedContent = computed(function() {
+          if (!content.value) return '';
+          if (typeof marked !== 'undefined' && marked.parse) {
+            return marked.parse(content.value);
+          }
+          return content.value.replace(/</g, '&lt;').replace(/\n/g, '<br>');
+        });
+
+        function fmtDate(d) {
+          if (!d) return '';
+          var m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+          return m ? m[3] + '.' + m[2] + '.' + m[1] : String(d);
+        }
+
+        function goBack() {
+          if (window.history.length > 1) {
+            window.history.back();
+          } else {
+            window.location.href = 'decisions.html';
+          }
+        }
+
+        function loadMeeting(fname) {
+          console.log('[meeting] loading protocol:', fname);
+          loading.value = true;
+          error.value = null;
+          api.meetingByFilename(fname).then(function(data) {
+            console.log('[meeting] loaded successfully:', fname, data.content.length, 'chars');
+            content.value = data.content || '';
+            date.value = data.date || '';
+          }).catch(function(err) {
+            if (err.name === 'AbortError') return;
+            console.error('[meeting] failed to load:', fname, err.message);
+            if (err.message && err.message.indexOf('404') >= 0) {
+              error.value = 'Протокол не найден: ' + fname;
+            } else {
+              error.value = 'Ошибка загрузки: ' + err.message;
+            }
+          }).finally(function() {
+            loading.value = false;
+          });
+        }
+
+        onMounted(function() {
+          var params = new URLSearchParams(window.location.search);
+          var file = params.get('file');
+          if (file) {
+            filename.value = file;
+            loadMeeting(file);
+          }
+          document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') searchOpen.value = false;
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+              e.preventDefault();
+              searchOpen.value = true;
+            }
+          });
+        });
+
+        return {
+          filename: filename, content: content, date: date,
+          loading: loading, error: error, searchOpen: searchOpen,
+          renderedContent: renderedContent,
+          fmtDate: fmtDate, goBack: goBack
+        };
+      }
+    });
+
+    registerComponents(app);
+    applyPageTheme().then(function() {
+      app.mount('#app');
+    });
+  </script>
+</body>
+</html>
