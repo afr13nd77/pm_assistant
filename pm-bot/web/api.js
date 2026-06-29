@@ -87,6 +87,19 @@ var api = {
     return apiFetch('/meetings?days=' + days);
   },
 
+  /** GET /api/v1/decisions -- aggregated decisions from meeting protocols */
+  decisions: function(params) {
+    var parts = [];
+    if (params) {
+      if (params.domain) parts.push('domain=' + encodeURIComponent(params.domain));
+      if (params.q) parts.push('q=' + encodeURIComponent(params.q));
+      if (params.date_from) parts.push('date_from=' + encodeURIComponent(params.date_from));
+      if (params.date_to) parts.push('date_to=' + encodeURIComponent(params.date_to));
+    }
+    var qs = parts.length ? '?' + parts.join('&') : '';
+    return apiFetch('/decisions' + qs);
+  },
+
   /** GET /api/v1/tasks -- task drafts from Tasks/Drafts/, optional domain filter */
   tasks: function(domain) {
     var path = '/tasks';

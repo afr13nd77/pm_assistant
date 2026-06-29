@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ru" class="theme-matrix">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Board — Decisions</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+  <script>
+  (function() {
+    try {
+      var t = localStorage.getItem('pm_theme');
+      if (t === 'light') {
+        document.documentElement.className = 'theme-light';
+        document.getElementById('theme-css').href = 'style-light.css';
+      }
+    } catch(e) {}
+  })();
+  </script>
+  <style>
+    /* Filters */
+    .decisions-filters {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 12px 0;
+      flex-wrap: wrap;
+    }
+    .decisions-search {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+      min-width: 200px;
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      background: rgba(0,0,0,0.2);
+    }
+    .decisions-search input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-body);
+      font-family: var(--font);
+      font-size: 12px;
+    }
+    .decisions-select, .decisions-date {
+      font-family: var(--font);
+      font-size: 11px;
+      padding: 6px 10px;
+      background: rgba(0,0,0,0.2);
+      border: 1px solid var(--border);
+      color: var(--text-body);
+      outline: none;
+    }
+    .decisions-count {
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+    }
+
+    /* Cards */
+    .decisions-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .decision-card {
+      border: 1px solid var(--border);
+      padding: 12px 16px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+      background: var(--card, rgba(0,0,0,0.3));
+    }
+    .decision-card:hover {
+      border-color: var(--border-hover, var(--cyan));
+    }
+    .decision-card.expanded {
+      border-color: var(--cyan);
+    }
+    .decision-card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .decision-domain-badge {
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      padding: 2px 8px;
+      border: 1px solid;
+      text-transform: uppercase;
+      font-family: var(--font);
+    }
+    .decision-date {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-left: auto;
+    }
+    .decision-type-tag {
+      font-size: 9px;
+      color: var(--text-dimmed, var(--text-muted));
+      letter-spacing: 0.08em;
+    }
+    .decision-text {
+      font-size: 13px;
+      color: var(--text-body);
+      line-height: 1.5;
+      margin-bottom: 4px;
+    }
+    .decision-text mark {
+      background: rgba(0, 255, 200, 0.15);
+      color: var(--cyan);
+      padding: 0 2px;
+    }
+    .decision-source {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: var(--text-dimmed, var(--text-muted));
+    }
+    .decision-expanded {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .decision-detail {
+      margin-bottom: 10px;
+    }
+    .decision-detail-label {
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      color: var(--cyan);
+      margin-bottom: 4px;
+      font-family: var(--font);
+    }
+    .decision-detail-value {
+      font-size: 12px;
+      color: var(--text-body);
+      line-height: 1.6;
+    }
+    .decision-open-source {
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <app-sidebar active="decisions" @search="searchOpen = true"></app-sidebar>
+    <search-overlay :open="searchOpen" @close="searchOpen = false"></search-overlay>
+    <main class="page-content" style="position: relative; overflow: hidden;">
+      <div class="scan-line"></div>
+      <div class="page-header">
+        <div class="text-page-title">DECISION_JOURNAL</div>
+        <div class="btn-row" style="margin:0;">
+          <span class="refresh-icon" :class="{ spinning: loading }" @click="loadDecisions" title="Refresh">&#8635;</span>
+        </div>
+      </div>
+
+      <!-- Metrics -->
+      <div class="metrics-grid" style="grid-template-columns: repeat(3, 1fr);">
+        <metric-box label="TOTAL" :value="totalCount" color="cyan"></metric-box>
+        <metric-box label="DOMAINS" :value="domainCount" color="green"></metric-box>
+        <metric-box label="THIS_WEEK" :value="weekCount" color="amber"></metric-box>
+      </div>
+
+      <!-- Filters -->
+      <div class="decisions-filters">
+        <div class="decisions-search">
+          <span class="material-symbols-outlined" style="font-size:16px; color: var(--text-muted);">search</span>
+          <input type="text" placeholder="Поиск решений..." v-model="searchQuery" @input="onSearchInput">
+        </div>
+        <select class="decisions-select" v-model="selectedDomain" @change="loadDecisions">
+          <option value="">Все домены</option>
+          <option v-for="d in domains" :key="d.slug" :value="d.slug">{{ d.display_name }}</option>
+        </select>
+        <input type="date" class="decisions-date" v-model="dateFrom" @change="loadDecisions" title="Дата от">
+        <input type="date" class="decisions-date" v-model="dateTo" @change="loadDecisions" title="Дата до">
+        <span class="decisions-count">{{ filteredCount }} решений</span>
+      </div>
+
+      <!-- Loading state -->
+      <div v-if="loading" class="loading">LOADING...</div>
+
+      <!-- Error state -->
+      <div v-if="error" class="empty-state">{{ error }}</div>
+
+      <!-- Decision cards -->
+      <div class="decisions-list" v-if="!loading && !error">
+        <div
+          v-for="d in decisions"
+          :key="d.source_file + '_' + d.text"
+          class="decision-card"
+          :class="{ expanded: d._expanded }"
+          @click="toggleExpand(d)"
+        >
+          <!-- Collapsed view -->
+          <div class="decision-card-header">
+            <span class="decision-domain-badge"
+              :style="{ color: d.domain_color || 'var(--cyan)', borderColor: d.domain_color || 'var(--cyan)' }">
+              {{ d.domain_display || d.domain || 'general' }}
+            </span>
+            <span class="decision-type-tag" v-if="d.meeting_type">{{ d.meeting_type.toUpperCase() }}</span>
+            <span class="decision-date">{{ fmtDate(d.date) }}</span>
+          </div>
+          <div class="decision-text" v-html="highlightMatch(d.text)"></div>
+          <div class="decision-source" v-if="d.source_title">
+            <span class="material-symbols-outlined" style="font-size:14px;">description</span>
+            {{ d.source_title }}
+          </div>
+
+          <!-- Expanded view -->
+          <div class="decision-expanded" v-if="d._expanded" @click.stop>
+            <div class="decision-detail" v-if="d.participants && d.participants.length">
+              <div class="decision-detail-label">УЧАСТНИКИ</div>
+              <div class="decision-detail-value">{{ d.participants }}</div>
+            </div>
+            <div class="decision-detail" v-if="d.context">
+              <div class="decision-detail-label">КОНТЕКСТ</div>
+              <div class="decision-detail-value" v-html="renderMd(d.context)"></div>
+            </div>
+            <div class="decision-detail" v-if="d.action_items && d.action_items.length">
+              <div class="decision-detail-label">ACTION ITEMS</div>
+              <div class="decision-detail-value">
+                <ul style="margin:0; padding-left:18px;">
+                  <li v-for="(item, idx) in d.action_items" :key="idx">{{ item }}</li>
+                </ul>
+              </div>
+            </div>
+            <div class="decision-detail" v-if="d.blockers">
+              <div class="decision-detail-label">БЛОКЕРЫ И РИСКИ</div>
+              <div class="decision-detail-value" v-html="renderMd(d.blockers)"></div>
+            </div>
+            <div class="decision-open-source" v-if="d.source_file">
+              <button class="cmd-btn cmd-btn-cyan" @click.stop="openProtocol(d)">OPEN PROTOCOL</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Empty state -->
+        <div v-if="!decisions.length" class="empty-state">Решений не найдено</div>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+  (function() {
+    var renderer = new marked.Renderer();
+    renderer.link = function(token) {
+      var href = token.href || '';
+      var title = token.title || '';
+      var text = token.text || '';
+      var titleAttr = title ? ' title="' + title + '"' : '';
+      return '<a href="' + href + '"' + titleAttr + ' target="_blank" rel="noopener">' + text + '</a>';
+    };
+    marked.use({ breaks: true, gfm: true, renderer: renderer });
+    console.log('[decisions] using marked.js v' + marked.version);
+  })();
+  </script>
+  <script src="api.js"></script>
+  <script src="components.js"></script>
+  <script>
+    var createApp = Vue.createApp;
+    var ref = Vue.ref;
+    var computed = Vue.computed;
+    var onMounted = Vue.onMounted;
+
+    var app = createApp({
+      setup: function() {
+        var decisions = ref([]);
+        var loading = ref(false);
+        var error = ref(null);
+        var searchQuery = ref('');
+        var selectedDomain = ref('');
+        var dateFrom = ref('');
+        var dateTo = ref('');
+        var domains = ref([]);
+        var debounceTimer = null;
+        var searchOpen = ref(false);
+
+        var totalCount = computed(function() { return decisions.value.length; });
+        var domainCount = computed(function() {
+          var set = new Set(decisions.value.map(function(d) { return d.domain; }));
+          return set.size;
+        });
+        var weekCount = computed(function() {
+          var now = new Date();
+          var weekAgo = new Date(now - 7 * 86400000).toISOString().slice(0, 10);
+          return decisions.value.filter(function(d) { return d.date >= weekAgo; }).length;
+        });
+        var filteredCount = computed(function() { return decisions.value.length; });
+
+        function loadDomains() {
+          console.log('[decisions] loadDomains — start');
+          api.domainConfig().then(function(data) {
+            domains.value = Object.entries(data.domains || {}).map(
+              function(entry) { return { slug: entry[0], display_name: (entry[1] && entry[1].display_name) || entry[0] }; }
+            );
+            console.log('[decisions] loadDomains — success, domains:', domains.value.length);
+          }).catch(function(err) {
+            console.error('[decisions] loadDomains error:', err.message);
+          });
+        }
+
+        function loadDecisions() {
+          console.log('[decisions] loadDecisions — start');
+          loading.value = true;
+          error.value = null;
+          api.decisions({
+            domain: selectedDomain.value || undefined,
+            q: searchQuery.value || undefined,
+            date_from: dateFrom.value || undefined,
+            date_to: dateTo.value || undefined
+          }).then(function(data) {
+            decisions.value = (data || []).map(function(d) {
+              d._expanded = false;
+              return d;
+            });
+            console.log('[decisions] loadDecisions — success, count:', decisions.value.length);
+          }).catch(function(err) {
+            if (err.name !== 'AbortError') {
+              error.value = 'Ошибка загрузки: ' + err.message;
+              console.error('[decisions] loadDecisions — error:', err.message);
+            }
+          }).finally(function() {
+            loading.value = false;
+          });
+        }
+
+        function onSearchInput() {
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(loadDecisions, 300);
+        }
+
+        function toggleExpand(d) {
+          d._expanded = !d._expanded;
+        }
+
+        function escapeHtml(str) {
+          if (!str) return '';
+          return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function highlightMatch(text) {
+          if (!searchQuery.value || searchQuery.value.length < 2) {
+            return escapeHtml(text);
+          }
+          var escaped = escapeHtml(text);
+          var q = searchQuery.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          var re = new RegExp('(' + q + ')', 'gi');
+          return escaped.replace(re, '<mark>$1</mark>');
+        }
+
+        function renderMd(text) {
+          if (!text) return '';
+          if (typeof marked !== 'undefined' && marked.parse) {
+            return marked.parse(text);
+          }
+          return escapeHtml(text).replace(/\n/g, '<br>');
+        }
+
+        function fmtDate(d) {
+          if (!d) return '';
+          var m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+          return m ? m[3] + '.' + m[2] + '.' + m[1] : String(d);
+        }
+
+        function openProtocol(d) {
+          console.log('[decisions] openProtocol:', d.source_file);
+          window.location.href = 'board.html?highlight=' + encodeURIComponent(d.source_file);
+        }
+
+        onMounted(function() {
+          console.log('[decisions] mounted — loading initial data');
+          loadDomains();
+          loadDecisions();
+          document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+              searchOpen.value = false;
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+              e.preventDefault();
+              searchOpen.value = true;
+            }
+          });
+        });
+
+        return {
+          decisions: decisions, loading: loading, error: error,
+          searchQuery: searchQuery, selectedDomain: selectedDomain,
+          dateFrom: dateFrom, dateTo: dateTo, domains: domains,
+          searchOpen: searchOpen,
+          totalCount: totalCount, domainCount: domainCount,
+          weekCount: weekCount, filteredCount: filteredCount,
+          loadDecisions: loadDecisions, onSearchInput: onSearchInput,
+          toggleExpand: toggleExpand, highlightMatch: highlightMatch,
+          renderMd: renderMd, fmtDate: fmtDate, openProtocol: openProtocol
+        };
+      }
+    });
+
+    registerComponents(app);
+    applyPageTheme().then(function() {
+      app.mount('#app');
+    });
+  </script>
+</body>
+</html>

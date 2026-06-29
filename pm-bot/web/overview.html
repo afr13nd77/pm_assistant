@@ -769,6 +769,31 @@
         .hbp-trend-up { color: #4caf50; }
         .hbp-trend-down { color: #f44336; }
         .hbp-trend-flat { color: var(--text-muted, #888); }
+
+        /* Decisions widget */
+        .decisions-widget-item {
+          padding: 8px 0;
+          border-bottom: 1px solid var(--border);
+        }
+        .decisions-widget-item:last-child { border-bottom: none; }
+        .decisions-widget-badge {
+          font-size: 8px;
+          letter-spacing: 0.1em;
+          padding: 1px 6px;
+          border: 1px solid;
+          text-transform: uppercase;
+          font-family: var(--font);
+        }
+        .decisions-widget-date {
+          font-size: 10px;
+          color: var(--text-dimmed);
+          margin-left: auto;
+        }
+        .decisions-widget-text {
+          font-size: 11px;
+          color: var(--text-body);
+          line-height: 1.4;
+        }
 </style>
 </head>
 <body>
@@ -879,6 +904,20 @@
               </div>
             </div>
             <div class="panel-body" id="activity-body" style="max-height:320px;">
+              <div class="skeleton skeleton-panel"></div>
+            </div>
+          </div>
+
+          <!-- Recent Decisions -->
+          <div class="panel" id="decisions-panel">
+            <div class="panel-header">
+              <div class="panel-header-title">
+                <span class="capture-header-dot"></span>
+                RECENT DECISIONS
+              </div>
+              <a href="decisions.html" class="text-link" style="font-size:10px;letter-spacing:0.1em;">ALL &rarr;</a>
+            </div>
+            <div class="panel-body" id="decisions-body">
               <div class="skeleton skeleton-panel"></div>
             </div>
           </div>
@@ -1418,6 +1457,51 @@ async function touchCreative(idx) {
 }
 
 // ================================================================
+// FETCH: Recent Decisions
+// ================================================================
+
+async function fetchRecentDecisions() {
+  var body = document.getElementById('decisions-body');
+  if (!body) return;
+  try {
+    var data = await api.decisions({});
+    var top5 = (data || []).slice(0, 5);
+
+    if (!top5.length) {
+      body.innerHTML = '<div class="empty-text">// NO DECISIONS</div>';
+      return;
+    }
+
+    var html = '';
+    top5.forEach(function(d) {
+      var text = d.text.length > 120
+        ? d.text.substring(0, 120) + '...'
+        : d.text;
+      var dateStr = d.date ? fmtDate(d.date) : '';
+      html += '<div class="decisions-widget-item">' +
+        '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">' +
+        '<span class="decisions-widget-badge" style="border-color:' +
+          (d.domain_color || '#607D8B') + ';color:' +
+          (d.domain_color || '#607D8B') + '">' +
+          (d.domain_display || d.domain || 'general') + '</span>' +
+        '<span class="decisions-widget-date">' + dateStr + '</span>' +
+        '</div>' +
+        '<div class="decisions-widget-text">' +
+          text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') +
+        '</div>' +
+        '</div>';
+    });
+    body.innerHTML = html;
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      body.innerHTML = '<div class="panel-error"><span>// ERROR</span>' +
+        '<button class="cmd-btn cmd-btn-muted" onclick="fetchRecentDecisions()">' +
+        '[RETRY]</button></div>';
+    }
+  }
+}
+
+// ================================================================
 // FETCH ALL + TIMERS + KEYBOARD
 // ================================================================
 
@@ -1430,6 +1514,7 @@ function fetchAll() {
   if (!isTyping) fetchActivityFeed();
 
   fetchHealthScore();
+  fetchRecentDecisions();
   fetchCreativeRecall();
 }
 
@@ -1451,6 +1536,7 @@ setInterval(function() {
   var isTyping = document.activeElement && (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT');
   if (!isTyping) fetchActivityFeed();
   fetchHealthScore();
+  fetchRecentDecisions();
   fetchCreativeRecall();
   updateRefreshTimestamp();
 }, 60000);

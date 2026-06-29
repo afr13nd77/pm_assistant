@@ -58,7 +58,9 @@
 | BL-21 | Ночной линтер | knowledge-engine | Проверка битых ссылок, сирот, протухших черновиков по cron (упомянуто в analysis миграции) |
 | BL-22 | Enrichment с семантическим поиском | knowledge-engine | При capture автоматически линковать к похожим существующим заметкам в vault |
 | BL-23 | Action Items Aggregator | knowledge-engine | Извлечь task/@assignee из протоколов -> агрегация по людям, трекинг overdue |
-| BL-24 | Decision Journal | knowledge-engine | Решения из встреч с тегом decision -> поиск "почему выбрали X?" с авто-контекстом |
+| BL-24 | ✅ Decision Journal | pm-bot | Единый реестр решений из протоколов встреч: API endpoint GET /api/v1/decisions + Web UI страница decisions.html + виджет на overview. Полнотекстовый поиск, фильтрация по домену/дате, expand карточки с контекстом |
+| BL-147 | Слой 1' — LLM-оптимизированный контекстный слой модели знаний | knowledge-engine, pm-bot | Offline-генерация digest'ов из wiki-артефактов (слой 1 → слой 1'). Фиксированный token envelope, машиночитаемая структура, TTL для актуальности, явные связи между артефактами. pm-bot использует только слой 1' для сборки контекста LLM-вызовов. Основан на статье Parallel Context Compaction (Cim et al., 2026). Спека: docs/context_compaction/ (PRD, design, SWOT, test results) — статус DRAFT |
+| BL-146 | Temporal Summarization — периодические отчёты по wiki | knowledge-engine | Cron-job (раз в неделю/месяц): собирает все wiki-документы за период (встречи, дейли, идеи, решения), отправляет в LLM, генерирует суммаризацию → `wiki/reports/weekly/YYYY-WW.md` / `monthly/YYYY-MM.md`. Отвечает на вопросы "что сделали за май", "какие решения в Q1". Один дополнительный пайплайн поверх существующей архитектуры. Связан с BL-23 (Action Items) и BL-24 (Decision Journal) |
 | BL-145 | Meeting Processing Queue — двухфазная обработка протоколов | knowledge-engine, pm-bot | Рефакторинг meeting fetcher: разделение на 3 независимых этапа. **Фаза 1 — Fetch:** IMAP fetch + transcript watcher складывают сырые транскрипты в `raw/meeting-queue/pending/` без LLM-вызовов. **Фаза 2 — Queue:** файловая очередь на базе папок-статусов (pending → processing → done / failed). Файл = единица работы, папка = статус. **Фаза 3 — Process:** воркер берёт по одному файлу из pending, вызывает LLM через fallback chain, валидирует ответ (YAML frontmatter, обязательные поля, минимальная длина), при успехе формирует wiki-сущность и перемещает в done, при ошибке — retry с другим провайдером или в failed. Мотивация: текущий синхронный пакетный алгоритм нестабилен (timeout 180s, 2-3 письма за проход), неконтролируем (нет UI), retry примитивен (3 попытки одним способом). Связан с BL-143 (Trace Log) и BL-144 (Pipeline Monitor) |
 
 ---
@@ -300,8 +302,8 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 87 | BL-01..BL-08, BL-11..BL-18, BL-25..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141 |
+| ✅ Реализовано | 88 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141 |
 | ✅ Баги исправлены | 24 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129 |
-| Идея | 26 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-24, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139 |
+| Идея | 25 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139 |
 | ❌ Удалено | 1 | BL-121 |
 | **Итого** | **140** | |
