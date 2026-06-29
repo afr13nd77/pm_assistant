@@ -82,6 +82,7 @@
 | # | Название | Компонент | Описание |
 |---|:---|:---|:---|
 | BL-30 | Competitive Spy | knowledge-engine | Мониторинг App Store отзывов, changelogs конкурентов, вакансии -> сигналы в Inbox |
+| BL-150 | Jira sync из попапа задачи | web-ui, pm-bot | Кнопка синхронизации выбранной задачи с Jira прямо из попапа детальной информации (task-drawer). Обновление полей задачи из Jira или push изменений в Jira без перехода на другие страницы |
 
 ---
 
@@ -232,6 +233,12 @@
 | BL-114 | ✅ Vault health score | knowledge-engine, pm-bot, web-ui | Количественная метрика здоровья vault (0-100): 7 категорий штрафов (broken links ×3, orphans ×5, dead-ends ×1, stale drafts ×1, unsorted misc ×0.5, ingest backlog ×0.2, description coverage). Грейды: healthy ≥80 / warning ≥50 / critical <50. `health_scorer.py` + CLI `health --save --json` + endpoint `GET /api/v1/vault/health` с trend 7d/30d. Overview виджет (Zone A): score + dot + sparkline + раскрывающаяся breakdown-панель по категориям. ke-cron job 04:00 ежедневно. История `.health-history.json` (TTL 90д). Спека: `docs/health-scoring/` (14 задач, все done) |
 | BL-115 | ✅ Wikilink resolver | knowledge-engine | 3-уровневый детерминированный резолвер ссылок в linter.py: exact name → unique suffix → unique stem. `_build_file_index()` + `_resolve_wikilink()`. Заменил примитивный exact-match в `check_broken_links()`. Сокращает ложные broken links. Спека: `docs/health-scoring/tasks.md` (T-05, T-06) |
 
+### 8.4 Идеи
+
+| # | Название | Компонент | Описание |
+|---|:---|:---|:---|
+| BL-149 | Dead ends: исключить IDEA и учитывать index/log | knowledge-engine | Текущая проверка dead_ends ложно срабатывает на IDEA-файлах (новая идея без входящих ссылок — нормальное состояние). Исправления: (1) исключить `wiki/domains/*/ideas/` из проверки dead_ends, (2) учитывать входящие ссылки из служебных файлов домена (`index.md`, `log.md`) при подсчёте |
+
 ---
 
 ## 9. Исправленные баги
@@ -305,6 +312,6 @@
 |:---|:---|:---|
 | ✅ Реализовано | 88 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141 |
 | ✅ Баги исправлены | 24 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129 |
-| Идея | 26 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148 |
+| Идея | 28 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-150 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **141** | |
+| **Итого** | **143** | |

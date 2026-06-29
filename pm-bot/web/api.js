@@ -284,6 +284,16 @@ var api = {
     return apiFetch('/jira/sync', { method: 'POST' });
   },
 
+  /** POST /api/v1/fetch-meetings -- trigger email fetch for meeting transcriptions */
+  fetchMeetings: async function() {
+    var resp = await apiFetch('/fetch-meetings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({notify: false, dry_run: false})
+    });
+    return resp;
+  },
+
   /** GET /api/v1/jira/sync-status -- get Jira sync status and metrics */
   jiraSyncStatus: function() {
     return apiFetch('/jira/sync-status');

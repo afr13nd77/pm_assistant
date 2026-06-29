@@ -406,6 +406,23 @@
           </div>
         </div>
 
+        <!-- Email fetch section -->
+        <div class="settings-section">
+          <div class="settings-section-title">// EMAIL_FETCH</div>
+          <div class="field-group">
+            <div class="field-label">FETCH_MEETINGS</div>
+            <div class="field-group" style="display: flex; align-items: center; gap: 12px;">
+              <cmd-button label="FETCH NOW" color="cyan" :loading="fetchingMeetings"
+                          @click="runFetchMeetings"></cmd-button>
+              <span v-if="fetchMeetingsStatus" class="save-status"
+                    :class="fetchMeetingsStatus.includes('ERROR') ? 'text-magenta' : 'text-green'">
+                {{ fetchMeetingsStatus }}
+              </span>
+            </div>
+            <div class="field-note">Проверить почту на новые транскрибации встреч</div>
+          </div>
+        </div>
+
         <!-- Jira sync section -->
         <div class="settings-section">
           <div class="settings-section-title">// JIRA_SYNC</div>
@@ -538,6 +555,8 @@
       var openrouterStatus = ref(null);
       var openrouterTesting = ref(false);
       var searchOpen = ref(false);
+      var fetchingMeetings = ref(false);
+      var fetchMeetingsStatus = ref('');
 
       var operationGroups = ref([
         {
@@ -697,6 +716,23 @@
           syncResult.value = 'ERROR: ' + e.message;
           syncing.value = false;
         });
+      }
+
+      async function runFetchMeetings() {
+        fetchingMeetings.value = true;
+        fetchMeetingsStatus.value = '';
+        try {
+          var data = await api.fetchMeetings();
+          if (data.status === 'ok') {
+            fetchMeetingsStatus.value = 'OK: ' + data.newly_processed + ' new, ' + data.already_processed + ' skipped';
+          } else {
+            fetchMeetingsStatus.value = 'ERROR: ' + (data.message || 'unknown');
+          }
+        } catch (e) {
+          fetchMeetingsStatus.value = 'ERROR: ' + (e.message || e);
+        }
+        fetchingMeetings.value = false;
+        setTimeout(function() { fetchMeetingsStatus.value = ''; }, 10000);
       }
 
       function setJiraSyncNotify(value) {
@@ -1015,6 +1051,9 @@
         addToChain: addToChain,
         availableProviders: availableProviders,
         saveProviderSettings: saveProviderSettings,
+        fetchingMeetings: fetchingMeetings,
+        fetchMeetingsStatus: fetchMeetingsStatus,
+        runFetchMeetings: runFetchMeetings,
       };
     }
   });

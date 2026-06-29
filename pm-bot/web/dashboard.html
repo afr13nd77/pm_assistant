@@ -114,6 +114,150 @@
       margin-top: 32px;
       padding-top: 16px;
       border-top: 1px solid var(--border);
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .health-popup-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .health-popup {
+      background: var(--card);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      max-width: 520px;
+      width: 92%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .hbp-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .hbp-title {
+      font-size: 11px;
+      letter-spacing: 1px;
+      opacity: 0.7;
+      text-transform: uppercase;
+    }
+    .hbp-score {
+      font-size: 18px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .hbp-category {
+      display: flex;
+      align-items: center;
+      padding: 6px 0;
+      cursor: pointer;
+      gap: 8px;
+    }
+    .hbp-category:hover {
+      opacity: 0.85;
+    }
+    .hbp-cat-icon {
+      width: 20px;
+      text-align: center;
+      font-size: 14px;
+    }
+    .hbp-cat-name {
+      flex: 1;
+      font-size: 12px;
+      text-transform: capitalize;
+    }
+    .hbp-cat-count {
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      min-width: 24px;
+      text-align: right;
+      margin-right: 8px;
+    }
+    .hbp-cat-penalty {
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      color: #ff6b6b;
+      min-width: 32px;
+      text-align: right;
+      margin-right: 8px;
+    }
+    .hbp-cat-arrow {
+      font-size: 10px;
+      opacity: 0.5;
+      transition: transform 0.2s;
+    }
+    .hbp-cat-arrow.expanded {
+      transform: rotate(90deg);
+    }
+    .hbp-files {
+      padding-left: 28px;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+    .hbp-file {
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      opacity: 0.6;
+      padding: 2px 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .hbp-file:hover {
+      opacity: 1;
+      color: var(--cyan);
+    }
+    .hbp-pipeline-divider {
+      border-top: 1px solid var(--border);
+      margin: 12px 0;
+    }
+    .hbp-pipeline-header {
+      font-size: 10px;
+      letter-spacing: 1px;
+      opacity: 0.5;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+    .hbp-pipeline-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 3px 0;
+      font-size: 12px;
+    }
+    .hbp-pipeline-label {
+      min-width: 110px;
+      opacity: 0.7;
+    }
+    .hbp-pipeline-value {
+      font-family: 'JetBrains Mono', monospace;
+      min-width: 60px;
+    }
+    .hbp-pipeline-detail {
+      font-size: 11px;
+      opacity: 0.4;
+    }
+    .loading-spinner {
+      width: 24px;
+      height: 24px;
+      border: 2px solid var(--border);
+      border-top: 2px solid var(--cyan);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
   </style>
 </head>
@@ -141,6 +285,52 @@
         <metric-box label="DOMAINS" :value="domains.length" color="cyan"></metric-box>
         <metric-box label="TOTAL_ARTIFACTS" :value="totalArtifacts" color="green"></metric-box>
         <metric-box label="LAST_ACTIVITY" :value="latestUpdate" color="amber"></metric-box>
+      </div>
+
+
+      <!-- Health Breakdown Popup -->
+      <div class="health-popup-overlay" v-if="showHealthPopup" @click.self="showHealthPopup = false">
+        <div class="health-popup">
+          <div class="hbp-header">
+            <span class="hbp-title">HEALTH BREAKDOWN</span>
+            <span class="hbp-score" :style="{color: health.grade === 'healthy' ? 'var(--green)' : health.grade === 'warning' ? 'var(--amber)' : 'var(--magenta)'}">{{ health.score }}/100</span>
+          </div>
+          <div class="hbp-body">
+            <template v-for="(info, cat) in healthCategories" :key="cat">
+              <div class="hbp-category" v-show="info.count > 0" @click.stop="toggleCat(cat)">
+                <span class="hbp-cat-icon">{{ catIcon(cat) }}</span>
+                <span class="hbp-cat-name">{{ catLabel(cat) }}</span>
+                <span class="hbp-cat-count">{{ info.count }}</span>
+                <span class="hbp-cat-penalty">-{{ Math.round(info.penalty) }}</span>
+                <span class="hbp-cat-arrow" :class="{expanded: expandedCats[cat]}">&#9654;</span>
+              </div>
+              <div class="hbp-files" v-show="info.count > 0 && expandedCats[cat]">
+                <div class="hbp-file" v-for="item in info.items.slice(0, 30)" :key="item.file" :title="item.file">
+                  {{ item.file || item.name || JSON.stringify(item) }}
+                </div>
+                <div v-if="info.items.length > 30" class="hbp-file" style="opacity: 0.4;">...и ещё {{ info.items.length - 30 }}</div>
+              </div>
+            </template>
+            <template v-if="health.pipeline">
+              <div class="hbp-pipeline-divider"></div>
+              <div class="hbp-pipeline-header">PIPELINE</div>
+              <div class="hbp-pipeline-row" v-if="health.pipeline.ingest_ratio != null">
+                <span class="hbp-pipeline-label">&#128229; Ingest ratio</span>
+                <span class="hbp-pipeline-value">{{ Math.round(health.pipeline.ingest_ratio * 100) }}%</span>
+                <span class="hbp-pipeline-detail">{{ health.pipeline.ingested || 0 }} / {{ health.pipeline.total_raw || 0 }} обработано</span>
+              </div>
+              <div class="hbp-pipeline-row" v-if="health.pipeline.avg_lag_hours != null">
+                <span class="hbp-pipeline-label">&#9201; Avg lag</span>
+                <span class="hbp-pipeline-value">{{ health.pipeline.avg_lag_hours }} ч</span>
+                <span class="hbp-pipeline-detail">{{ health.pipeline.pairs || 0 }} пар raw&#8594;wiki</span>
+              </div>
+              <div class="hbp-pipeline-row" v-if="health.pipeline.raw_counts">
+                <span class="hbp-pipeline-label">&#128202; Raw counts</span>
+                <span class="hbp-pipeline-value">{{ Object.entries(health.pipeline.raw_counts).map(function(e){return e[0]+': '+e[1]}).join(', ') }}</span>
+              </div>
+            </template>
+          </div>
+        </div>
       </div>
 
       <!-- Domain cards grid -->
@@ -210,8 +400,8 @@
       </div>
 
       <!-- Jira Sync Status -->
-      <div class="sync-status-section" v-if="!loading && syncStatus">
-        <div class="domain-card" style="max-width: 330px;max-height: 218px;">
+      <div class="sync-status-section" v-if="!loading">
+        <div class="domain-card" style="max-width: 330px;max-height: 218px;" v-if="syncStatus">
           <div class="domain-card-display-name">
 		<span class="domain-color-dot" :style="{background: syncOverdue ? 'var(--magenta)' : 'var(--green)'}"></span> Jira Sync</div>
 	  <div class="domain-card-slug"></div>
@@ -241,6 +431,41 @@
             <span class="domain-card-updated">Последняя синхронизация: {{ formattedSyncTime }}</span>
           </div>
         </div>
+      <!-- Vault Health Card -->
+      <div class="domain-card" style="max-width: 330px;max-height: 218px; cursor: pointer;" @click="showHealthPopup = !showHealthPopup">
+        <div class="domain-card-display-name">
+          <template v-if="health">
+            <span class="domain-color-dot" :style="{background: health.grade === 'healthy' ? 'var(--green)' : health.grade === 'warning' ? 'var(--amber)' : 'var(--magenta)'}"></span>
+            Vault Health
+          </template>
+          <template v-else>
+            <span class="dot dot-active" style="animation: pulse 1.5s infinite;"></span>
+            Vault Health
+          </template>
+        </div>
+        <div class="domain-card-slug"></div>
+        <template v-if="health">
+          <div class="domain-stats">
+            <div class="domain-stat">
+              <span class="domain-stat-value" :style="{color: health.grade === 'healthy' ? 'var(--green)' : health.grade === 'warning' ? 'var(--amber)' : 'var(--magenta)'}">{{ health.score }}</span>
+              <span class="domain-stat-label">SCORE</span>
+            </div>
+            <div class="domain-stat" v-for="(info, cat) in topHealthCats" :key="cat">
+              <span class="domain-stat-value text-magenta">{{ info.count }}</span>
+              <span class="domain-stat-label" style="font-size: 0.55rem;">{{ cat.replace(/_/g, ' ').toUpperCase() }}</span>
+            </div>
+          </div>
+          <div class="domain-card-footer">
+            <span class="domain-card-updated">{{ health.grade.toUpperCase() }}</span>
+            <span style="font-size: 0.7rem; opacity: 0.5;">&#9656; подробнее</span>
+          </div>
+        </template>
+        <template v-else>
+          <div style="display: flex; align-items: center; justify-content: center; height: 100px;">
+            <span class="loading-spinner"></span>
+          </div>
+        </template>
+      </div>
       </div>
 
       <!-- Domain config drawer -->
@@ -281,6 +506,11 @@
 
         var syncStatus = Vue.ref(null);
         var searchOpen = Vue.ref(false);
+
+        // Health card state
+        var health = Vue.ref(null);
+        var showHealthPopup = Vue.ref(false);
+        var expandedCats = Vue.ref({});
 
         var totalArtifacts = Vue.computed(function() {
           return domains.value.reduce(function(sum, d) { return sum + d.total_count; }, 0);
@@ -331,6 +561,61 @@
             return true;
           }
         });
+
+        var healthCategories = Vue.computed(function() {
+          if (!health.value || !health.value.breakdown) return {};
+          var bd = health.value.breakdown;
+          var result = {};
+          for (var k in bd) {
+            if (bd.hasOwnProperty(k)) {
+              var v = bd[k];
+              if (typeof v === 'object' && v !== null && 'count' in v) {
+                result[k] = v;
+              }
+            }
+          }
+          return result;
+        });
+
+        var topHealthCats = Vue.computed(function() {
+            if (!health.value || !health.value.breakdown) return {};
+            var bd = health.value.breakdown;
+            var entries = Object.entries(bd)
+                .filter(function(e) { return typeof e[1] === 'object' && e[1] !== null && 'count' in e[1] && e[1].count > 0; })
+                .sort(function(a, b) { return b[1].penalty - a[1].penalty; })
+                .slice(0, 5);
+            var result = {};
+            entries.forEach(function(e) { result[e[0]] = e[1]; });
+            return result;
+        });
+
+        function toggleCat(cat) {
+          expandedCats.value[cat] = !expandedCats.value[cat];
+        }
+
+        var CAT_ICONS = {
+            broken_links: '🔗', orphan_pages: '👻', dead_ends: '🚧',
+            stale_drafts: '📝', unsorted_misc: '📂', ingest_backlog: '📥',
+            description_coverage: '📊', decay_stale: '⏳'
+        };
+        var CAT_LABELS = {
+            broken_links: 'Broken Links', orphan_pages: 'Orphan Pages', dead_ends: 'Dead Ends',
+            stale_drafts: 'Stale Drafts', unsorted_misc: 'Unsorted Misc', ingest_backlog: 'Ingest Backlog',
+            description_coverage: 'Description Coverage', decay_stale: 'Decay Stale'
+        };
+        function catIcon(cat) { return CAT_ICONS[cat] || '📋'; }
+        function catLabel(cat) { return CAT_LABELS[cat] || cat.replace(/_/g, ' '); }
+
+        async function fetchHealth() {
+          console.log('[domains] fetchHealth — start');
+          try {
+            health.value = await api.vaultHealth();
+            console.log('[domains] fetchHealth — success, score:', health.value.score);
+          } catch(e) {
+            console.error('[domains] fetchHealth — error:', e.message);
+          }
+        }
+
 
         async function loadDomains() {
           console.log('[domains] loadDomains — start');
@@ -419,6 +704,7 @@
           loadDomains();
           checkSeedBanner();
           loadSyncStatus();
+          fetchHealth();
           document.addEventListener('keydown', function(e) {
             if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
               e.preventDefault();
@@ -442,6 +728,14 @@
           syncStatus:        syncStatus,
           formattedSyncTime: formattedSyncTime,
           syncOverdue:       syncOverdue,
+          health:            health,
+          showHealthPopup:   showHealthPopup,
+          expandedCats:      expandedCats,
+          healthCategories:  healthCategories,
+          topHealthCats:     topHealthCats,
+          toggleCat:         toggleCat,
+          catIcon:           catIcon,
+          catLabel:          catLabel,
           openAddDomain: openAddDomain,
           editDomain:    editDomain,
           onDomainSaved: onDomainSaved,

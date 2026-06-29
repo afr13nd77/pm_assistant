@@ -871,7 +871,7 @@ function registerComponents(app) {
             </div>\
           </div>\
           <div class="task-drawer-section">\
-            <div class="task-drawer-section-title">BODY <button class="cmd-btn cmd-btn-sm" style="margin-left:8px;font-size:11px;" @click="bodyEditorOpen = true">EDIT BODY</button></div>\
+            <div class="task-drawer-section-title">BODY <button class="cmd-btn cmd-btn-cyan cmd-btn-sm" style="margin-left:8px;font-size:11px;" @click="bodyEditorOpen = true">EDIT BODY</button></div>\
             <div class="task-drawer-content" v-if="item.body" v-html="renderMdSafe(item.body)"></div>\
             <div v-else style="color:var(--text-muted,#888);font-size:12px;">No body content</div>\
           </div>\
@@ -1010,7 +1010,7 @@ function registerComponents(app) {
             </div>\
           </div>\
           <div class="task-drawer-section">\
-            <div class="task-drawer-section-title">BODY <button class="cmd-btn cmd-btn-sm" style="margin-left:8px;font-size:11px;" @click="bodyEditorOpen = true">EDIT BODY</button></div>\
+            <div class="task-drawer-section-title">BODY <button class="cmd-btn cmd-btn-cyan cmd-btn-sm" style="margin-left:8px;font-size:11px;" @click="bodyEditorOpen = true">EDIT BODY</button></div>\
             <div class="task-drawer-content" v-if="item.body" v-html="renderMdSafe(item.body)"></div>\
             <div v-else style="color:var(--text-muted,#888);font-size:12px;">No body content</div>\
           </div>\

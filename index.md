@@ -15,7 +15,7 @@ pm_assistant/
 ├── docker-compose.yml              # оркестрация: pm-bot + knowledge-engine (:8001 API) + ke-cron + idea-pipeline
 ├── settings.yaml                   # централизованная runtime-конфигурация (timeouts, cooldowns, rate_limits)
 ├── CHANGELOG.md                    # журнал изменений по всем компонентам (от новых к старым)
-├── BACKLOG.md                      # бэклог: реализованные фичи (88), баги (24), идеи (26)
+├── BACKLOG.md                      # бэклог: реализованные фичи (88), баги (24), идеи (28), итого (143)
 │
 ├── shared/                         # общий модуль — единый источник для pm-bot, KE, idea-pipeline
 │   ├── __init__.py                 # __version__ = "0.1.0"
@@ -83,7 +83,7 @@ pm_assistant/
 │       ├── board.html              # канбан-доска (auto-refresh 30s / manual + refresh icon)
 │       ├── ideas.html              # канбан идей по статусам + capture drawer (4 типа) + readiness %
 │       ├── meeting.html            # просмотр одного протокола встречи (markdown render)
-│       ├── dashboard.html           # домены, статистика артефактов, Jira sync status
+│       ├── dashboard.html           # домены, статистика артефактов, Jira sync status, Vault Health card
 │       ├── roadmap.html            # roadmap с эпиками (auto-refresh 60s / manual + refresh icon)
 │       ├── timeline.html           # таймлайн фич
 │       ├── decay.html              # decay state dashboard: bubble scatter, donut, projection, domain bars, gems
@@ -97,6 +97,8 @@ pm_assistant/
 │       ├── style.css               # базовая тема (flat)
 │       ├── style-matrix.css        # matrix тема (glow, neon)
 │       ├── style-light.css         # light тема (cream, warm)
+│       ├── vendor/                 # локальные зависимости
+│       │   └── fonts/              # локальные шрифты (Material Symbols, JetBrains Mono, Inter, Share Tech Mono)
 │       └── tests/                  # Node.js unit-тесты для страниц
 │           ├── test-report-node.js
 │           ├── test-components-node.js
@@ -167,10 +169,10 @@ pm_assistant/
 
 | Компонент | Версия | Последнее изменение | Описание |
 |---|---|---|---|
-| **pm-bot** | 1.13.1 | 2026-06-29 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. Настраиваемые fallback-цепочки LLM-провайдеров в Settings UI (BL-140, BL-141). Decision Journal: реестр решений из протоколов + просмотр протокола (BL-24). Timeout fetch_meetings 180s → 600s. |
+| **pm-bot** | 1.14.0 | 2026-06-29 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. Настраиваемые fallback-цепочки LLM-провайдеров в Settings UI (BL-140, BL-141). Decision Journal: реестр решений из протоколов + просмотр протокола (BL-24). Timeout fetch_meetings 180s → 600s. |
 | **knowledge-engine** | 1.11.1 | 2026-06-29 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (19 эндпоинтов), jira-search endpoint. Импорты из shared/. Унификация LLM-вызовов через call() (BL-140, BL-141). Meeting protocol enrichment (BL-133, BL-134). Багфиксы: patch_jira_links startswith (BUG-016), footer append fallback (BUG-017). Фикс YAML injection в meeting fetcher (BUG). Фикс 3 багов линтера wikilinks: pipe order, .txt index, escaped pipe. |
 | **idea-pipeline** | 1.1.2 | 2026-06-14 | Orchestrator: Analyst → PM → Decomposer. Импорты vault_paths и file_writer из shared/. |
-| **web-ui** | 1.23.0 | 2026-06-29 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141), LLM Playground (BL-142). Decision Journal (BL-24): decisions.html + meeting.html + overview виджет RECENT DECISIONS. |
+| **web-ui** | 1.24.0 | 2026-06-29 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141), LLM Playground (BL-142). Decision Journal (BL-24): decisions.html + meeting.html + overview виджет RECENT DECISIONS. |
 | **инфраструктура** | 1.0.0 | 2026-06-11 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120) |
 | **shared** | 0.3.0 | 2026-06-23 | Общий модуль: llm_client (call с настраиваемыми fallback-цепочками, Ollama timeout ×5, call_transcription), openrouter_client, file_writer, vault_paths, domain_config, frontmatter_utils, settings. Единый источник для всех компонентов. Единый call() с настраиваемыми fallback-цепочками (BL-140, BL-141). |
 
@@ -235,7 +237,7 @@ pm_assistant/
 | roadmap.html | Roadmap с эпиками и прогрессом |
 | timeline.html | Таймлайн по фичам |
 | report.html | Просмотр еженедельных отчётов (Markdown → HTML через marked.js) |
-| settings.html | Настройки: тема, refresh mode, LLM Provider (Claude/Ollama/Hybrid + Test Connection), prompts, Jira sync |
+| settings.html | Настройки: тема, refresh mode, LLM Provider (Claude/Ollama/Hybrid + Test Connection), prompts, Jira sync, Email Fetch |
 | playground.html | LLM Playground: тестирование провайдеров и моделей |
 | about.html | О сервисе: версии компонентов, история изменений (CHANGES.md → marked.js) |
 

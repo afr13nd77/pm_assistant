@@ -2068,6 +2068,43 @@ def jira_sync():
         _jira_sync_lock.release()
 
 
+# ---------------------------------------------------------------------------
+# Fetch Meetings (email import) endpoint
+# ---------------------------------------------------------------------------
+
+
+class FetchMeetingsRequest(BaseModel):
+    notify: bool = False
+    dry_run: bool = False
+
+
+class FetchMeetingsResponse(BaseModel):
+    status: str
+    total_emails: int = 0
+    already_processed: int = 0
+    newly_processed: int = 0
+    errors: int = 0
+    details: list = []
+    message: str = ""
+
+
+@app.post("/api/v1/fetch-meetings", response_model=FetchMeetingsResponse)
+def fetch_meetings_endpoint(req: FetchMeetingsRequest):
+    """Fetch and process new meeting transcripts from email via knowledge-engine."""
+    logger.info("POST /api/v1/fetch-meetings — start, notify=%s, dry_run=%s", req.notify, req.dry_run)
+    try:
+        data = ke_client.fetch_meetings(notify=req.notify, dry_run=req.dry_run)
+        _cache.invalidate()
+        logger.info("POST /api/v1/fetch-meetings — success: newly_processed=%s", data.get("newly_processed", 0))
+        return FetchMeetingsResponse(**data)
+    except requests.RequestException as exc:
+        logger.error("POST /api/v1/fetch-meetings — ke_client error: %s", exc)
+        raise HTTPException(status_code=502, detail=f"KE API error: {exc}")
+    except Exception as exc:
+        logger.error("POST /api/v1/fetch-meetings — error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @app.get("/api/v1/timeline/{ticket_id}")
 def get_timeline(ticket_id: str):
     """Search all vault folders for mentions of ticket_id and build chronological timeline.

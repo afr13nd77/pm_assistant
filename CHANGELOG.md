@@ -5,6 +5,22 @@
 
 ---
 
+## 30.06.2026 — Dashboard Health + Email Fetch + UX fixes (BL-136, BL-148)
+
+### pm-bot 1.14.0
+- **vault_api.py**: `POST /api/v1/fetch-meetings` — proxy endpoint к KE для ручного запуска обработки email-транскрибаций (BL-148)
+- **api.js**: `api.fetchMeetings()` с Content-Type header (BL-148)
+
+### web-ui 1.24.0
+- **dashboard.html**: карточка Vault Health рядом с Jira Sync в формате domain-card, спиннер загрузки, попап breakdown с иконками и Pipeline Metrics (BL-136)
+- **settings.html**: секция EMAIL_FETCH с кнопкой FETCH NOW + индикатор статуса (BL-148)
+- **components.js**: fix — кнопка EDIT BODY невидима в Matrix теме → добавлен `cmd-btn-cyan`
+- **dashboard.html**: fix — попап health чёрный в Light теме → `var(--card)` вместо хардкода rgba
+- **style.css, style-matrix.css, style-light.css**: все шрифты (Material Symbols, Share Tech Mono, JetBrains Mono, Inter) загружаются локально из `vendor/fonts/` вместо Google Fonts CDN
+- **vendor/fonts/**: 9 файлов шрифтов для локальной загрузки
+
+---
+
 ## 29.06.2026 — Vault Health: исправление broken links + YAML injection fix
 
 ### knowledge-engine 1.11.1
