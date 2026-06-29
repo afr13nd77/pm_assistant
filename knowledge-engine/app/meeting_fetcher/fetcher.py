@@ -210,7 +210,16 @@ def _inject_source_file(protocol_md: str, raw_rel_path: str) -> str:
         fm_body = fm_match.group(1)
         fm_close = fm_match.group(2)
         rest = result[fm_match.end():]
-        result = f"{fm_body}source_file: {raw_rel_path}\n{fm_close}{rest}"
+        # Quote path if it contains YAML-special characters
+        if any(c in raw_rel_path for c in ':#[]{}'):
+            quoted_path = f'"{raw_rel_path}"'
+            logger.debug(
+                "_inject_source_file: path quoted for YAML safety: %s -> %s",
+                raw_rel_path, quoted_path,
+            )
+        else:
+            quoted_path = raw_rel_path
+        result = f"{fm_body}source_file: {quoted_path}\n{fm_close}{rest}"
         logger.info("_inject_source_file: frontmatter injected")
     else:
         logger.warning(

@@ -5,7 +5,7 @@
 timeouts:
   enrich: 30
   synthesize: 120
-  fetch_meetings: 180
+  fetch_meetings: 600
   jira_sync: 120
   jira_import: 60
   jira_create: 120
