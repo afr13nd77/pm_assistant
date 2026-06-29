@@ -15,7 +15,7 @@ pm_assistant/
 ├── docker-compose.yml              # оркестрация: pm-bot + knowledge-engine (:8001 API) + ke-cron + idea-pipeline
 ├── settings.yaml                   # централизованная runtime-конфигурация (timeouts, cooldowns, rate_limits)
 ├── CHANGELOG.md                    # журнал изменений по всем компонентам (от новых к старым)
-├── BACKLOG.md                      # бэклог: реализованные фичи (88), баги (24), идеи (25)
+├── BACKLOG.md                      # бэклог: реализованные фичи (88), баги (24), идеи (26)
 │
 ├── shared/                         # общий модуль — единый источник для pm-bot, KE, idea-pipeline
 │   ├── __init__.py                 # __version__ = "0.1.0"
@@ -48,6 +48,7 @@ pm_assistant/
 │   ├── domain-general-revision/     # BL-124 DONE: requirements.md, design.md, tasks.md
 │   ├── dedup-and-config/            # BL-126+BL-130 DONE: requirements.md, design.md, tasks.md (28 задач)
 │   ├── decay-engine-dashboard/      # BL-132 DONE: requirements.md, design.md, tasks.md (13 задач), прототип index.html
+│   ├── decision-journal/           # BL-24 DONE: requirements.md, design.md, tasks.md
 │   ├── capture-terminal-redesign/   # BL-137 DONE: requirements.md, design.md, tasks.md (13 задач)
 │   ├── meeting-protocol-enrich/     # BL-133+BL-134 DONE: requirements.md, design.md, tasks.md (4 задачи)
 │   ├── openrouter-transcription/    # BL-138 DONE: requirements.md, design.md, tasks.md (10 задач)
@@ -166,8 +167,8 @@ pm_assistant/
 
 | Компонент | Версия | Последнее изменение | Описание |
 |---|---|---|---|
-| **pm-bot** | 1.13.0 | 2026-06-29 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. Настраиваемые fallback-цепочки LLM-провайдеров в Settings UI (BL-140, BL-141). Decision Journal: реестр решений из протоколов + просмотр протокола (BL-24). |
-| **knowledge-engine** | 1.11.0 | 2026-06-23 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (19 эндпоинтов), jira-search endpoint. Импорты из shared/. Унификация LLM-вызовов через call() (BL-140, BL-141). Meeting protocol enrichment (BL-133, BL-134). Багфиксы: patch_jira_links startswith (BUG-016), footer append fallback (BUG-017). |
+| **pm-bot** | 1.13.1 | 2026-06-29 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. Настраиваемые fallback-цепочки LLM-провайдеров в Settings UI (BL-140, BL-141). Decision Journal: реестр решений из протоколов + просмотр протокола (BL-24). Timeout fetch_meetings 180s → 600s. |
+| **knowledge-engine** | 1.11.1 | 2026-06-29 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (19 эндпоинтов), jira-search endpoint. Импорты из shared/. Унификация LLM-вызовов через call() (BL-140, BL-141). Meeting protocol enrichment (BL-133, BL-134). Багфиксы: patch_jira_links startswith (BUG-016), footer append fallback (BUG-017). Фикс YAML injection в meeting fetcher (BUG). Фикс 3 багов линтера wikilinks: pipe order, .txt index, escaped pipe. |
 | **idea-pipeline** | 1.1.2 | 2026-06-14 | Orchestrator: Analyst → PM → Decomposer. Импорты vault_paths и file_writer из shared/. |
 | **web-ui** | 1.23.0 | 2026-06-29 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141), LLM Playground (BL-142). Decision Journal (BL-24): decisions.html + meeting.html + overview виджет RECENT DECISIONS. |
 | **инфраструктура** | 1.0.0 | 2026-06-11 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120) |

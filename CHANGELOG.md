@@ -5,6 +5,25 @@
 
 ---
 
+## 29.06.2026 — Vault Health: исправление broken links + YAML injection fix
+
+### knowledge-engine 1.11.1
+- **linter.py**: 3 бага wikilink-resolve: pipe order `[[target|display]]` вместо инвертированного, индексация `.txt` файлов в raw/, нормализация escaped pipe `\|` в markdown-таблицах. Broken links: 54 → 0
+- **linter.py**: расширен фильтр допустимых расширений `.md` + `.txt` для raw source links
+- **fetcher.py**: `_inject_source_file()` — квотирование `raw_rel_path` при наличии YAML-спецсимволов (`:`, `#`, `[`, `]`). Корневая причина: пути с двоеточиями (`09:32`, `R6 :: Daily`) ломали YAML frontmatter → enrich() падал → email блокировался после 3 попыток
+- **Тесты**: обновлены под правильный pipe order в wikilinks
+
+### pm-bot 1.13.1
+- **settings.yaml**: timeout `fetch_meetings` увеличен 180s → 600s для обработки нескольких протоколов
+
+### Vault data
+- Импортированы 24 Jira-тикета (GO-*, PLATFORM-*, TMPL-*) через API для устранения broken links из daily-logs
+- Исправлены 34 битых wikilinks в 10 vault-файлах (удалены ссылки на несуществующие отчёты, исправлены имена идей, обновлены пути доменов)
+- Сброшен state 2 failed-протоколов (22.06 и 29.06) в `.meeting-fetcher-state.json`
+- Vault health score: 0 → 11
+
+---
+
 ## 29.06.2026 — Decision Journal (BL-24)
 
 ### pm-bot 1.13.0
