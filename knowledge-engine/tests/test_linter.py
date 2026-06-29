@@ -91,7 +91,7 @@ class TestCheckBrokenLinks:
         _write_md(existing, "# Target")
 
         md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "idea-01.md"
-        _write_md(md, "# Idea\n\n[[display text|target-file]]\n")
+        _write_md(md, "# Idea\n\n[[target-file|display text]]\n")
 
         result = linter.check_broken_links(str(tmp_path))
         assert result == []
@@ -99,11 +99,11 @@ class TestCheckBrokenLinks:
     def test_pipe_syntax_broken_target_reported(self, tmp_path):
         linter = _import_linter(tmp_path)
         md = tmp_path / "wiki" / "domains" / "test-domain" / "ideas" / "idea-01.md"
-        _write_md(md, "# Idea\n\n[[display|missing-file]]\n")
+        _write_md(md, "# Idea\n\n[[missing-file|display]]\n")
 
         result = linter.check_broken_links(str(tmp_path))
         assert len(result) == 1
-        assert result[0]["link"] == "display|missing-file"
+        assert result[0]["link"] == "missing-file|display"
 
     def test_multiple_broken_links_in_one_file(self, tmp_path):
         linter = _import_linter(tmp_path)

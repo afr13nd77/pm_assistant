@@ -25,15 +25,17 @@ _ATTACHMENT_EXTS = frozenset({
 def _resolve_wikilink_target(raw: str) -> str:
     """Extract the target filename from a raw wikilink string.
 
-    Handles pipe syntax: [[display text|target]] → target.
-    Ensures .md extension is present.
+    Handles pipe syntax: [[target|display text]] → target.
+    Adds .md extension only when the target has no extension.
     """
+    raw = raw.replace("\\|", "|")
     if "|" in raw:
-        target = raw.split("|", 1)[1].strip()
+        target = raw.split("|", 1)[0].strip()
     else:
         target = raw.strip()
 
-    if not target.endswith(".md"):
+    # Add .md only if the filename part has no extension
+    if "." not in target.rsplit("/", 1)[-1]:
         target = target + ".md"
     return target
 
@@ -45,6 +47,7 @@ def _is_ignorable_link(raw: str) -> bool:
     template variables ({{...}}), and URLs.
     """
     stripped = raw.strip()
+    stripped = stripped.replace("\\|", "|")
     lower = stripped.lower()
 
     # @mentions
@@ -61,7 +64,7 @@ def _is_ignorable_link(raw: str) -> bool:
 
     # Attachment file extensions — check the raw target before .md is appended
     # Handle pipe syntax: [[display|target]]
-    target_part = stripped.split("|", 1)[1].strip() if "|" in stripped else stripped
+    target_part = stripped.split("|", 1)[0].strip() if "|" in stripped else stripped
     dot_pos = target_part.rfind(".")
     if dot_pos != -1:
         ext = target_part[dot_pos:].lower()
@@ -107,14 +110,16 @@ def _build_file_index(vault: Path) -> dict:
     for scan_dir in (wiki_dir, vault / "raw"):
         if not scan_dir.exists():
             continue
-        for file in scan_dir.rglob("*.md"):
-            rel_path = str(file.relative_to(vault)).replace("\\", "/").lower()
-            name = file.name.lower()
-            stem = file.stem.lower()
+        patterns = ["*.md"] if scan_dir.name == "wiki" else ["*.md", "*.txt"]
+        for pattern in patterns:
+            for file in scan_dir.rglob(pattern):
+                rel_path = str(file.relative_to(vault)).replace("\\", "/").lower()
+                name = file.name.lower()
+                stem = file.stem.lower()
 
-            by_name.setdefault(name, []).append(rel_path)
-            by_stem.setdefault(stem, []).append(rel_path)
-            all_paths.append(rel_path)
+                by_name.setdefault(name, []).append(rel_path)
+                by_stem.setdefault(stem, []).append(rel_path)
+                all_paths.append(rel_path)
 
     logger.info(
         "_build_file_index: indexed %d files, %d unique names, %d unique stems",
@@ -212,8 +217,9 @@ def check_broken_links(vault_path: str) -> list[dict]:
                     continue
                 target = _resolve_wikilink_target(raw)
                 # Skip non-markdown targets (image/attachment embeds like [[files/image.png]])
-                if not target.lower().endswith(".md"):
-                    logger.debug("check_broken_links: skipping non-md target: %s", target)
+                allowed_exts = (".md", ".txt")
+                if not any(target.lower().endswith(ext) for ext in allowed_exts):
+                    logger.debug("check_broken_links: skipping non-md/txt target: %s", target)
                     continue
                 # Resolve relative paths (../) against the current file's directory
                 if "../" in target:
@@ -445,9 +451,10 @@ def check_unsorted_misc(vault_path: str) -> list[dict]:
                 continue
             for match in _WIKILINK_RE.finditer(text):
                 raw = match.group(1).strip()
-                # Handle pipe syntax: [[display|target]] → use target
+                raw = raw.replace("\\|", "|")
+                # Handle pipe syntax: [[target|display]] → use target
                 if "|" in raw:
-                    target = raw.split("|", 1)[1].strip()
+                    target = raw.split("|", 1)[0].strip()
                 else:
                     target = raw.strip()
                 target_lower = target.lower()
