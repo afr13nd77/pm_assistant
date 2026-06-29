@@ -15,7 +15,7 @@ pm_assistant/
 ├── docker-compose.yml              # оркестрация: pm-bot + knowledge-engine (:8001 API) + ke-cron + idea-pipeline
 ├── settings.yaml                   # централизованная runtime-конфигурация (timeouts, cooldowns, rate_limits)
 ├── CHANGELOG.md                    # журнал изменений по всем компонентам (от новых к старым)
-├── BACKLOG.md                      # бэклог: реализованные фичи (85), баги (24), идеи (27)
+├── BACKLOG.md                      # бэклог: реализованные фичи (88), баги (24), идеи (25)
 │
 ├── shared/                         # общий модуль — единый источник для pm-bot, KE, idea-pipeline
 │   ├── __init__.py                 # __version__ = "0.1.0"
@@ -81,11 +81,13 @@ pm_assistant/
 │       ├── overview.html           # дашборд: system status, idea funnel, today's queue, activity feed, quick capture
 │       ├── board.html              # канбан-доска (auto-refresh 30s / manual + refresh icon)
 │       ├── ideas.html              # канбан идей по статусам + capture drawer (4 типа) + readiness %
+│       ├── meeting.html            # просмотр одного протокола встречи (markdown render)
 │       ├── dashboard.html           # домены, статистика артефактов, Jira sync status
 │       ├── roadmap.html            # roadmap с эпиками (auto-refresh 60s / manual + refresh icon)
 │       ├── timeline.html           # таймлайн фич
 │       ├── decay.html              # decay state dashboard: bubble scatter, donut, projection, domain bars, gems
 │       ├── decay.js                # логика decay dashboard: Chart.js, проекция, gems (424 строки)
+│       ├── decisions.html          # журнал решений из протоколов (поиск, фильтры, expand контекст)
 │       ├── playground.html         # LLM Playground: тестирование провайдеров и моделей
 │       ├── report.html             # просмотр отчётов (marked.js для MD)
 │       ├── settings.html           # настройки (theme, refresh mode, LLM Providers с fallback chains drag-and-drop, prompts, Jira sync)
@@ -164,10 +166,10 @@ pm_assistant/
 
 | Компонент | Версия | Последнее изменение | Описание |
 |---|---|---|---|
-| **pm-bot** | 1.12.0 | 2026-06-23 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. Настраиваемые fallback-цепочки LLM-провайдеров в Settings UI (BL-140, BL-141). |
+| **pm-bot** | 1.13.0 | 2026-06-29 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. Настраиваемые fallback-цепочки LLM-провайдеров в Settings UI (BL-140, BL-141). Decision Journal: реестр решений из протоколов + просмотр протокола (BL-24). |
 | **knowledge-engine** | 1.11.0 | 2026-06-23 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (19 эндпоинтов), jira-search endpoint. Импорты из shared/. Унификация LLM-вызовов через call() (BL-140, BL-141). Meeting protocol enrichment (BL-133, BL-134). Багфиксы: patch_jira_links startswith (BUG-016), footer append fallback (BUG-017). |
 | **idea-pipeline** | 1.1.2 | 2026-06-14 | Orchestrator: Analyst → PM → Decomposer. Импорты vault_paths и file_writer из shared/. |
-| **web-ui** | 1.22.0 | 2026-06-25 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141), LLM Playground (BL-142) |
+| **web-ui** | 1.23.0 | 2026-06-29 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141), LLM Playground (BL-142). Decision Journal (BL-24): decisions.html + meeting.html + overview виджет RECENT DECISIONS. |
 | **инфраструктура** | 1.0.0 | 2026-06-11 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120) |
 | **shared** | 0.3.0 | 2026-06-23 | Общий модуль: llm_client (call с настраиваемыми fallback-цепочками, Ollama timeout ×5, call_transcription), openrouter_client, file_writer, vault_paths, domain_config, frontmatter_utils, settings. Единый источник для всех компонентов. Единый call() с настраиваемыми fallback-цепочками (BL-140, BL-141). |
 
@@ -225,8 +227,10 @@ pm_assistant/
 | index.html | Redirect → overview.html |
 | overview.html | Дашборд: system status, idea funnel, today's queue, activity feed, quick capture |
 | ideas.html | Канбан идей: 4 колонки по статусам, фильтр по доменам, capture drawer, readiness % |
+| meeting.html | Просмотр одного протокола встречи (markdown render, кнопка НАЗАД) |
 | board.html | Канбан-доска задач |
 | dashboard.html | Домены, статистика артефактов, Jira sync status (overdue alert) |
+| decisions.html | Журнал решений: карточки из протоколов, поиск, фильтр по домену/дате, expand с контекстом |
 | roadmap.html | Roadmap с эпиками и прогрессом |
 | timeline.html | Таймлайн по фичам |
 | report.html | Просмотр еженедельных отчётов (Markdown → HTML через marked.js) |
@@ -322,6 +326,7 @@ pm_assistant/
 | /ideas | 570ms | 10ms |
 | /tasks | 1364ms | 34ms |
 | /epics | 1370ms | 7ms |
+| /decisions | ~1500ms | 100ms |
 
 ## Документация (docs/)
 
@@ -335,6 +340,7 @@ pm_assistant/
 | daily-alert/ | APPROVED, IMPLEMENTED | Alert в Telegram при отсутствии Daily-протокола за текущий день, cron 18:00 МСК (requirements, design, tasks) |
 | daily-jira-sync/ | APPROVED, IMPLEMENTED | Извлечение Jira-ключей из daily-протоколов, авто-импорт недостающих, Obsidian wiki-links (requirements, design, tasks) |
 | daily-progress-report/ | APPROVED, IMPLEMENTED | Команда /progress — отправка ежедневного отчёта о ходе проекта в Telegram (requirements, design, tasks) |
+| decision-journal/ | DONE | BL-24: Decision Journal — единый реестр решений из протоколов (requirements, design, tasks — 6 задач) |
 | dedup-and-config/ | APPROVED, DONE | BL-126+BL-130: Дедупликация + декаплинг — shared/ модуль, KE HTTP API, ke_client, settings.yaml (requirements, design, tasks — 28 задач) |
 | domain-config/ | APPROVED, IMPLEMENTED | Настройка доменов (requirements, design, tasks) |
 | domain-general-revision/ | APPROVED, DONE | BL-124: Ревизия домена general — domain_mover.py + 3 CLI + 14 тестов. Batch выполнен: 1 moved, 7 дубликатов удалены, 148 unmatched (requirements, design, tasks) |

@@ -5,6 +5,22 @@
 
 ---
 
+## 29.06.2026 — Decision Journal (BL-24)
+
+### pm-bot 1.13.0
+- **vault_api.py**: `GET /api/v1/decisions` — агрегация решений из wiki/meetings/*.md с фильтрацией по домену, тексту, дате. On-the-fly парсинг секции `## Решения`, TTL-кэш 30с (BL-24, T-01)
+- **vault_api.py**: `GET /api/v1/meetings/{filename}` — просмотр одного протокола по имени файла, валидация безопасности (BL-24)
+- **vault_api.py**: 6 вспомогательных функций: `_parse_decision_bullets`, `_is_empty_decisions`, `_detect_domain_for_decision`, `_load_domain_display_map`, `_normalize_participants`, `_decision_matches_query`
+
+### web-ui 1.23.0
+- **decisions.html**: страница Decision Journal — карточки решений, метрики (TOTAL/DOMAINS/THIS_WEEK), поиск с подсветкой, фильтры домен/дата, expand с контекстом/action items/блокерами, кнопка OPEN PROTOCOL (BL-24, T-04)
+- **meeting.html**: страница просмотра протокола встречи — markdown render через marked.js, кнопка НАЗАД (BL-24)
+- **api.js**: методы `api.decisions(params)` и `api.meetingByFilename(filename)` (BL-24, T-02)
+- **components.js**: пункт DECISIONS в sidebar (icon: gavel) (BL-24, T-03)
+- **overview.html**: виджет RECENT DECISIONS — 5 последних решений, badge домена, ссылка ALL → (BL-24, T-05)
+
+---
+
 ## 18.06.2026 — Багфиксы BL-133, BL-134
 
 ### knowledge-engine 1.10.1
