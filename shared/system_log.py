@@ -21,7 +21,7 @@ DB_PATH = _vault_path / DB_FILENAME
 VALID_PROCESS_TYPES = {
     "decay-recalc", "linter", "health-score", "jira-sync",
     "synthesis", "fetch-meetings", "process-queue", "rebuild-index",
-    "weekly-report", "enrichment-reminder", "daily-alert",
+    "weekly-report", "enrichment-reminder", "daily-alert", "llm-call",
 }
 
 VALID_STATUSES = {"success", "warning", "error", "info"}

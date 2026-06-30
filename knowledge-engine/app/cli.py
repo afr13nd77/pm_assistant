@@ -746,8 +746,22 @@ def main():
             from shared.system_log import LoggedProcess
             with LoggedProcess("process-queue", source="ke-cron") as lp:
                 result = processor.process_pending(vault_path, limit=args.limit, notify=args.notify)
-                lp.summary = f"{result.get('processed', 0)} обработано, {result.get('failed', 0)} ошибок"
-                lp.details = {"processed": result.get("processed", 0), "failed": result.get("failed", 0), "requeued": result.get("requeued", 0), "reclaimed": result.get("reclaimed", 0)}
+                unit_results = []
+                for d in result.get("details", []):
+                    entry = {"unit_id": d.get("unit_id", "?"), "result": d.get("result", "?")}
+                    if d.get("error"):
+                        entry["error"] = d["error"][:200]
+                    unit_results.append(entry)
+
+                lp.details = {
+                    "processed": result.get("processed", 0),
+                    "failed": result.get("failed", 0),
+                    "requeued": result.get("requeued", 0),
+                    "reclaimed": result.get("reclaimed", 0),
+                    "units": unit_results,
+                }
+                unit_count = len(result.get("details", []))
+                lp.summary = f"{result.get('processed', 0)} обработано, {result.get('failed', 0)} ошибок" + (f" ({unit_count} юнитов)" if unit_count else "")
             logger.info(
                 "process-queue: completed, reclaimed=%d, processed=%d, failed=%d, requeued=%d",
                 result.get("reclaimed", 0), result.get("processed", 0),

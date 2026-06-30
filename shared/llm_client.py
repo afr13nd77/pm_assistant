@@ -344,6 +344,9 @@ def call_detailed(
 
     logger.info("call_detailed: operation=%s, group=%s, chain=%s", operation, group, chain)
 
+    import time as _time
+    _t0 = _time.monotonic_ns()
+
     errors: list[tuple[str, str]] = []
 
     for i, provider in enumerate(chain):
@@ -369,6 +372,27 @@ def call_detailed(
                 "call_detailed: success, operation=%s, provider=%s, output_len=%d",
                 operation, provider, len(result),
             )
+            _duration = (_time.monotonic_ns() - _t0) // 1_000_000
+            try:
+                from shared.system_log import log_event
+                log_event(
+                    process_type="llm-call",
+                    status="success",
+                    summary=f"{operation} via {provider}",
+                    details={
+                        "operation": operation,
+                        "group": group,
+                        "provider_chain": chain,
+                        "used_provider": provider,
+                        "fallback_count": len(errors),
+                        "errors": [{"provider": p, "error": e} for p, e in errors],
+                        "output_len": len(result),
+                    },
+                    duration_ms=_duration,
+                    source="llm-client",
+                )
+            except Exception:
+                pass
             return result, provider_record
 
         except Exception as exc:
@@ -385,6 +409,24 @@ def call_detailed(
                     provider, operation, exc,
                 )
 
+    _duration = (_time.monotonic_ns() - _t0) // 1_000_000
+    try:
+        from shared.system_log import log_event
+        log_event(
+            process_type="llm-call",
+            status="error",
+            summary=f"{operation}: all providers failed",
+            details={
+                "operation": operation,
+                "group": group,
+                "provider_chain": chain,
+                "errors": [{"provider": p, "error": e} for p, e in errors],
+            },
+            duration_ms=_duration,
+            source="llm-client",
+        )
+    except Exception:
+        pass
     error_summary = "; ".join(f"{p}: {e}" for p, e in errors)
     raise RuntimeError(
         f"All providers failed for operation={operation} "
