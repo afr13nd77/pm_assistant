@@ -27,11 +27,13 @@ pm_assistant/
 │   ├── domain_config.py            # загрузка/сохранение domain-config.yaml (13 функций)
 │   ├── frontmatter_utils.py        # read_frontmatter, update_frontmatter
 │   ├── settings.py                 # загрузка settings.yaml, dot-notation доступ, singleton
+│   ├── system_log.py               # Централизованный журнал системных операций (SQLite в /vault/.system-log.db)
 │   └── tests/                      # unit-тесты для shared/
 │       ├── test_settings.py        # 14 тестов
 │       ├── test_openrouter.py      # 9 тестов (call, test_connection, models)
 │       ├── test_llm_client.py     # 21 тестов (call, fallback chains, migration, resolve)
-│       └── test_llm_transcription.py  # 5 тестов (call_transcription fallback chain)
+│       ├── test_llm_transcription.py  # 5 тестов (call_transcription fallback chain)
+│       └── test_system_log.py      # unit-тесты для system_log.py
 │
 ├── docs/                           # спеки и дизайн-документы (корень монорепо)
 │   ├── jira-polling/               # requirements.md, design.md, tasks.md
@@ -95,6 +97,7 @@ pm_assistant/
 │       ├── settings.html           # настройки (theme, refresh mode, LLM Providers с fallback chains drag-and-drop, prompts, Jira sync)
 │       ├── processes.html          # каталог системных процессов
 │       ├── process.html            # детальная страница процесса
+│       ├── system-log.html         # Журнал системных операций — лог cron/pipeline/scheduler с фильтрацией
 │       ├── api.js                  # fetch-клиент к vault_api (cancellation, caching, user-prefs, decay snapshot)
 │       ├── components.js           # shared Vue 3 компоненты (sidebar, cards, drawer)
 │       ├── style.css               # базовая тема (flat)
@@ -373,6 +376,7 @@ pm_assistant/
 | marketing_promo/ | — | Промо-материалы: презентации, слайды, обложки (PDF, PPTX, MD) |
 | meeting-fetcher/ | APPROVED, IMPLEMENTED | Импорт транскриптов из email (requirements, design, tasks) |
 | meeting-processing-queue/ | APPROVED, IMPLEMENTED, e2e VERIFIED | BL-145: трёхфазная файловая очередь обработки протоколов (Fetch/Queue/Process), watchdog (PollingObserver) + cron, retry по fallback-цепочке (max_attempts=5), валидация ответа до записи в wiki. E2E пройден на Docker 30.06.2026 (requirements, design, tasks, ADR-005) |
+| system-activity-log/ | IN PROGRESS | Централизованный журнал системных операций (cron/pipeline/scheduler) с фильтрацией и пагинацией (requirements, design, tasks) |
 | ollama-hybrid/ | APPROVED, IMPLEMENTED | Гибридная LLM-архитектура: Claude API + Ollama (requirements, design, tasks) |
 | overview-dashboard/ | APPROVED, IMPLEMENTED | Overview дашборд (requirements, tasks) |
 | overview-redesign/ | APPROVED, IMPLEMENTED | Редизайн overview (requirements, design, tasks) |

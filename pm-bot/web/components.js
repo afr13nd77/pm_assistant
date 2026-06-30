@@ -138,7 +138,8 @@ function registerComponents(app) {
           { name: 'timeline', label: 'TIMELINE', href: 'timeline.html', icon: 'timeline' },
           { name: 'decay', label: 'DECAY', href: 'decay.html', icon: 'psychology' },
           { name: 'decisions', label: 'DECISIONS', href: 'decisions.html', icon: 'gavel' },
-          { name: 'playground', label: 'PLAYGROUND', href: 'playground.html', icon: 'smart_toy' }
+          { name: 'playground', label: 'PLAYGROUND', href: 'playground.html', icon: 'smart_toy' },
+          { name: 'system-log', label: 'SYSTEM LOG', href: 'system-log.html', icon: 'terminal' }
         ];
       }
     },

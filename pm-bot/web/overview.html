@@ -833,6 +833,11 @@
           <span class="status-value" id="health-score">--</span>
           <canvas id="health-sparkline" width="56" height="20" style="vertical-align:middle;margin-left:4px;"></canvas>
         </div>
+        <div class="status-indicator" id="si-errors" style="cursor: pointer;" onclick="location.href='system-log.html?status=error&period=24h'" title="System log errors in last 24h">
+          <span class="status-dot dot-muted" id="errors-dot"></span>
+          <span class="status-label">ERRORS</span>
+          <span class="status-value" id="errors-count">--</span>
+        </div>
         <span class="status-refresh-info">// AUTO 30s | <span id="last-refresh">--:--</span></span>
       </div>
 
@@ -1070,6 +1075,23 @@ async function fetchSystemStatus() {
   }
 
   updateRefreshTimestamp();
+}
+
+function fetchSystemLogStats() {
+  fetchWithTimeout(API + '/system-log/stats')
+    .then(function(data) {
+      var el = document.getElementById('si-errors');
+      var dot = document.getElementById('errors-dot');
+      var val = document.getElementById('errors-count');
+      if (!el || !dot || !val) return;
+      var count = (data && data.last_24h) ? (data.last_24h.error || 0) : 0;
+      val.textContent = count;
+      dot.className = 'status-dot ' + (count > 0 ? 'dot-offline' : 'dot-online');
+      flashElement(el);
+    })
+    .catch(function(err) {
+      console.warn('[overview] fetchSystemLogStats error:', err);
+    });
 }
 
 // ================================================================
@@ -1507,6 +1529,7 @@ async function fetchRecentDecisions() {
 
 function fetchAll() {
   fetchSystemStatus();
+  fetchSystemLogStats();
   fetchIdeaFunnel();
   fetchQueue();
 
@@ -1530,6 +1553,7 @@ document.addEventListener('keydown', function(e) {
 
 // Timers
 setInterval(fetchSystemStatus, 30000);
+setInterval(fetchSystemLogStats, 30000);
 setInterval(function() {
   fetchIdeaFunnel();
   fetchQueue();

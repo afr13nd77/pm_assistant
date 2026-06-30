@@ -73,22 +73,28 @@ async def _run_weekly_report_async(bot, chat_id: int):
     """Async implementation of weekly report generation and notification."""
     logger.info("Running scheduled weekly report")
     try:
+        from shared.system_log import LoggedProcess
+
         from .obsidian_writer import write_report
         from .reporter import generate_weekly_report
 
-        report_md = generate_weekly_report()
-        logger.info("Weekly report generated, length=%d", len(report_md))
+        with LoggedProcess(process_type="weekly-report", source="pm-bot") as lp:
+            report_md = generate_weekly_report()
+            logger.info("Weekly report generated, length=%d", len(report_md))
 
-        filepath = write_report(report_md)
-        logger.info("Weekly report saved to %s", filepath)
+            filepath = write_report(report_md)
+            logger.info("Weekly report saved to %s", filepath)
 
-        await _rate_limiter.acquire()
-        await bot.send_message(
-            chat_id=chat_id,
-            text=f"Еженедельный отчёт готов:\n`{filepath.name}`\n\nОткрой: http://localhost:8080/report.html",
-            parse_mode="Markdown",
-        )
-        logger.info("Weekly report notification sent to chat_id=%s", chat_id)
+            await _rate_limiter.acquire()
+            await bot.send_message(
+                chat_id=chat_id,
+                text=f"Еженедельный отчёт готов:\n`{filepath.name}`\n\nОткрой: http://localhost:8080/report.html",
+                parse_mode="Markdown",
+            )
+            logger.info("Weekly report notification sent to chat_id=%s", chat_id)
+
+            lp.summary = "Еженедельный отчёт сгенерирован и отправлен"
+            lp.details = {"report_path": str(filepath.name), "telegram_sent": True}
     except Exception as e:
         logger.error("Weekly report generation failed: %s", e, exc_info=True)
         try:

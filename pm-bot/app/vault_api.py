@@ -3832,3 +3832,51 @@ def playground_chat(body: PlaygroundChatRequest):
             status_code=502,
             detail=error_msg,
         )
+
+
+# ---------------------------------------------------------------------------
+# System Log endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/v1/system-log")
+async def get_system_log(
+    period: str = "24h",
+    process_type: str | None = None,
+    status: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    """Журнал системных операций с фильтрацией и пагинацией."""
+    logger.info(
+        "GET /api/v1/system-log — period=%s process_type=%s status=%s limit=%d offset=%d",
+        period, process_type, status, limit, offset,
+    )
+    try:
+        from shared.system_log import query_log
+        result = query_log(
+            period=period,
+            process_type=process_type,
+            status=status,
+            limit=limit,
+            offset=offset,
+        )
+        logger.info("GET /api/v1/system-log — returning %d entries (total=%d)", len(result["entries"]), result["total"])
+        return result
+    except Exception as exc:
+        logger.error("GET /api/v1/system-log — error: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/v1/system-log/stats")
+async def get_system_log_stats():
+    """Статистика ошибок за 24ч для overview badge."""
+    logger.info("GET /api/v1/system-log/stats")
+    try:
+        from shared.system_log import get_stats
+        result = get_stats()
+        logger.info("GET /api/v1/system-log/stats — total=%d errors=%d", result["last_24h"]["total"], result["last_24h"]["error"])
+        return result
+    except Exception as exc:
+        logger.error("GET /api/v1/system-log/stats — error: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))

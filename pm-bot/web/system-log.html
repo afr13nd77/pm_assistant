@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="ru" class="theme-matrix">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Board — System Log</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+  <script>
+  (function() {
+    try {
+      var t = localStorage.getItem('pm_theme');
+      if (t === 'light') {
+        document.documentElement.className = 'theme-light';
+        document.getElementById('theme-css').href = 'style-light.css';
+      }
+    } catch(e) {}
+  })();
+  </script>
+  <style>
+    /* Filters */
+    .syslog-filters {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .syslog-select {
+      background: var(--card);
+      color: var(--text-body);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-family: var(--font);
+      font-size: 12px;
+      outline: none;
+    }
+
+    /* Day headers */
+    .syslog-day-header {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      opacity: 0.5;
+      margin: 20px 0 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Entry cards */
+    .syslog-entry {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .syslog-entry:hover {
+      border-color: var(--cyan);
+    }
+    .syslog-entry.expanded {
+      border-color: var(--cyan);
+    }
+    .syslog-entry-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+    .syslog-time {
+      font-size: 12px;
+      opacity: 0.5;
+      min-width: 42px;
+    }
+
+    /* Status dots */
+    .syslog-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .syslog-dot.dot-success { background: #00ff41; box-shadow: 0 0 6px #00ff4180; }
+    .syslog-dot.dot-warning { background: #ff9800; box-shadow: 0 0 6px #ff980080; }
+    .syslog-dot.dot-error   { background: #ff1744; box-shadow: 0 0 6px #ff174480; }
+    .syslog-dot.dot-info    { background: #00e5ff; box-shadow: 0 0 6px #00e5ff80; }
+
+    /* Light theme: no glow */
+    .theme-light .syslog-dot.dot-success { background: #2e7d32; box-shadow: none; }
+    .theme-light .syslog-dot.dot-warning { background: #e65100; box-shadow: none; }
+    .theme-light .syslog-dot.dot-error   { background: #c62828; box-shadow: none; }
+    .theme-light .syslog-dot.dot-info    { background: #0277bd; box-shadow: none; }
+
+    .syslog-type {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+    .syslog-sep {
+      opacity: 0.3;
+    }
+    .syslog-summary {
+      flex: 1;
+    }
+    .syslog-duration {
+      font-size: 11px;
+      opacity: 0.4;
+      margin-left: auto;
+    }
+
+    /* Expanded details */
+    .syslog-details {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+    .syslog-detail-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 4px;
+      font-size: 12px;
+    }
+    .syslog-detail-label {
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      opacity: 0.5;
+      min-width: 100px;
+      padding-top: 2px;
+    }
+    .syslog-detail-value {
+      color: var(--text-body);
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <app-sidebar active="system-log" @search="searchOpen = true"></app-sidebar>
+    <search-overlay :open="searchOpen" @close="searchOpen = false"></search-overlay>
+    <main class="page-content" style="position: relative; overflow: hidden;">
+      <div class="scan-line"></div>
+      <div class="page-header">
+        <div class="text-page-title">SYSTEM_LOG</div>
+        <div class="btn-row" style="margin:0;">
+          <span class="refresh-icon" :class="{ spinning: loading }" @click="loadLog" title="Refresh">&#8635;</span>
+        </div>
+      </div>
+
+      <!-- Metrics -->
+      <div class="metrics-grid" style="grid-template-columns: repeat(3, 1fr);">
+        <metric-box label="TOTAL" :value="totalCount" color="cyan"></metric-box>
+        <metric-box label="SUCCESS" :value="successCount" color="green"></metric-box>
+        <metric-box label="ERRORS" :value="errorCount" color="red"></metric-box>
+      </div>
+
+      <!-- Filters -->
+      <div class="syslog-filters">
+        <select v-model="period" @change="loadLog" class="syslog-select">
+          <option value="24h">Last 24h</option>
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last 30 days</option>
+          <option value="all">All time</option>
+        </select>
+        <select v-model="processType" @change="loadLog" class="syslog-select">
+          <option value="">All processes</option>
+          <option value="decay-recalc">decay-recalc</option>
+          <option value="linter">linter</option>
+          <option value="health-score">health-score</option>
+          <option value="jira-sync">jira-sync</option>
+          <option value="synthesis">synthesis</option>
+          <option value="fetch-meetings">fetch-meetings</option>
+          <option value="process-queue">process-queue</option>
+          <option value="rebuild-index">rebuild-index</option>
+          <option value="weekly-report">weekly-report</option>
+          <option value="enrichment-reminder">enrichment-reminder</option>
+          <option value="daily-alert">daily-alert</option>
+        </select>
+        <select v-model="statusFilter" @change="loadLog" class="syslog-select">
+          <option value="">All statuses</option>
+          <option value="success">Success</option>
+          <option value="warning">Warning</option>
+          <option value="error">Error</option>
+          <option value="info">Info</option>
+        </select>
+        <span class="syslog-reset" @click="resetFilters" style="cursor:pointer; opacity:0.6; font-size:11px; letter-spacing:0.1em; text-transform:uppercase;">RESET</span>
+        <span class="syslog-count" style="margin-left:auto; opacity:0.5; font-size:11px;">{{ totalEntries }} entries</span>
+      </div>
+
+      <!-- Loading state -->
+      <div v-if="loading" class="loading">LOADING...</div>
+
+      <!-- Error state -->
+      <div v-if="error" class="empty-state">{{ error }}</div>
+
+      <!-- Log entries grouped by day -->
+      <div v-if="!loading && !error && entries.length">
+        <div v-for="group in groupedEntries" :key="group.label">
+          <div class="syslog-day-header">{{ group.label }}</div>
+          <div
+            v-for="(e, idx) in group.items"
+            :key="idx"
+            class="syslog-entry"
+            :class="[e.status, { expanded: e._expanded }]"
+            @click="toggleExpand(e)"
+          >
+            <div class="syslog-entry-header">
+              <span class="syslog-time">{{ fmtTime(e.timestamp) }}</span>
+              <span class="syslog-dot" :class="'dot-' + e.status"></span>
+              <span class="syslog-type">{{ e.process_type }}</span>
+              <span class="syslog-sep">&mdash;</span>
+              <span class="syslog-summary">{{ e.summary }}</span>
+              <span v-if="e.duration_ms" class="syslog-duration">{{ fmtDuration(e.duration_ms) }}</span>
+            </div>
+            <div v-if="e._expanded" class="syslog-details" @click.stop>
+              <div class="syslog-detail-row" v-if="e.source">
+                <span class="syslog-detail-label">SOURCE</span>
+                <span class="syslog-detail-value">{{ e.source }}</span>
+              </div>
+              <div class="syslog-detail-row" v-if="e.duration_ms">
+                <span class="syslog-detail-label">DURATION</span>
+                <span class="syslog-detail-value">{{ fmtDuration(e.duration_ms) }}</span>
+              </div>
+              <div class="syslog-detail-row" v-for="(val, key) in filteredDetails(e.details)" :key="key">
+                <span class="syslog-detail-label">{{ key.toUpperCase() }}</span>
+                <span class="syslog-detail-value">{{ formatDetailValue(val) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty state -->
+      <div v-if="!loading && !error && !entries.length" class="empty-state">No entries found</div>
+
+      <!-- Load more -->
+      <div v-if="hasMore" style="text-align:center; margin:24px 0;">
+        <cmd-button label="LOAD MORE" @click="loadMore" :loading="loadingMore"></cmd-button>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="api.js"></script>
+  <script src="components.js"></script>
+  <script>
+    var createApp = Vue.createApp;
+    var ref = Vue.ref;
+    var computed = Vue.computed;
+    var onMounted = Vue.onMounted;
+
+    var app = createApp({
+      setup: function() {
+        var entries = ref([]);
+        var loading = ref(false);
+        var loadingMore = ref(false);
+        var error = ref(null);
+        var searchOpen = ref(false);
+        var period = ref('24h');
+        var processType = ref('');
+        var statusFilter = ref('');
+        var totalEntries = ref(0);
+        var currentOffset = ref(0);
+        var PAGE_SIZE = 50;
+
+        var totalCount = computed(function() { return totalEntries.value; });
+        var successCount = computed(function() {
+          return entries.value.filter(function(e) { return e.status === 'success'; }).length;
+        });
+        var errorCount = computed(function() {
+          return entries.value.filter(function(e) { return e.status === 'error'; }).length;
+        });
+        var hasMore = computed(function() {
+          return entries.value.length < totalEntries.value;
+        });
+
+        // Group entries by day
+        var groupedEntries = computed(function() {
+          var groups = [];
+          var currentGroup = null;
+          var today = new Date();
+          today.setHours(0, 0, 0, 0);
+          var yesterday = new Date(today);
+          yesterday.setDate(yesterday.getDate() - 1);
+
+          entries.value.forEach(function(e) {
+            var d = new Date(e.timestamp);
+            d.setHours(0, 0, 0, 0);
+            var label;
+            if (d.getTime() === today.getTime()) {
+              label = 'СЕГОДНЯ';
+            } else if (d.getTime() === yesterday.getTime()) {
+              label = 'ВЧЕРА';
+            } else {
+              var dd = String(d.getDate()).padStart(2, '0');
+              var mm = String(d.getMonth() + 1).padStart(2, '0');
+              label = dd + '.' + mm + '.' + d.getFullYear();
+            }
+            if (!currentGroup || currentGroup.label !== label) {
+              currentGroup = { label: label, items: [] };
+              groups.push(currentGroup);
+            }
+            currentGroup.items.push(e);
+          });
+          return groups;
+        });
+
+        function parseUrlParams() {
+          var params = new URLSearchParams(window.location.search);
+          if (params.get('period')) period.value = params.get('period');
+          if (params.get('process_type')) processType.value = params.get('process_type');
+          if (params.get('status')) statusFilter.value = params.get('status');
+        }
+
+        function updateUrl() {
+          var params = new URLSearchParams();
+          if (period.value !== '24h') params.set('period', period.value);
+          if (processType.value) params.set('process_type', processType.value);
+          if (statusFilter.value) params.set('status', statusFilter.value);
+          var qs = params.toString();
+          var url = window.location.pathname + (qs ? '?' + qs : '');
+          history.replaceState(null, '', url);
+        }
+
+        function loadLog() {
+          console.log('[system-log] loadLog — start');
+          loading.value = true;
+          error.value = null;
+          currentOffset.value = 0;
+          updateUrl();
+          var params = {
+            period: period.value,
+            limit: PAGE_SIZE,
+            offset: 0
+          };
+          if (processType.value) params.process_type = processType.value;
+          if (statusFilter.value) params.status = statusFilter.value;
+
+          api.systemLog(params)
+            .then(function(data) {
+              entries.value = (data.entries || []).map(function(e) {
+                e._expanded = false;
+                return e;
+              });
+              totalEntries.value = data.total || 0;
+              currentOffset.value = entries.value.length;
+              console.log('[system-log] loadLog — success, count:', entries.value.length, 'total:', totalEntries.value);
+            })
+            .catch(function(err) {
+              if (err.name !== 'AbortError') {
+                error.value = 'Ошибка загрузки: ' + err.message;
+                console.error('[system-log] loadLog — error:', err.message);
+              }
+            })
+            .finally(function() {
+              loading.value = false;
+            });
+        }
+
+        function loadMore() {
+          console.log('[system-log] loadMore — offset:', currentOffset.value);
+          loadingMore.value = true;
+          var params = {
+            period: period.value,
+            limit: PAGE_SIZE,
+            offset: currentOffset.value
+          };
+          if (processType.value) params.process_type = processType.value;
+          if (statusFilter.value) params.status = statusFilter.value;
+
+          api.systemLog(params)
+            .then(function(data) {
+              var newEntries = (data.entries || []).map(function(e) {
+                e._expanded = false;
+                return e;
+              });
+              entries.value = entries.value.concat(newEntries);
+              currentOffset.value = entries.value.length;
+              console.log('[system-log] loadMore — success, loaded:', newEntries.length, 'total now:', entries.value.length);
+            })
+            .catch(function(err) {
+              if (err.name !== 'AbortError') {
+                error.value = 'Ошибка загрузки: ' + err.message;
+                console.error('[system-log] loadMore — error:', err.message);
+              }
+            })
+            .finally(function() {
+              loadingMore.value = false;
+            });
+        }
+
+        function resetFilters() {
+          console.log('[system-log] resetFilters');
+          period.value = '24h';
+          processType.value = '';
+          statusFilter.value = '';
+          loadLog();
+        }
+
+        function toggleExpand(e) {
+          e._expanded = !e._expanded;
+        }
+
+        function fmtTime(ts) {
+          if (!ts) return '--:--';
+          var parts = ts.split('T');
+          if (parts.length < 2) return ts;
+          return parts[1].substring(0, 5);
+        }
+
+        function fmtDuration(ms) {
+          if (!ms && ms !== 0) return '';
+          if (ms < 1000) return ms + 'ms';
+          return (ms / 1000).toFixed(1) + 's';
+        }
+
+        function filteredDetails(details) {
+          if (!details) return {};
+          var result = {};
+          Object.keys(details).forEach(function(key) {
+            if (key !== 'duration_ms') result[key] = details[key];
+          });
+          return result;
+        }
+
+        function formatDetailValue(val) {
+          if (val === null || val === undefined) return '—';
+          if (typeof val === 'object') return JSON.stringify(val);
+          return String(val);
+        }
+
+        onMounted(function() {
+          console.log('[system-log] mounted — loading initial data');
+          parseUrlParams();
+          loadLog();
+          document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+              searchOpen.value = false;
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+              e.preventDefault();
+              searchOpen.value = true;
+            }
+          });
+        });
+
+        return {
+          entries: entries, loading: loading, loadingMore: loadingMore,
+          error: error, searchOpen: searchOpen,
+          period: period, processType: processType, statusFilter: statusFilter,
+          totalEntries: totalEntries, totalCount: totalCount,
+          successCount: successCount, errorCount: errorCount,
+          hasMore: hasMore, groupedEntries: groupedEntries,
+          loadLog: loadLog, loadMore: loadMore, resetFilters: resetFilters,
+          toggleExpand: toggleExpand, fmtTime: fmtTime, fmtDuration: fmtDuration,
+          filteredDetails: filteredDetails, formatDetailValue: formatDetailValue
+        };
+      }
+    });
+
+    registerComponents(app);
+    applyPageTheme().then(function() {
+      app.mount('#app');
+    });
+  </script>
+</body>
+</html>

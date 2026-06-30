@@ -199,79 +199,90 @@ async def run_enrichment_check(bot, chat_id: int) -> None:
     """
     logger.info("run_enrichment_check: start")
     try:
+        from shared.system_log import LoggedProcess
         from shared.vault_paths import VAULT_PATH
 
         from .enrichment_db import get_reminded_today, init_db, record_reminder
 
-        db_path = VAULT_PATH / ".enrichment-reminders.db"
-        init_db(db_path)
+        with LoggedProcess(process_type="enrichment-reminder", source="pm-bot") as lp:
+            db_path = VAULT_PATH / ".enrichment-reminders.db"
+            init_db(db_path)
 
-        reminded_today = get_reminded_today(db_path)
-        ideas = _scan_all_ideas()
-        host_url = os.getenv("ENRICHMENT_HOST_URL", "http://localhost:8080")
-        sent_count = 0
+            reminded_today = get_reminded_today(db_path)
+            ideas = _scan_all_ideas()
+            host_url = os.getenv("ENRICHMENT_HOST_URL", "http://localhost:8080")
+            sent_count = 0
+            skipped_cooldown = 0
 
-        for idea in ideas:
-            idea_id = idea["id"]
+            for idea in ideas:
+                idea_id = idea["id"]
 
-            if idea["status"] not in ACTIVE_STATUSES:
-                logger.info(
-                    "run_enrichment_check: %s status=%s, skip (not active)",
-                    idea_id, idea["status"],
-                )
-                continue
-
-            if idea["readiness"] >= 100:
-                logger.info("run_enrichment_check: %s readiness=100%%, skip", idea_id)
-                continue
-
-            if idea_id in reminded_today:
-                logger.info("run_enrichment_check: %s already sent today, skip", idea_id)
-                continue
-
-            if not idea["empty_sections"]:
-                logger.info("run_enrichment_check: %s no empty sections, skip", idea_id)
-                continue
-
-            try:
-                message = _build_reminder_message(idea, host_url)
-                await _rate_limiter.acquire()
-                try:
-                    await bot.send_message(
-                        chat_id=chat_id, text=message, parse_mode="Markdown",
+                if idea["status"] not in ACTIVE_STATUSES:
+                    logger.info(
+                        "run_enrichment_check: %s status=%s, skip (not active)",
+                        idea_id, idea["status"],
                     )
-                except Exception as send_err:
-                    # Handle Telegram 429 RetryAfter
-                    from telegram.error import RetryAfter
-                    if isinstance(send_err, RetryAfter):
-                        _rate_limiter.on_retry_after(send_err.retry_after)
-                        await asyncio.sleep(send_err.retry_after)
+                    continue
+
+                if idea["readiness"] >= 100:
+                    logger.info("run_enrichment_check: %s readiness=100%%, skip", idea_id)
+                    continue
+
+                if idea_id in reminded_today:
+                    logger.info("run_enrichment_check: %s already sent today, skip", idea_id)
+                    skipped_cooldown += 1
+                    continue
+
+                if not idea["empty_sections"]:
+                    logger.info("run_enrichment_check: %s no empty sections, skip", idea_id)
+                    continue
+
+                try:
+                    message = _build_reminder_message(idea, host_url)
+                    await _rate_limiter.acquire()
+                    try:
                         await bot.send_message(
                             chat_id=chat_id, text=message, parse_mode="Markdown",
                         )
-                    else:
-                        raise
-                logger.info(
-                    "run_enrichment_check: sent reminder for %s to chat_id=%s",
-                    idea_id, chat_id,
-                )
+                    except Exception as send_err:
+                        # Handle Telegram 429 RetryAfter
+                        from telegram.error import RetryAfter
+                        if isinstance(send_err, RetryAfter):
+                            _rate_limiter.on_retry_after(send_err.retry_after)
+                            await asyncio.sleep(send_err.retry_after)
+                            await bot.send_message(
+                                chat_id=chat_id, text=message, parse_mode="Markdown",
+                            )
+                        else:
+                            raise
+                    logger.info(
+                        "run_enrichment_check: sent reminder for %s to chat_id=%s",
+                        idea_id, chat_id,
+                    )
 
-                record_reminder(
-                    db_path, idea_id, idea["filename"],
-                    idea["readiness"], idea["empty_sections"],
-                )
-                sent_count += 1
-            except Exception as send_err:
-                logger.error(
-                    "run_enrichment_check: failed to send reminder for %s: %s",
-                    idea_id, send_err,
-                )
-                continue
+                    record_reminder(
+                        db_path, idea_id, idea["filename"],
+                        idea["readiness"], idea["empty_sections"],
+                    )
+                    sent_count += 1
+                except Exception as send_err:
+                    logger.error(
+                        "run_enrichment_check: failed to send reminder for %s: %s",
+                        idea_id, send_err,
+                    )
+                    continue
 
-        logger.info(
-            "run_enrichment_check: complete — %d ideas scanned, %d reminders sent",
-            len(ideas), sent_count,
-        )
+            lp.summary = f"{sent_count} напоминаний отправлено из {len(ideas)} идей"
+            lp.details = {
+                "ideas_scanned": len(ideas),
+                "reminders_sent": sent_count,
+                "skipped_cooldown": skipped_cooldown,
+            }
+
+            logger.info(
+                "run_enrichment_check: complete — %d ideas scanned, %d reminders sent",
+                len(ideas), sent_count,
+            )
     except Exception as e:
         logger.error("run_enrichment_check: failed: %s", e, exc_info=True)
 

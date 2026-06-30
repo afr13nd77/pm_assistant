@@ -231,7 +231,14 @@ def main():
 
     elif args.command == "synthesize":
         from .synthesizer import synthesize
-        result = synthesize(vault_path, notify=args.notify, min_ideas=args.min_ideas, dry_run=args.dry_run)
+        from shared.system_log import LoggedProcess
+        with LoggedProcess("synthesis", source="ke-cron") as lp:
+            result = synthesize(vault_path, notify=args.notify, min_ideas=args.min_ideas, dry_run=args.dry_run)
+            status_val = result.get("status", "unknown")
+            lp.summary = "Синтез выполнен" if status_val == "ok" else f"Синтез: {status_val}"
+            if status_val == "skip":
+                lp.status = "info"
+            lp.details = {"status": status_val}
         _output_json(result)
         sys.exit(0 if result["status"] in ("ok", "skip") else 1)
 
@@ -249,7 +256,11 @@ def main():
 
     elif args.command == "fetch-meetings":
         from .meeting_fetcher.fetcher import fetch_new_meetings
-        result = fetch_new_meetings(vault_path, notify=args.notify, dry_run=args.dry_run)
+        from shared.system_log import LoggedProcess
+        with LoggedProcess("fetch-meetings", source="ke-cron") as lp:
+            result = fetch_new_meetings(vault_path, notify=args.notify, dry_run=args.dry_run)
+            lp.summary = f"Fetch meetings: status={result.get('status', 'unknown')}"
+            lp.details = {"status": result.get("status", "")}
         _output_json(result)
         sys.exit(0 if result["status"] in ("ok", "skip") else 1)
 
@@ -383,26 +394,31 @@ def main():
             target_domains = all_domains()
 
         logger.info(f"rebuild-index: rebuilding for domains={target_domains}")
-        rebuilt = []
-        for domain in target_domains:
-            for artifact_type in _ARTIFACT_TYPES:
-                try:
-                    index_path = update_domain_index(domain, artifact_type)
-                    artifact_dir = index_path.parent
-                    entries = sum(
-                        1 for f in artifact_dir.glob("*.md")
-                        if f.name not in ("index.md", "log.md")
-                    )
-                    rebuilt.append({"domain": domain, "artifact_type": artifact_type, "entries": entries})
-                    logger.info(
-                        f"rebuild-index: rebuilt domain={domain!r} artifact_type={artifact_type!r} entries={entries}"
-                    )
-                except Exception as exc:
-                    logger.error(
-                        f"rebuild-index: failed for domain={domain!r} artifact_type={artifact_type!r}: {exc}"
-                    )
+        from shared.system_log import LoggedProcess
+        with LoggedProcess("rebuild-index", source="ke-cron") as lp:
+            rebuilt = []
+            for domain in target_domains:
+                for artifact_type in _ARTIFACT_TYPES:
+                    try:
+                        index_path = update_domain_index(domain, artifact_type)
+                        artifact_dir = index_path.parent
+                        entries = sum(
+                            1 for f in artifact_dir.glob("*.md")
+                            if f.name not in ("index.md", "log.md")
+                        )
+                        rebuilt.append({"domain": domain, "artifact_type": artifact_type, "entries": entries})
+                        logger.info(
+                            f"rebuild-index: rebuilt domain={domain!r} artifact_type={artifact_type!r} entries={entries}"
+                        )
+                    except Exception as exc:
+                        logger.error(
+                            f"rebuild-index: failed for domain={domain!r} artifact_type={artifact_type!r}: {exc}"
+                        )
+            result = {"status": "ok", "rebuilt": rebuilt, "total_indices": len(rebuilt)}
+            lp.summary = f"{result.get('total_indices', 0)} индексов перестроено"
+            lp.details = {"total_indices": result.get("total_indices", 0)}
         logger.info(f"rebuild-index: total_indices={len(rebuilt)}")
-        _output_json({"status": "ok", "rebuilt": rebuilt, "total_indices": len(rebuilt)})
+        _output_json(result)
         sys.exit(0)
 
     elif args.command == "ingest-clippings":
@@ -421,7 +437,11 @@ def main():
         _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
         from .jira_fetcher.fetcher import sync
         logger.info(f"jira-sync: starting sync, vault={vault_path}, notify={args.notify}, dry_run={args.dry_run}")
-        result = sync(vault_path, notify=args.notify, dry_run=args.dry_run)
+        from shared.system_log import LoggedProcess
+        with LoggedProcess("jira-sync", source="ke-cron") as lp:
+            result = sync(vault_path, notify=args.notify, dry_run=args.dry_run)
+            lp.summary = f"Jira sync: status={result.get('status', 'unknown')}"
+            lp.details = {"status": result.get("status", "")}
         logger.info(f"jira-sync: completed, status={result.get('status')}")
         _output_json(result)
         sys.exit(0 if result["status"] in ("ok", "skip") else 1)
@@ -521,7 +541,11 @@ def main():
         _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
         from .linter import lint
         logger.info("lint: starting vault health check, vault=%s", vault_path)
-        result = lint(vault_path)
+        from shared.system_log import LoggedProcess
+        with LoggedProcess("linter", source="ke-cron") as lp:
+            result = lint(vault_path)
+            lp.summary = f"Проверка завершена. Проблем: {result.get('summary', {}).get('total_issues', 0)}"
+            lp.details = {"total_issues": result.get("summary", {}).get("total_issues", 0)}
         logger.info("lint: completed, total_issues=%d", result["summary"]["total_issues"])
         _output_json(result)
         sys.exit(0)
@@ -557,7 +581,11 @@ def main():
                     "processed_count": pm.get("processed_count"),
                     "backlog_count": pm.get("backlog_count"),
                 }
-            save_history(vault_path, entry)
+            from shared.system_log import LoggedProcess
+            with LoggedProcess("health-score", source="ke-cron") as lp:
+                save_history(vault_path, entry)
+                lp.summary = f"Score: {entry.get('score', 0)}, grade: {entry.get('grade', 'unknown')}"
+                lp.details = {"score": entry.get("score", 0), "grade": entry.get("grade", "")}
             logger.info("health: saved history entry for date=%s", today)
 
         if args.json_output:
@@ -603,7 +631,11 @@ def main():
         from .decay_engine import load_config, recalc_vault
         logger.info("decay-recalc: starting, vault=%s, config=%s, dry_run=%s", vault_path, args.config, args.dry_run)
         config = load_config(args.config)
-        result = recalc_vault(vault_path, config, dry_run=args.dry_run)
+        from shared.system_log import LoggedProcess
+        with LoggedProcess("decay-recalc", source="ke-cron") as lp:
+            result = recalc_vault(vault_path, config, dry_run=args.dry_run)
+            lp.summary = f"{result.get('processed', 0)} файлов обработано, {len(result.get('transitions', []))} переходов"
+            lp.details = {"items_processed": result.get("processed", 0), "skipped": result.get("skipped", 0), "transitions_count": len(result.get("transitions", [])), "errors_count": len(result.get("errors", []))}
         logger.info(
             "decay-recalc: completed, processed=%d, skipped=%d, transitions=%d, errors=%d",
             result["processed"], result["skipped"], len(result["transitions"]), len(result["errors"])
@@ -711,7 +743,11 @@ def main():
         logger.info("process-queue: starting, vault=%s, limit=%s, notify=%s",
                     vault_path, args.limit, args.notify)
         try:
-            result = processor.process_pending(vault_path, limit=args.limit, notify=args.notify)
+            from shared.system_log import LoggedProcess
+            with LoggedProcess("process-queue", source="ke-cron") as lp:
+                result = processor.process_pending(vault_path, limit=args.limit, notify=args.notify)
+                lp.summary = f"{result.get('processed', 0)} обработано, {result.get('failed', 0)} ошибок"
+                lp.details = {"processed": result.get("processed", 0), "failed": result.get("failed", 0), "requeued": result.get("requeued", 0), "reclaimed": result.get("reclaimed", 0)}
             logger.info(
                 "process-queue: completed, reclaimed=%d, processed=%d, failed=%d, requeued=%d",
                 result.get("reclaimed", 0), result.get("processed", 0),

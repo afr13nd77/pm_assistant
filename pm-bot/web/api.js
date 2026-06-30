@@ -442,6 +442,25 @@ var api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
+  },
+
+  /** GET /api/v1/system-log -- system process log with optional filters */
+  systemLog: function(params) {
+    var parts = [];
+    if (params) {
+      if (params.period) parts.push('period=' + encodeURIComponent(params.period));
+      if (params.process_type) parts.push('process_type=' + encodeURIComponent(params.process_type));
+      if (params.status) parts.push('status=' + encodeURIComponent(params.status));
+      if (params.limit) parts.push('limit=' + params.limit);
+      if (params.offset) parts.push('offset=' + params.offset);
+    }
+    var qs = parts.length ? '?' + parts.join('&') : '';
+    return apiFetch('/system-log' + qs);
+  },
+
+  /** GET /api/v1/system-log/stats -- system log aggregated statistics */
+  systemLogStats: function() {
+    return apiFetch('/system-log/stats');
   }
 };
 
