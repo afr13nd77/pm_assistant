@@ -1,0 +1,10 @@
+Обязательные поля core-digest для типа Meeting:
+- тип: [sprint-review|planning|standup|one-on-one|retrospective|ad-hoc]
+- дата: [YYYY-MM-DD]
+- участники: [список]
+- решения:
+  - [решение 1]
+  - [решение 2]
+- action_items:
+  - [задача -> ответственный, дедлайн]
+- follow_up: [дата и тема следующей встречи]

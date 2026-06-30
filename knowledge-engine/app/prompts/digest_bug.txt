@@ -1,0 +1,7 @@
+Обязательные поля core-digest для типа Bug:
+- суть: [одно предложение]
+- severity: [critical|major|minor|trivial]
+- статус: [open|in-progress|fixed|closed|wontfix]
+- компонент: [затронутый модуль]
+- причина: [root cause если известна]
+- решение: [описание фикса если есть]

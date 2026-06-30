@@ -1,0 +1,8 @@
+Обязательные поля core-digest для типа Epic:
+- суть: [одно предложение]
+- статус: [draft|planned|in-progress|done|cancelled]
+- прогресс: [X/Y задач, N%]
+- задачи:
+  - [ключевые задачи]
+- зависимости: [layer1p-{type}-{slug}, ...]
+- дедлайн: [YYYY-MM-DD или Q#]

@@ -1,0 +1,8 @@
+Обязательные поля core-digest для типа Jira Draft:
+- тикет: [ключ тикета если есть]
+- тип: [task|bug|story|epic]
+- статус: [draft|created|in-progress|done]
+- суть: [одно предложение]
+- приоритет: [critical|high|medium|low]
+- компонент: [модуль/сервис]
+- зависимости: [layer1p-{type}-{slug}, ...]

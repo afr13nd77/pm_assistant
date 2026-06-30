@@ -1,0 +1,8 @@
+Обязательные поля core-digest для типа User Story:
+- суть: [As a..., I want..., so that...]
+- acceptance_criteria:
+  - [критерий 1]
+  - [критерий 2]
+- статус: [draft|ready|in-progress|done]
+- epic: [layer1p-epic-{slug}]
+- приоритет: [must|should|could|wont]

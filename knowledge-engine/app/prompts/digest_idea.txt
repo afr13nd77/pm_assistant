@@ -1,0 +1,7 @@
+Обязательные поля core-digest для типа Idea:
+- суть: [одно предложение]
+- статус: [raw|enriched|analyzed|promoted|rejected]
+- domain: [домен из vault]
+- tags: [перечень тегов]
+- потенциал: [оценка потенциала]
+- связанные_идеи: [layer1p-idea-{slug}, ...]
