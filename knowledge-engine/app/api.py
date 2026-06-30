@@ -14,7 +14,6 @@ import re
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from shared import vault_paths as _vp
@@ -101,6 +100,11 @@ class DecayTouchRequest(BaseModel):
 class DecaySetTierRequest(BaseModel):
     filepath: str
     tier: str
+
+
+class ProcessQueueRequest(BaseModel):
+    limit: Optional[int] = None
+    notify: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -804,4 +808,112 @@ def decay_snapshot():
         return result
     except Exception as exc:
         logger.error("API decay/snapshot error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# 24. GET /api/v1/meeting-queue/status  (BL-145, US-03 — публичный контракт BL-144)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/meeting-queue/status")
+def meeting_queue_status():
+    """Счётчики очереди + список юнитов из всех 4 папок с их meta.
+
+    Публичный контракт наблюдаемости для BL-144 (design §3.7, §6):
+    {counts: {pending,processing,done,failed}, units: [{unit_id, source, subject,
+    status, attempts, output_file, last_error, updated_at}, ...]}.
+    """
+    logger.info("API meeting-queue/status: collecting queue counts and units")
+    try:
+        import json as _json
+
+        from shared.meeting_queue import (
+            meeting_queue_done,
+            meeting_queue_failed,
+            meeting_queue_pending,
+            meeting_queue_processing,
+        )
+
+        from .meeting_fetcher.queue import MeetingQueue
+
+        vault_path = _vault_path_str()
+        queue = MeetingQueue(vault_path)
+        counts = queue.status_counts()
+
+        folders = {
+            "pending": meeting_queue_pending(vault_path),
+            "processing": meeting_queue_processing(vault_path),
+            "done": meeting_queue_done(vault_path),
+            "failed": meeting_queue_failed(vault_path),
+        }
+
+        units: list[dict] = []
+        for folder_status, folder in folders.items():
+            for meta_file in sorted(folder.glob("*.meta.json")):
+                unit_id = meta_file.name[: -len(".meta.json")]
+                try:
+                    meta = _json.loads(meta_file.read_text(encoding="utf-8"))
+                except (OSError, ValueError) as exc:
+                    logger.warning(
+                        "API meeting-queue/status: unreadable meta %s: %s",
+                        meta_file, exc,
+                    )
+                    units.append({
+                        "unit_id": unit_id,
+                        "source": None,
+                        "subject": None,
+                        "status": folder_status,
+                        "attempts": None,
+                        "output_file": None,
+                        "last_error": "unreadable meta",
+                        "updated_at": None,
+                    })
+                    continue
+                units.append({
+                    "unit_id": meta.get("unit_id", unit_id),
+                    "source": meta.get("source"),
+                    "subject": meta.get("subject"),
+                    "status": meta.get("status", folder_status),
+                    "attempts": meta.get("attempts", 0),
+                    "output_file": meta.get("output_file"),
+                    "last_error": meta.get("last_error"),
+                    "updated_at": meta.get("updated_at"),
+                })
+
+        result = {"counts": counts, "units": units}
+        logger.info(
+            "API meeting-queue/status: completed, counts=%s, units=%d",
+            counts, len(units),
+        )
+        return result
+    except Exception as exc:
+        logger.error("API meeting-queue/status error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# 25. POST /api/v1/process-queue  (BL-145, US-03 — ручной триггер обработки)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/process-queue")
+def process_queue(req: ProcessQueueRequest):
+    """Ручной триггер drain-прохода очереди: processor.process_pending (design §3.7).
+
+    Тело: {limit: int|None, notify: bool=False}. Возвращает результат
+    process_pending: {status, reclaimed, processed, failed, requeued, details}.
+    """
+    logger.info("API process-queue: limit=%s, notify=%s", req.limit, req.notify)
+    try:
+        from .meeting_fetcher.processor import process_pending
+
+        result = process_pending(
+            _vault_path_str(), limit=req.limit, notify=req.notify,
+        )
+        logger.info(
+            "API process-queue: completed, status=%s, processed=%s, failed=%s",
+            result.get("status"), result.get("processed"), result.get("failed"),
+        )
+        return result
+    except Exception as exc:
+        logger.error("API process-queue error: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))

@@ -445,3 +445,87 @@ class TestBackwardsCompat:
         state = _empty_state()
         assert "failed" in state
         assert state["failed"] == {}
+
+    def test_loads_old_state_without_enqueued_key(self, vault, state_path):
+        """State files from before this change (no 'enqueued' key) should load fine."""
+        old_state = {
+            "version": 1,
+            "last_run": "2026-04-25T10:00:00",
+            "processed": {
+                "<msg-1>": {
+                    "subject": "Test meeting",
+                    "date": "2026-04-25T09:00:00",
+                    "attachment": "test.txt",
+                    "output_file": "docs/test.md",
+                    "type": "daily",
+                    "processed_at": "2026-04-25T10:00:00",
+                }
+            },
+            "failed": {},
+        }
+        state_path.write_text(json.dumps(old_state), encoding="utf-8")
+
+        s = State(str(vault))
+        # Processed data should load correctly
+        assert s.is_processed("<msg-1>") is True
+        # Enqueued dict should be initialized empty (back-compat)
+        assert s._data["enqueued"] == {}
+        assert s.is_enqueued("<msg-1>") is False
+        # Should be able to use mark_enqueued
+        s.mark_enqueued("<msg-1>", "uid-1", "Test meeting", "2026-04-25")
+        assert s.is_enqueued("<msg-1>") is True
+
+    def test_empty_state_includes_enqueued_key(self):
+        """_empty_state() should always include 'enqueued' key."""
+        state = _empty_state()
+        assert "enqueued" in state
+        assert state["enqueued"] == {}
+
+
+# ---------------------------------------------------------------------------
+# mark_enqueued / is_enqueued
+# ---------------------------------------------------------------------------
+
+class TestMarkEnqueued:
+    def test_adds_entry_and_persists(self, vault, state_path):
+        s = State(str(vault))
+        s.mark_enqueued(
+            message_id="<enq@example.com>",
+            unit_id="uid-1",
+            subject="Daily standup",
+            date="2026-06-30T09:00:00+03:00",
+        )
+
+        # In-memory state
+        assert s.is_enqueued("<enq@example.com>") is True
+        entry = s._data["enqueued"]["<enq@example.com>"]
+        assert entry["unit_id"] == "uid-1"
+        assert entry["subject"] == "Daily standup"
+        assert entry["date"] == "2026-06-30T09:00:00+03:00"
+        assert "enqueued_at" in entry
+
+        # Persisted to disk
+        assert state_path.exists()
+        on_disk = json.loads(state_path.read_text(encoding="utf-8"))
+        assert "<enq@example.com>" in on_disk["enqueued"]
+        assert on_disk["last_run"] is not None
+
+    def test_enqueued_survives_reload(self, vault):
+        """Enqueued state written by one instance is readable by another."""
+        s1 = State(str(vault))
+        s1.mark_enqueued("<persist@example.com>", "uid-9", "Persist test", "2026-06-30")
+
+        s2 = State(str(vault))
+        assert s2.is_enqueued("<persist@example.com>") is True
+        assert s2._data["enqueued"]["<persist@example.com>"]["unit_id"] == "uid-9"
+
+    def test_is_enqueued_false_for_unknown(self, vault):
+        s = State(str(vault))
+        assert s.is_enqueued("<unknown@example.com>") is False
+
+    def test_save_raises_on_write_failure(self, vault):
+        """If atomic_write fails, mark_enqueued should propagate the exception."""
+        s = State(str(vault))
+        with patch("app.meeting_fetcher.state.atomic_write", side_effect=OSError("disk full")):
+            with pytest.raises(OSError, match="disk full"):
+                s.mark_enqueued("<fail@example.com>", "uid-x", "Fail", "2026-06-30")

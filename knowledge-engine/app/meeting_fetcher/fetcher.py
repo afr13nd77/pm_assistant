@@ -1,9 +1,17 @@
 """
-Fetcher orchestrator for Meeting Fetcher pipeline.
+Fetcher orchestrator for Meeting Fetcher pipeline (BL-145 refactor).
 
-Ties together the entire meeting fetch pipeline:
-IMAP fetch -> filter by state -> Claude processing -> classification
--> file write -> enrichment -> notification.
+After the meeting-processing-queue refactor (design §1.3, §3.1) the Fetch phase
+is LLM-free: it only fills the file-based queue. The pipeline is now:
+
+    IMAP fetch -> dedup gate (is_enqueued | is_processed) -> enqueue() to pending/
+
+LLM processing (Claude), classification, wiki write, jira sync, enrichment and
+per-protocol notifications moved to the Process phase (processor.py). The helper
+functions below (``_inject_source_file``, ``_build_fetcher_log_entry``,
+``_unique_filepath``, ``save_raw_fallback``) are kept here intentionally — they
+are reused/migrated by the Process worker; only their CALLS were removed from
+``fetch_new_meetings``.
 """
 
 import logging
@@ -14,11 +22,8 @@ from pathlib import Path
 
 import requests
 
-from shared.file_writer import atomic_write
+from shared.meeting_queue import enqueue
 
-from .. import claude_client
-from ..enricher import enrich
-from .classifier import classify_type, extract_type, make_daily_filename, make_filename, route_protocol
 from .imap_client import EmailAttachment, IMAPError, fetch_emails
 from .state import State
 
@@ -343,24 +348,32 @@ def fetch_new_meetings(
     notify: bool = False,
     dry_run: bool = False,
 ) -> dict:
-    """Run the full meeting-fetch pipeline.
+    """Fetch new meeting emails and enqueue them for processing (BL-145).
+
+    This is now an LLM-free Fetch phase (design §1.3, §3.1): it only fills the
+    file-based queue ``raw/meeting-queue/pending/``. The actual transcript ->
+    protocol conversion is performed by the separate Process worker
+    (``processor.py``), triggered by the queue watchdog / cron.
 
     Steps:
       1. Load IMAP credentials from environment.
       2. Fetch emails via IMAP.
-      3. Filter out already-processed emails using state tracker.
-      4. (dry_run) Return counts without processing.
-      5. For each new attachment: Claude -> classify -> write -> enrich -> state.
-      6. Send notifications if requested.
+      3. Dedup gate: drop attachments already enqueued OR already processed
+         (back-compat with the old monolith) — AC-07.
+      4. (dry_run) Return counts without enqueueing.
+      5. For each new attachment: ``shared.meeting_queue.enqueue`` + mark
+         enqueued in state.
+      6. Send a summary notification if requested.
 
     Args:
         vault_path: Absolute path to the Obsidian vault root.
-        notify: Whether to send Telegram notifications.
-        dry_run: If True, only report counts without downloading or processing.
+        notify: Whether to send a Telegram summary notification.
+        dry_run: If True, only report counts without enqueueing.
 
     Returns:
-        A dict with keys: status, total_emails, already_processed,
-        newly_processed, errors, details, message.
+        A compatible dict (AC-09) with keys: status, total_emails,
+        already_processed, newly_processed (= enqueued), enqueued,
+        skipped_failed (= 0), errors, details, message.
     """
     logger.info(
         "fetch_new_meetings started: vault_path=%s, notify=%s, dry_run=%s",
@@ -406,18 +419,24 @@ def fetch_new_meetings(
     total_emails = len(attachments)
 
     # ------------------------------------------------------------------ #
-    # Step 3: Filter by state (dedup)
+    # Step 3: Dedup gate (AC-07): skip already-enqueued OR already-processed.
+    #         is_processed keeps back-compat with emails handled by the old
+    #         monolith (design §2.5, §7).
     # ------------------------------------------------------------------ #
     logger.info("fetch_new_meetings: loading state from vault")
     state = State(vault_path)
 
     new_attachments = [
-        a for a in attachments if not state.is_processed(a.message_id)
+        a
+        for a in attachments
+        if not (
+            state.is_enqueued(a.message_id) or state.is_processed(a.message_id)
+        )
     ]
     already_processed = total_emails - len(new_attachments)
 
     logger.info(
-        "fetch_new_meetings: %d total, %d already processed, %d new",
+        "fetch_new_meetings: %d total, %d already enqueued/processed, %d new",
         total_emails,
         already_processed,
         len(new_attachments),
@@ -430,7 +449,7 @@ def fetch_new_meetings(
         msg = (
             f"Dry run: {total_emails} email(s), "
             f"{len(new_attachments)} new, "
-            f"{already_processed} already processed"
+            f"{already_processed} already enqueued/processed"
         )
         logger.info("fetch_new_meetings: %s", msg)
         return {
@@ -438,6 +457,7 @@ def fetch_new_meetings(
             "total_emails": total_emails,
             "already_processed": already_processed,
             "newly_processed": 0,
+            "enqueued": 0,
             "skipped_failed": 0,
             "errors": 0,
             "details": [],
@@ -445,286 +465,80 @@ def fetch_new_meetings(
         }
 
     # ------------------------------------------------------------------ #
-    # Step 5: Process each new attachment
+    # Step 5: Enqueue each new attachment (NO LLM — AC-01)
     # ------------------------------------------------------------------ #
     newly_processed = 0
     errors = 0
-    skipped_failed = 0
     details: list[dict] = []
 
     for attachment in new_attachments:
-        # Skip emails that have permanently failed (max retries exceeded)
-        if state.is_max_retried(attachment.message_id):
-            skipped_failed += 1
-            logger.warning(
-                "fetch_new_meetings: skipping permanently failed email "
-                "message_id=%s, subject='%s'",
-                attachment.message_id,
-                attachment.subject,
-            )
-            continue
-
         logger.info(
-            "fetch_new_meetings: processing attachment message_id=%s, "
+            "fetch_new_meetings: enqueueing attachment message_id=%s, "
             "filename=%s (%d chars)",
             attachment.message_id,
             attachment.filename,
             len(attachment.content),
         )
-        raw_saved = False
         try:
-            # 5a. Save raw transcript (always, before Claude processing)
-            raw_path = save_raw_fallback(vault_path, attachment)
-            raw_saved = True
-            logger.info(
-                "fetch_new_meetings: raw transcript saved to %s", raw_path
-            )
-
-            # 5b. Claude processing
-            logger.info(
-                "fetch_new_meetings: calling Claude API for transcript "
-                "(%d chars)",
-                len(attachment.content),
-            )
-            protocol_md = claude_client.process_meeting_transcript(
-                attachment.content
-            )
-            logger.info(
-                "fetch_new_meetings: Claude returned protocol (%d chars)",
-                len(protocol_md),
-            )
-
-            # 5b-bis. Inject source_file into protocol (BL-133, non-fatal)
-            try:
-                raw_rel = str(raw_path.relative_to(Path(vault_path))).replace("\\", "/")
-                protocol_md = _inject_source_file(protocol_md, raw_rel)
-            except Exception as src_err:
-                logger.warning(
-                    "fetch_new_meetings: source_file injection failed "
-                    "(non-fatal): %s",
-                    src_err,
-                )
-
-            # 5c. Classification (subject heuristic first, LLM fallback)
-            protocol_type = classify_type(protocol_md, subject=attachment.subject)
-            logger.info(
-                "fetch_new_meetings: classified as type='%s'", protocol_type
-            )
-
-            target_folder = route_protocol(protocol_type)
-            logger.info(
-                "fetch_new_meetings: routed to folder='%s'", target_folder
-            )
-
-            # 5d. Ensure target directory exists (before filename generation,
-            #     because make_daily_filename needs to scan the directory)
-            target_dir = Path(vault_path) / target_folder
-            target_dir.mkdir(parents=True, exist_ok=True)
-            logger.info(
-                "fetch_new_meetings: target directory ensured: %s", target_dir
-            )
-
-            if protocol_type == "daily":
-                filename = make_daily_filename(target_dir)
-            else:
-                filename = make_filename(attachment.date, attachment.subject)
-            logger.info(
-                "fetch_new_meetings: generated filename='%s'", filename
-            )
-
-            # 5e. Handle filename collision
-            target_path = _unique_filepath(target_dir, filename)
-            logger.info(
-                "fetch_new_meetings: target path resolved: %s", target_path
-            )
-
-            # 5f. Write protocol file
-            atomic_write(str(target_path), protocol_md)
-            logger.info(
-                "fetch_new_meetings: protocol written to %s", target_path.name
-            )
-
-            # 5f-bis. Jira key sync — all protocol types (non-fatal)
-            jira_sync_detail = {}
-            try:
-                from ..jira_key_sync import sync_jira_keys, patch_jira_links
-                jira_sync_detail = sync_jira_keys(
-                    protocol_md, vault_path
-                )
-                logger.info(
-                    "fetch_new_meetings: jira_key_sync keys=%d missing=%d "
-                    "imported=%d failed=%d",
-                    len(jira_sync_detail.get("keys", [])),
-                    len(jira_sync_detail.get("missing", [])),
-                    len(jira_sync_detail.get("imported", [])),
-                    len(jira_sync_detail.get("failed", [])),
-                )
-                patch_jira_links(
-                    str(target_path),
-                    jira_sync_detail.get("keys_map", {}),
-                )
-            except Exception as jira_err:
-                logger.warning(
-                    "fetch_new_meetings: jira_key_sync failed for %s "
-                    "(non-fatal): %s",
-                    target_path.name,
-                    jira_err,
-                )
-
-            # 5g. Enrichment (non-fatal)
-            links_found = 0
-            try:
-                logger.info(
-                    "fetch_new_meetings: starting enrichment for %s",
-                    target_path.name,
-                )
-                enrich_result = enrich(str(target_path), vault_path)
-                links_found = enrich_result.get("links_found", 0)
-                logger.info(
-                    "fetch_new_meetings: enrichment complete, "
-                    "links_found=%d, status=%s",
-                    links_found,
-                    enrich_result.get("status", "unknown"),
-                )
-            except Exception as enrich_err:
-                logger.warning(
-                    "fetch_new_meetings: enrichment failed for %s "
-                    "(non-fatal): %s",
-                    target_path.name,
-                    enrich_err,
-                )
-
-            # 5h. Mark as processed in state
-            relative_output = str(
-                target_path.relative_to(Path(vault_path))
-            )
-            date_iso = attachment.date.isoformat()
-
-            state.mark_processed(
-                message_id=attachment.message_id,
+            unit = enqueue(
+                vault_path,
+                raw_text=attachment.content,
+                source="email",
                 subject=attachment.subject,
-                date=date_iso,
-                attachment=attachment.filename,
-                output_file=relative_output,
-                protocol_type=protocol_type,
+                date=attachment.date,
+                message_id=attachment.message_id,
+                source_filename=attachment.filename,
             )
-            logger.info(
-                "fetch_new_meetings: marked as processed, message_id=%s",
+
+            # enqueue returns None for an empty transcript — nothing to process.
+            if unit is None:
+                logger.warning(
+                    "fetch_new_meetings: empty transcript skipped, "
+                    "message_id=%s, subject='%s'",
+                    attachment.message_id,
+                    attachment.subject,
+                )
+                continue
+
+            state.mark_enqueued(
                 attachment.message_id,
+                unit.unit_id,
+                attachment.subject,
+                attachment.date.isoformat(),
             )
 
             newly_processed += 1
-            detail = {
-                "file": str(target_path),
-                "type": protocol_type,
-                "links_found": links_found,
-                "jira_sync": jira_sync_detail,
-            }
-            details.append(detail)
-
-            # 5h-bis. Non-critical: append entry to root LOG.md
-            try:
-                log_entry = _build_fetcher_log_entry(
-                    filename=target_path.name,
-                    protocol_type=protocol_type,
-                    protocol_md=protocol_md,
-                    msg_date=attachment.date,
-                    target_folder=target_folder,
-                )
-                from ..ingest import _append_root_log
-                _append_root_log(log_entry)
-                logger.info(
-                    "fetch_new_meetings: LOG.md entry appended for %s",
-                    target_path.name,
-                )
-            except Exception as log_err:
-                logger.warning(
-                    "fetch_new_meetings: failed to append LOG.md entry for %s "
-                    "(non-fatal): %s",
-                    target_path.name,
-                    log_err,
-                )
-
-            # 5i. Per-protocol notification
-            if notify:
-                notify_text = (
-                    "Протокол встречи готов\n\n"
-                    f"Файл: {target_path.name}\n"
-                    f"Тип: {protocol_type}\n"
-                    f"Папка: {target_folder}/\n"
-                    f"Связей найдено: {links_found}"
-                )
-                if jira_sync_detail.get("keys"):
-                    keys_str = ", ".join(jira_sync_detail["keys"])
-                    notify_text += f"\n📋 Задачи: {keys_str}"
-                    imported = jira_sync_detail.get("imported", [])
-                    if imported:
-                        imp_str = ", ".join(
-                            f"{i['key']}→{i['domain']}" for i in imported
-                        )
-                        notify_text += f"\n⬇️ Импортировано: {imp_str}"
-                    failed = jira_sync_detail.get("failed", [])
-                    if failed:
-                        fail_str = ", ".join(f["key"] for f in failed)
-                        notify_text += f"\n⚠️ Ошибка импорта: {fail_str}"
-                _notify(notify_text)
-
-        except Exception as proc_err:
-            logger.error(
-                "fetch_new_meetings: processing failed for message_id=%s: %s",
+            details.append(
+                {
+                    "unit_id": unit.unit_id,
+                    "subject": attachment.subject,
+                    "source": "email",
+                    "status": "pending",
+                }
+            )
+            logger.info(
+                "fetch_new_meetings: enqueued message_id=%s as unit_id=%s",
                 attachment.message_id,
-                proc_err,
+                unit.unit_id,
             )
-            if not raw_saved:
-                try:
-                    fallback_path = save_raw_fallback(vault_path, attachment)
-                    logger.info(
-                        "fetch_new_meetings: raw fallback saved at %s",
-                        fallback_path,
-                    )
-                except Exception as fallback_err:
-                    logger.error(
-                        "fetch_new_meetings: raw fallback also failed for "
-                        "message_id=%s: %s",
-                        attachment.message_id,
-                        fallback_err,
-                    )
-
-            # Track failure in state for retry limiting
-            state.mark_failed(
-                attachment.message_id, attachment.subject, str(proc_err)
+        except Exception as enq_err:
+            logger.error(
+                "fetch_new_meetings: enqueue failed for message_id=%s: %s",
+                attachment.message_id,
+                enq_err,
             )
-
-            # Send one-time notification when email becomes permanently failed
-            if state.is_max_retried(attachment.message_id):
-                logger.warning(
-                    "fetch_new_meetings: message_id=%s has reached max retries, "
-                    "marked as permanently failed",
-                    attachment.message_id,
-                )
-                if notify:
-                    _notify(
-                        "Meeting Fetcher: письмо помечено как необработаемое\n\n"
-                        f"Тема: {attachment.subject}\n"
-                        f"Ошибка: {proc_err}\n"
-                        f"Попытки: 3/3\n"
-                        f"Транскрипт сохранён в raw/inbound/"
-                    )
-
             errors += 1
 
     # ------------------------------------------------------------------ #
     # Step 6: Summary notification
     # ------------------------------------------------------------------ #
     summary_msg = (
-        f"Meeting Fetcher: обработка завершена\n\n"
+        f"Meeting Fetcher: {newly_processed} писем поставлено в очередь\n\n"
         f"Всего писем: {total_emails}\n"
-        f"Новых обработано: {newly_processed}\n"
-        f"Пропущено (уже обработаны): {already_processed}\n"
+        f"Поставлено в очередь: {newly_processed}\n"
+        f"Пропущено (уже в очереди/обработаны): {already_processed}\n"
         f"Ошибок: {errors}"
     )
-    if skipped_failed > 0:
-        summary_msg += f"\nПропущено (неисправимые ошибки): {skipped_failed}"
 
     if notify:
         logger.info("fetch_new_meetings: sending summary notification")
@@ -733,15 +547,16 @@ def fetch_new_meetings(
     # ------------------------------------------------------------------ #
     # Step 7: Return result
     # ------------------------------------------------------------------ #
+    # status stays 'ok' when there are no enqueue errors — LLM is NOT called
+    # here, so LLM unavailability never turns this into an error (AC-01).
     status = "ok" if errors == 0 else "error"
     logger.info(
-        "fetch_new_meetings completed: status=%s, total=%d, new=%d, "
-        "skipped=%d, skipped_failed=%d, errors=%d",
+        "fetch_new_meetings completed: status=%s, total=%d, enqueued=%d, "
+        "already=%d, errors=%d",
         status,
         total_emails,
         newly_processed,
         already_processed,
-        skipped_failed,
         errors,
     )
 
@@ -750,7 +565,8 @@ def fetch_new_meetings(
         "total_emails": total_emails,
         "already_processed": already_processed,
         "newly_processed": newly_processed,
-        "skipped_failed": skipped_failed,
+        "enqueued": newly_processed,
+        "skipped_failed": 0,
         "errors": errors,
         "details": details,
         "message": summary_msg,
@@ -764,7 +580,7 @@ def _error_result(message: str) -> dict:
         message: Human-readable error description.
 
     Returns:
-        FetchResult dict with status="error" and zero counts.
+        FetchResult dict with status="error" and zero counts (AC-09 keys).
     """
     logger.debug("_error_result: %s", message)
     return {
@@ -772,6 +588,7 @@ def _error_result(message: str) -> dict:
         "total_emails": 0,
         "already_processed": 0,
         "newly_processed": 0,
+        "enqueued": 0,
         "skipped_failed": 0,
         "errors": 1,
         "details": [],

@@ -24,6 +24,7 @@ def _empty_state() -> dict:
         "last_run": None,
         "processed": {},
         "failed": {},
+        "enqueued": {},
     }
 
 
@@ -211,6 +212,66 @@ class State:
         logger.info("State.get_failed_count: %d permanently failed", count)
         return count
 
+    def mark_enqueued(
+        self,
+        message_id: str,
+        unit_id: str,
+        subject: str,
+        date: str,
+    ) -> None:
+        """Record that a message was enqueued for processing. Persist to disk.
+
+        ``enqueued`` is a permanent marker — it is never cleared. It records
+        that a message-id has been handed off to the processing queue, to
+        prevent re-enqueueing the same email across runs.
+
+        Args:
+            message_id: RFC-822 Message-ID of the email.
+            unit_id:    Identifier of the queued processing unit.
+            subject:    Email subject line.
+            date:       ISO-8601 date string of the meeting email.
+        """
+        logger.info(
+            "State.mark_enqueued: message_id=%s unit_id=%s subject=%s",
+            message_id,
+            unit_id,
+            subject,
+        )
+        try:
+            self._data["enqueued"][message_id] = {
+                "unit_id": unit_id,
+                "subject": subject,
+                "date": date,
+                "enqueued_at": datetime.now().isoformat(),
+            }
+            self._save()
+            logger.info(
+                "State.mark_enqueued: OK, total enqueued=%d",
+                len(self._data["enqueued"]),
+            )
+        except Exception as exc:
+            logger.error(
+                "State.mark_enqueued: failed for message_id=%s: %s",
+                message_id,
+                exc,
+            )
+            raise
+
+    def is_enqueued(self, message_id: str) -> bool:
+        """Check if a message-id was already enqueued for processing.
+
+        Args:
+            message_id: RFC-822 Message-ID of the email.
+
+        Returns:
+            True if already enqueued, False otherwise.
+        """
+        result = message_id in self._data["enqueued"]
+        logger.info(
+            "State.is_enqueued: message_id=%s result=%s", message_id, result
+        )
+        return result
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -233,6 +294,11 @@ class State:
         if "failed" not in self._data:
             logger.info("State._load: migrating state — adding missing 'failed' key")
             self._data["failed"] = {}
+
+        # Backwards compat: old state files may lack the "enqueued" key
+        if "enqueued" not in self._data:
+            logger.info("State._load: migrating state — adding missing 'enqueued' key")
+            self._data["enqueued"] = {}
 
         logger.info("State._load: parsed state file OK")
 

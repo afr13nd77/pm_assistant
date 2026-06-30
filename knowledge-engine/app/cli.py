@@ -192,6 +192,32 @@ def main():
     serve_parser.add_argument("--host", default="0.0.0.0")
     serve_parser.add_argument("--port", type=int, default=8001)
 
+    process_queue_parser = subparsers.add_parser(
+        "process-queue",
+        help="Drain meeting queue: reclaim stuck + process pending units (BL-145)"
+    )
+    process_queue_parser.add_argument("--vault", default=None, help="Vault root path")
+    process_queue_parser.add_argument("--limit", type=int, default=None,
+                                      help="Max units to process this run (default: no limit)")
+    process_queue_parser.add_argument("--notify", action="store_true",
+                                      help="Send Telegram notification per protocol")
+
+    queue_watch_parser = subparsers.add_parser(
+        "queue-watch",
+        help="Start watchdog daemon on meeting queue pending/ (near-realtime, BL-145)"
+    )
+    queue_watch_parser.add_argument("--vault", default=None, help="Vault root path")
+    queue_watch_parser.add_argument("--notify", action="store_true",
+                                    help="Send Telegram notification per protocol")
+
+    queue_status_parser = subparsers.add_parser(
+        "queue-status",
+        help="Show meeting queue counts and units (BL-145)"
+    )
+    queue_status_parser.add_argument("--vault", default=None, help="Vault root path")
+    queue_status_parser.add_argument("--format", choices=["json", "table"], default="table",
+                                     help="Output format (default: table)")
+
     args = parser.parse_args()
     vault_path = args.vault or os.getenv("VAULT_PATH", "/vault")
 
@@ -586,7 +612,7 @@ def main():
         sys.exit(0)
 
     elif args.command == "decay-init":
-        from .decay_engine import load_config, init_vault
+        from .decay_engine import init_vault, load_config
         logger.info("decay-init: starting, vault=%s, config=%s, dry_run=%s", vault_path, args.config, args.dry_run)
         config = load_config(args.config)
         result = init_vault(vault_path, config, dry_run=args.dry_run)
@@ -679,6 +705,135 @@ def main():
         from .api import app
         logger.info("KE API server starting on %s:%s", args.host, args.port)
         uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+
+    elif args.command == "process-queue":
+        from .meeting_fetcher import processor
+        logger.info("process-queue: starting, vault=%s, limit=%s, notify=%s",
+                    vault_path, args.limit, args.notify)
+        try:
+            result = processor.process_pending(vault_path, limit=args.limit, notify=args.notify)
+            logger.info(
+                "process-queue: completed, reclaimed=%d, processed=%d, failed=%d, requeued=%d",
+                result.get("reclaimed", 0), result.get("processed", 0),
+                result.get("failed", 0), result.get("requeued", 0),
+            )
+            _output_json(result)
+            sys.exit(0 if result.get("status") == "ok" else 1)
+        except Exception as exc:
+            logger.error("process-queue: failed: %s", exc)
+            _output_json({"status": "error", "message": str(exc)})
+            sys.exit(1)
+
+    elif args.command == "queue-watch":
+        from .meeting_fetcher import queue_watcher
+        logger.info("queue-watch: starting daemon, vault=%s, notify=%s", vault_path, args.notify)
+        try:
+            observer = queue_watcher.start_queue_watch(vault_path, notify=args.notify)
+            logger.info("queue-watch: daemon started, waiting for events (Ctrl-C to stop)")
+        except Exception as exc:
+            logger.error("queue-watch: failed to start: %s", exc)
+            _output_json({"status": "error", "message": str(exc)})
+            sys.exit(1)
+        try:
+            observer.join()
+        except KeyboardInterrupt:
+            logger.info("queue-watch: KeyboardInterrupt received, stopping daemon")
+            observer.stop()
+            observer.join()
+            logger.info("queue-watch: daemon stopped")
+
+    elif args.command == "queue-status":
+        from .meeting_fetcher.queue import MeetingQueue
+        logger.info("queue-status: collecting counts and units, vault=%s, format=%s",
+                    vault_path, args.format)
+        try:
+            counts = MeetingQueue(vault_path).status_counts()
+            units = _collect_queue_units(vault_path)
+            logger.info("queue-status: completed, counts=%s, units=%d", counts, len(units))
+            if args.format == "json":
+                _output_json({"status": "ok", "counts": counts, "units": units})
+            else:
+                _print_queue_status_table(counts, units)
+            sys.exit(0)
+        except Exception as exc:
+            logger.error("queue-status: failed: %s", exc)
+            _output_json({"status": "error", "message": str(exc)})
+            sys.exit(1)
+
+
+def _collect_queue_units(vault_path: str) -> list:
+    """Collect queue units (with meta) from all 4 folders (mirrors api.py contract)."""
+    from shared.meeting_queue import (
+        meeting_queue_done,
+        meeting_queue_failed,
+        meeting_queue_pending,
+        meeting_queue_processing,
+    )
+
+    folders = {
+        "pending": meeting_queue_pending(vault_path),
+        "processing": meeting_queue_processing(vault_path),
+        "done": meeting_queue_done(vault_path),
+        "failed": meeting_queue_failed(vault_path),
+    }
+    units = []
+    for folder_status, folder in folders.items():
+        for meta_file in sorted(folder.glob("*.meta.json")):
+            unit_id = meta_file.name[: -len(".meta.json")]
+            try:
+                meta = json.loads(meta_file.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                logger.warning("queue-status: unreadable meta %s: %s", meta_file, exc)
+                units.append({
+                    "unit_id": unit_id,
+                    "source": None,
+                    "subject": None,
+                    "status": folder_status,
+                    "attempts": None,
+                    "output_file": None,
+                    "last_error": "unreadable meta",
+                    "updated_at": None,
+                })
+                continue
+            units.append({
+                "unit_id": meta.get("unit_id", unit_id),
+                "source": meta.get("source"),
+                "subject": meta.get("subject"),
+                "status": meta.get("status", folder_status),
+                "attempts": meta.get("attempts", 0),
+                "output_file": meta.get("output_file"),
+                "last_error": meta.get("last_error"),
+                "updated_at": meta.get("updated_at"),
+            })
+    return units
+
+
+def _print_queue_status_table(counts: dict, units: list) -> None:
+    """Human-readable table of queue counts + units."""
+    print("Meeting queue status")
+    print("-" * 60)
+    print(f"  pending:    {counts.get('pending', 0)}")
+    print(f"  processing: {counts.get('processing', 0)}")
+    print(f"  done:       {counts.get('done', 0)}")
+    print(f"  failed:     {counts.get('failed', 0)}")
+    total = sum(counts.get(k, 0) for k in ("pending", "processing", "done", "failed"))
+    print(f"  total:      {total}")
+    print()
+    if not units:
+        print("No units in queue.")
+        return
+    header = f"{'Unit ID':<34} {'Status':<11} {'Source':<8} {'Att':>3}  {'Subject'}"
+    print(header)
+    print("-" * len(header))
+    for u in units:
+        subject = (u.get("subject") or "")[:40]
+        attempts = u.get("attempts")
+        att_str = str(attempts) if attempts is not None else "-"
+        print(
+            f"{str(u.get('unit_id', '')):<34} {str(u.get('status', '')):<11} "
+            f"{str(u.get('source') or ''):<8} {att_str:>3}  {subject}"
+        )
+    print(f"\nTotal: {len(units)} unit(s)")
 
 
 def _output_json(data):
