@@ -287,3 +287,41 @@ def get_creative(count: int = 5) -> list:
 def decay_snapshot() -> dict:
     """Get full decay state snapshot from KE."""
     return _get("/api/v1/decay/snapshot", _get_timeout("default"))
+
+
+# ---------------------------------------------------------------------------
+# 24. POST /api/v1/digest/generate
+# ---------------------------------------------------------------------------
+
+def digest_generate(filepath: str, force: bool = False) -> dict:
+    """Generate digest for a single wiki artifact."""
+    logger.info("digest_generate: filepath=%s, force=%s", filepath, force)
+    return _post("/api/v1/digest/generate", _get_timeout("default"),
+                 json={"filepath": filepath, "force": force})
+
+
+# ---------------------------------------------------------------------------
+# 25. POST /api/v1/digest/bulk
+# ---------------------------------------------------------------------------
+
+def digest_bulk(domain: Optional[str] = None, type: Optional[str] = None,
+                force: bool = False) -> dict:
+    """Generate digests in bulk for wiki artifacts."""
+    logger.info("digest_bulk: domain=%s, type=%s, force=%s", domain, type, force)
+    body: dict = {"force": force}
+    if domain is not None:
+        body["domain"] = domain
+    if type is not None:
+        body["type"] = type
+    return _post("/api/v1/digest/bulk", _get_timeout("long"),
+                 json=body)
+
+
+# ---------------------------------------------------------------------------
+# 26. GET /api/v1/digest/status
+# ---------------------------------------------------------------------------
+
+def digest_status() -> dict:
+    """Get digest coverage statistics."""
+    logger.info("digest_status: fetching coverage stats")
+    return _get("/api/v1/digest/status", _get_timeout("default"))

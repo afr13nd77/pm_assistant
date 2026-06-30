@@ -1,4 +1,5 @@
 import logging
+import os
 import signal
 import time
 from pathlib import Path
@@ -114,6 +115,103 @@ class ClippingsHandler(FileSystemEventHandler):
             logger.error("ClippingsHandler: unhandled error for %s: %s", path.name, e)
 
 
+class DigestHandler(FileSystemEventHandler):
+    """Watch wiki/ directories for .md changes and auto-generate digest to llm_wiki/."""
+
+    DEBOUNCE_SECONDS = 5
+
+    def __init__(self, vault_path: str):
+        self.vault_path = vault_path
+        self._pending: dict[str, float] = {}
+
+    def on_created(self, event):
+        if event.is_directory:
+            return
+        path = Path(event.src_path)
+        if path.suffix.lower() != ".md":
+            return
+        if path.stem.endswith(".tmp"):
+            return
+        self._schedule_digest(path)
+
+    def on_modified(self, event):
+        if event.is_directory:
+            return
+        path = Path(event.src_path)
+        if path.suffix.lower() != ".md":
+            return
+        if path.stem.endswith(".tmp"):
+            return
+        self._schedule_digest(path)
+
+    def _schedule_digest(self, path: Path):
+        now = time.time()
+        first_seen = self._pending.get(str(path))
+
+        if first_seen is None:
+            self._pending[str(path)] = now
+            logger.info(f"DigestHandler: new file detected, waiting for debounce: {path.name}")
+            return
+
+        elapsed = now - first_seen
+        if elapsed < self.DEBOUNCE_SECONDS:
+            logger.debug(f"DigestHandler: debounce window, skipping: {path.name} ({elapsed:.1f}s)")
+            return
+
+        del self._pending[str(path)]
+        logger.info(f"DigestHandler: debounce passed, generating: {path.name}")
+        self._do_generate(path)
+
+    def _should_process(self, path: Path) -> bool:
+        if path.suffix.lower() != ".md":
+            return False
+
+        try:
+            metadata, body = read_frontmatter(path)
+        except Exception as e:
+            logger.warning(f"DigestHandler: could not read frontmatter for {path.name}: {e}")
+            return False
+
+        status = metadata.get("status", "")
+        if status == "draft":
+            logger.debug(f"DigestHandler: draft status, skipping: {path.name}")
+            return False
+
+        from .digest.paths import wiki_to_llm_wiki
+        from .digest.generator import _compute_body_hash
+
+        vault_root = Path(self.vault_path)
+        try:
+            digest_path = wiki_to_llm_wiki(path, vault_root)
+        except ValueError as e:
+            logger.debug(f"DigestHandler: path not under wiki/, skipping: {path.name}: {e}")
+            return False
+
+        current_hash = _compute_body_hash(body)
+
+        if digest_path.exists():
+            try:
+                digest_meta, _ = read_frontmatter(digest_path)
+                existing_hash = digest_meta.get("body_hash", "")
+                if existing_hash == current_hash:
+                    logger.debug(f"DigestHandler: body unchanged, skipping: {path.name}")
+                    return False
+            except Exception as e:
+                logger.warning(f"DigestHandler: could not read digest frontmatter for {path.name}: {e}")
+
+        return True
+
+    def _do_generate(self, path: Path):
+        if not self._should_process(path):
+            return
+        try:
+            from .digest.generator import generate_digest
+            result = generate_digest(str(path), self.vault_path, force=False)
+            logger.info(f"DigestHandler: digest generated for {path.name}, status={result.get('status')}")
+        except Exception as e:
+            logger.warning(f"DigestHandler: generation failed for {path.name}: {e}")
+
+
 def start_watch(vault_path: str):
     logger.info(f"Starting watcher, vault_path={vault_path}")
     logger.info("Using polling observer (interval: 5s)")
@@ -143,6 +241,26 @@ def start_watch(vault_path: str):
     clippings_handler = ClippingsHandler()
     observer.schedule(clippings_handler, str(clippings_dir), recursive=False)
     logger.info("Scheduled clippings observer on: %s", clippings_dir)
+
+    # Watch wiki/ directories for digest generation (Layer 1')
+    digest_enabled = os.getenv("DIGEST_ENABLED", "0") == "1"
+    if digest_enabled:
+        digest_handler = DigestHandler(vault_path)
+        # Register on all wiki/ domain directories (all artifact types)
+        for domain in domains:
+            for art_type in vault_paths._VALID_ARTIFACT_TYPES:
+                domain_type_dir = vault_paths.wiki_domain_dir(domain, art_type)
+                observer.schedule(digest_handler, str(domain_type_dir), recursive=False)
+                logger.info(f"DigestHandler: scheduled on domain dir: {domain_type_dir}")
+        # Register on meetings/, daily-logs/, reports/ if they exist
+        for extra_dir_name in ("meetings", "daily-logs", "reports"):
+            extra_dir = vault_paths.VAULT_PATH / "wiki" / extra_dir_name
+            if extra_dir.exists():
+                observer.schedule(digest_handler, str(extra_dir), recursive=False)
+                logger.info(f"DigestHandler: scheduled on: {extra_dir}")
+        logger.info("DigestHandler: registered on all wiki/ directories")
+    else:
+        logger.info("DigestHandler: disabled (DIGEST_ENABLED != 1)")
 
     observer.start()
     logger.info(f"Watching {len(watch_dirs)} domain idea dirs + clippings for new .md files (Ctrl+C to stop)")

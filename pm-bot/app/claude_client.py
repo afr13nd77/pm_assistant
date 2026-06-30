@@ -144,8 +144,39 @@ def _inject_domains_section(template: str, domains_section: str) -> str:
     return template
 
 
+def _get_digest_context(raw_text: str) -> str:
+    """Build digest context section from llm_wiki/ if enabled.
+
+    Returns empty string if DIGEST_CONTEXT_SOURCE=wiki (kill switch, default).
+    """
+    try:
+        from app.context_assembler import assemble_context, AssembledContext
+
+        ctx = assemble_context(query=raw_text, domain="")
+
+        if ctx.fallback_used and not ctx.one_liners:
+            # Kill switch active (wiki mode) — no digest context
+            logger.debug("_get_digest_context: kill switch active (wiki mode)")
+            return ""
+
+        parts = []
+        if ctx.one_liners:
+            parts.append(f"## Контекст из базы знаний (one-liners)\n{ctx.one_liners}")
+        if ctx.core_digests:
+            parts.append(f"## Контекст из базы знаний (подробности)\n{ctx.core_digests}")
+
+        if parts:
+            result = "\n\n".join(parts)
+            logger.info(f"_get_digest_context: injected {ctx.total_tokens} tokens, sources={len(ctx.sources_used)}")
+            return result
+    except Exception as exc:
+        logger.warning(f"_get_digest_context: failed, skipping digest context: {exc}")
+
+    return ""
+
+
 def _build_idea_prompt(raw_text: str) -> str:
-    """Build the full idea prompt with dynamic domain section."""
+    """Build the full idea prompt with dynamic domain section and digest context."""
     try:
         from shared import domain_config
         domains_section = domain_config.build_prompt_section()
@@ -156,15 +187,20 @@ def _build_idea_prompt(raw_text: str) -> str:
                 "_build_idea_prompt: using dynamic domains section (%d domains)",
                 domains_section.count("\n") + 1,
             )
-            return f"{prompt}\n\n---\n{raw_text}"
+        else:
+            prompt = _load_prompt("idea")
     except Exception as exc:
         logger.warning(
             "_build_idea_prompt: failed to build dynamic prompt, "
             "using static: %s", exc,
         )
+        prompt = _load_prompt("idea")
 
-    logger.info("_build_idea_prompt: using static prompt from idea.txt")
-    prompt = _load_prompt("idea")
+    # Inject digest context if available (Layer 1')
+    digest_context = _get_digest_context(raw_text)
+    if digest_context:
+        logger.info("_build_idea_prompt: digest context injected")
+        return f"{prompt}\n\n{digest_context}\n\n---\n{raw_text}"
     return f"{prompt}\n\n---\n{raw_text}"
 
 

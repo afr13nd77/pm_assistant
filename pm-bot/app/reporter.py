@@ -324,6 +324,18 @@ def generate_weekly_report() -> str:
     )
     logger.info("generate_weekly_report: context length = %d characters", len(context))
 
+    # Inject digest context if available (Layer 1')
+    try:
+        from app.context_assembler import assemble_context
+        digest_ctx = assemble_context(query="weekly report", domain="")
+        if digest_ctx.one_liners and not digest_ctx.fallback_used:
+            context += f"\n\n## Контекст из базы знаний\n{digest_ctx.one_liners}"
+            logger.info(f"generate_weekly_report: injected {digest_ctx.total_tokens} digest tokens")
+        else:
+            logger.debug("generate_weekly_report: no digest context injected (kill switch or empty)")
+    except Exception as exc:
+        logger.warning(f"generate_weekly_report: digest context failed: {exc}")
+
     # Step 6: Load prompt
     logger.info("generate_weekly_report: loading weekly_report prompt")
     prompt = _load_prompt("weekly_report")

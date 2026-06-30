@@ -107,6 +107,17 @@ class ProcessQueueRequest(BaseModel):
     notify: bool = False
 
 
+class DigestGenerateRequest(BaseModel):
+    filepath: str
+    force: bool = False
+
+
+class DigestBulkRequest(BaseModel):
+    domain: Optional[str] = None
+    type: Optional[str] = None
+    force: bool = False
+
+
 # ---------------------------------------------------------------------------
 # Startup
 # ---------------------------------------------------------------------------
@@ -916,4 +927,110 @@ def process_queue(req: ProcessQueueRequest):
         return result
     except Exception as exc:
         logger.error("API process-queue error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# 26. POST /api/v1/digest/generate
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/digest/generate")
+def digest_generate(req: DigestGenerateRequest):
+    logger.info("API digest/generate: filepath=%s, force=%s", req.filepath, req.force)
+    try:
+        from .digest.generator import generate_digest
+
+        result = generate_digest(
+            source_path=pathlib.Path(req.filepath),
+            vault_path=_vault_path_str(),
+            force=req.force,
+        )
+        logger.info("API digest/generate: completed, status=%s", result.get("status"))
+        return result
+    except Exception as exc:
+        logger.error("API digest/generate error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# 27. POST /api/v1/digest/bulk
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/digest/bulk")
+def digest_bulk(req: DigestBulkRequest):
+    logger.info("API digest/bulk: domain=%s, type=%s, force=%s", req.domain, req.type, req.force)
+    try:
+        from .digest.generator import generate_bulk
+
+        result = generate_bulk(
+            vault_path=_vault_path_str(),
+            domain=req.domain,
+            artifact_type=req.type,
+            force=req.force,
+        )
+        logger.info("API digest/bulk: completed, status=%s", result.get("status"))
+        return result
+    except Exception as exc:
+        logger.error("API digest/bulk error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# 28. GET /api/v1/digest/status
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/digest/status")
+def digest_status():
+    logger.info("API digest/status: collecting digest coverage stats")
+    try:
+        from shared.frontmatter_utils import read_frontmatter as _read_fm
+
+        vault_root = pathlib.Path(_vault_path_str())
+        llm_wiki = vault_root / "llm_wiki"
+        wiki_dir = vault_root / "wiki"
+
+        total_digests = 0
+        passed = 0
+        failed = 0
+        total_wiki = 0
+
+        if llm_wiki.exists():
+            for md in llm_wiki.rglob("*.md"):
+                if md.name == "_index.md":
+                    continue
+                total_digests += 1
+                try:
+                    meta, _ = _read_fm(md)
+                    if meta.get("validation") == "passed":
+                        passed += 1
+                    else:
+                        failed += 1
+                except Exception:
+                    failed += 1
+
+        if wiki_dir.exists():
+            for md in wiki_dir.rglob("*.md"):
+                if md.name.upper() in {"INDEX.MD", "LOG.MD"} or md.name.startswith("_"):
+                    continue
+                total_wiki += 1
+
+        missing = max(0, total_wiki - total_digests)
+        coverage = round(total_digests / total_wiki * 100, 1) if total_wiki > 0 else 0.0
+
+        result = {
+            "status": "ok",
+            "total_wiki_artifacts": total_wiki,
+            "total_digests": total_digests,
+            "valid_digests": passed,
+            "failed_digests": failed,
+            "missing_digests": missing,
+            "coverage_percent": coverage,
+        }
+        logger.info(
+            "API digest/status: completed, wiki=%d, digests=%d, coverage=%.1f%%",
+            total_wiki, total_digests, coverage,
+        )
+        return result
+    except Exception as exc:
+        logger.error("API digest/status error: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
