@@ -1,7 +1,7 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.12.0 / knowledge-engine 1.11.0 / idea-pipeline 1.1.2 / web-ui 1.21.0 / shared 0.4.0
-**Обновлён:** 30.06.2026 (BL-143)
+**Версии:** pm-bot 1.12.0 / knowledge-engine 1.11.0 / idea-pipeline 1.1.2 / web-ui 1.21.0 / shared 0.5.0
+**Обновлён:** 30.06.2026 (BL-143 ✅)
 
 ---
 
@@ -196,13 +196,13 @@
 | BL-78 | ✅ Enrichment DB | pm-bot | SQLite: дедупликация напоминаний (cooldown 24ч, cleanup 90д) |
 | BL-79 | ✅ Atomic file write | pm-bot, knowledge-engine | file_writer.py: tmp + os.replace |
 | BL-80 | ✅ Frontmatter utils | knowledge-engine | Чтение/запись YAML frontmatter |
+| BL-143 | ✅ Trace Log — централизованный журнал операций | pm-bot, knowledge-engine, shared | shared/system_log.py (SQLite модуль), 11 процессов обёрнуты в LoggedProcess, API /system-log + /system-log/stats, Web UI system-log.html, LLM trace (provider chain, fallback, ошибки), per-unit details meeting queue, overview badge, cron cleanup 90д, 12 unit-тестов. Спека: docs/system-activity-log/ |
 
 ### 7.2 Идеи
 
 | # | Название | Компонент | Описание |
 |---|:---|:---|:---|
 | BL-81 | Мониторинг и алерты по доступности Ollama | pm-bot | Health check, uptime tracking (упомянуто в Out of Scope ollama-hybrid) |
-| BL-143 | 🔶 Trace Log — централизованный журнал операций | pm-bot, knowledge-engine, shared | **Реализовано (~80%):** shared/system_log.py (SQLite модуль), 8 CLI-команд KE + 3 scheduler-задачи обёрнуты в LoggedProcess, API GET /system-log + /system-log/stats, Web UI system-log.html (фильтры, группировка по дням, expand деталей), overview badge ошибок, cron cleanup 90д, 12 unit-тестов. **Остаток (~20%):** LLM trace (provider chain, fallback-переключения, модель, retry counts), интеграция с meeting queue (детальный статус обработки каждого юнита) |
 | BL-144 | Pipeline Monitor — интерактивная визуализация обработки | web-ui, pm-bot, knowledge-engine | Расширение system-log (BL-143) до realtime pipeline view: текущий этап обработки для каждого элемента (fetch → parse → LLM call → write), elapsed time, provider chain, retry counts. Мотивация: BL-143 покрывает журнал завершённых операций, BL-144 — визуализацию процесса в реальном времени |
 
 ---
@@ -310,7 +310,7 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 88 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141 |
+| ✅ Реализовано | 89 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143 |
 | ✅ Баги исправлены | 24 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129 |
 | Идея | 28 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-150 |
 | ❌ Удалено | 1 | BL-121 |

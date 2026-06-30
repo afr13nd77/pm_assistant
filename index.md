@@ -27,7 +27,7 @@ pm_assistant/
 │   ├── domain_config.py            # загрузка/сохранение domain-config.yaml (13 функций)
 │   ├── frontmatter_utils.py        # read_frontmatter, update_frontmatter
 │   ├── settings.py                 # загрузка settings.yaml, dot-notation доступ, singleton
-│   ├── system_log.py               # Централизованный журнал системных операций (SQLite в /vault/.system-log.db)
+│   ├── system_log.py               # Централизованный журнал системных операций (SQLite, 12 process types вкл. llm-call)
 │   └── tests/                      # unit-тесты для shared/
 │       ├── test_settings.py        # 14 тестов
 │       ├── test_openrouter.py      # 9 тестов (call, test_connection, models)
@@ -183,7 +183,7 @@ pm_assistant/
 | **idea-pipeline** | 1.1.2 | 2026-06-14 | Orchestrator: Analyst → PM → Decomposer. Импорты vault_paths и file_writer из shared/. |
 | **web-ui** | 1.25.0 | 2026-06-30 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141), LLM Playground (BL-142). Decision Journal (BL-24): decisions.html + meeting.html + overview виджет RECENT DECISIONS. Process Catalog (processes.html, process.html). |
 | **инфраструктура** | 1.1.0 | 2026-06-30 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120). KE-контейнер: процесс queue-watch (watchdog на pending/); ke-cron: process-queue каждые 10 мин — страховка/reclaim (BL-145). |
-| **shared** | 0.4.0 | 2026-06-30 | Общий модуль: llm_client (call с настраиваемыми fallback-цепочками, Ollama timeout ×5, call_transcription, call_detailed — additive, отдаёт provider_record), meeting_queue (enqueue-ядро файловой очереди: Unit, make_unit_id, build_meta, enqueue, path-хелперы — BL-145), openrouter_client, file_writer, vault_paths, domain_config, frontmatter_utils, settings. Единый источник для всех компонентов. |
+| **shared** | 0.5.0 | 2026-06-30 | Общий модуль: llm_client (call с настраиваемыми fallback-цепочками, Ollama timeout ×5, call_transcription, call_detailed — additive, отдаёт provider_record + автоматический LLM trace в system_log), meeting_queue (enqueue-ядро файловой очереди: Unit, make_unit_id, build_meta, enqueue, path-хелперы — BL-145), openrouter_client, system_log (12 process types, LoggedProcess, per-unit details), file_writer, vault_paths, domain_config, frontmatter_utils, settings. Единый источник для всех компонентов. |
 
 Схема: semver `MAJOR.MINOR.PATCH`. MAJOR — ломающие изменения API/контрактов. MINOR — новый функционал. PATCH — багофиксы.
 
