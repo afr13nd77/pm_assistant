@@ -35,6 +35,8 @@ services:
       - CT2_FORCE_CPU_ISA=GENERIC
       - KE_API_URL=http://knowledge-engine:8001
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - DIGEST_ENABLED=1
+      - DIGEST_CONTEXT_SOURCE=auto
     depends_on:
       - knowledge-engine
       - idea-pipeline
@@ -59,6 +61,7 @@ services:
       - JIRA_URL=${JIRA_URL}
       - JIRA_TOKEN=${JIRA_TOKEN}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - DIGEST_ENABLED=1
     command: >
       sh -c "python -m knowledge_engine serve &
              python -m knowledge_engine watch &
