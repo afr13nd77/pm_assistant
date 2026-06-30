@@ -1,7 +1,7 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.12.0 / knowledge-engine 1.11.0 / idea-pipeline 1.1.2 / web-ui 1.21.0 / shared 0.3.0
-**Обновлён:** 23.06.2026 (BL-140, BL-141)
+**Версии:** pm-bot 1.12.0 / knowledge-engine 1.11.0 / idea-pipeline 1.1.2 / web-ui 1.21.0 / shared 0.4.0
+**Обновлён:** 30.06.2026 (BL-143)
 
 ---
 
@@ -202,8 +202,8 @@
 | # | Название | Компонент | Описание |
 |---|:---|:---|:---|
 | BL-81 | Мониторинг и алерты по доступности Ollama | pm-bot | Health check, uptime tracking (упомянуто в Out of Scope ollama-hybrid) |
-| BL-143 | Trace Log — централизованный журнал операций | pm-bot, knowledge-engine, shared | Единая точка для отслеживания всех операций системы: LLM-вызовы (провайдер, модель, операция, статус, ошибка), meeting fetcher (email → raw → wiki, retry-счётчики, причины отказа), pipeline runs и Jira sync. Прозрачный trace: какой провайдер вызван, почему пропущен, какой fallback сработал. Web UI страница с фильтрацией по типу операции, статусу и дате. Мотивация: без trace log невозможно диагностировать каскадные отказы провайдеров (как OPENROUTER_API_KEY не попадал в cron — обнаружено только при ручном анализе) |
-| BL-144 | Pipeline Monitor — интерактивная визуализация обработки | web-ui, pm-bot, knowledge-engine | Страница Web UI, показывающая в реальном времени (или near-realtime) ход обработки писем, протоколов встреч и дейли-логов. Для каждого элемента: текущий этап (fetch → parse → LLM call → write to vault), статус (pending/processing/done/error), провайдер и модель, elapsed time, ошибки. Схематичный pipeline-вид или лог-вид с фильтрацией. Мотивация: сейчас процесс обработки — чёрный ящик, диагностика возможна только через docker logs |
+| BL-143 | 🔶 Trace Log — централизованный журнал операций | pm-bot, knowledge-engine, shared | **Реализовано (~80%):** shared/system_log.py (SQLite модуль), 8 CLI-команд KE + 3 scheduler-задачи обёрнуты в LoggedProcess, API GET /system-log + /system-log/stats, Web UI system-log.html (фильтры, группировка по дням, expand деталей), overview badge ошибок, cron cleanup 90д, 12 unit-тестов. **Остаток (~20%):** LLM trace (provider chain, fallback-переключения, модель, retry counts), интеграция с meeting queue (детальный статус обработки каждого юнита) |
+| BL-144 | Pipeline Monitor — интерактивная визуализация обработки | web-ui, pm-bot, knowledge-engine | Расширение system-log (BL-143) до realtime pipeline view: текущий этап обработки для каждого элемента (fetch → parse → LLM call → write), elapsed time, provider chain, retry counts. Мотивация: BL-143 покрывает журнал завершённых операций, BL-144 — визуализацию процесса в реальном времени |
 
 ---
 
