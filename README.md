@@ -189,22 +189,23 @@ Jira-статусы не нормализуются — Jira является и
 
 ## Компоненты
 
-### pm-bot (v1.11.0)
+### pm-bot (v1.15.0)
 
 Telegram-бот + Vault API + Web UI сервер. Точка входа для всех взаимодействий.
 
 Функции:
 
-- Telegram-хендлеры: /idea, /jira, /daily, /synthesize, /jira_sync, /jira_import, /jira_create, /pipeline, /domain, /lint, /status, /test_enrichment, текст, голос
+- Telegram-хендлеры: /idea, /jira, /daily, /synthesize, /jira_sync, /jira_import, /jira_create, /pipeline, /domain, /lint, /status, /test_enrichment, /fetch_meetings, текст, голос
 - Claude API / Ollama / Hybrid — гибридная LLM-архитектура с fallback (Ollama: Qwen 3.5)
 - OpenRouter API для транскрибаций (6 моделей, fallback chain)
 - Speech-to-Text (faster-whisper)
+- transcript_watcher: локальные `.txt` кладёт в файловую очередь `raw/meeting-queue/pending/` (без локального LLM; обработку выполняет KE-воркер) — BL-145
 - Vault API (FastAPI, порт 8000) с in-memory TTL cache (30s)
 - Web UI static server (порт 8080)
 - APScheduler: weekly report (Mon 09:00), enrichment reminders (daily)
 - SQLite: дедупликация enrichment-напоминаний (cooldown 24ч)
 
-### knowledge-engine (v1.10.0)
+### knowledge-engine (v1.12.0)
 
 Сервис обогащения и синтеза знаний.
 
@@ -215,7 +216,11 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 - Jira sync (cron каждые 3ч): fetch JQL -> diff state -> write wiki/ + raw/ -> notify
 - Jira import: импорт единичного тикета по ключу
 - Jira create: создание тикетов из vault
-- Meeting fetcher: IMAP клиент -> classify -> wiki -> enrich -> notify
+- **Meeting Processing Queue (BL-145)**: трёхфазная обработка протоколов через файловую очередь `raw/meeting-queue/{pending,processing,done,failed}/`:
+  - *Fetch* (`fetcher.py`): IMAP fetch -> кладёт сырые транскрипты в `pending/` (без LLM, быстро); дедуп `is_enqueued OR is_processed`
+  - *Process* (`processor.py`): воркер берёт юнит по одному -> LLM через fallback chain (`call_detailed`, max_attempts=5) -> `validate_protocol` (frontmatter type/date + H1 + длина) -> classify -> запись в `wiki/meetings/` -> jira sync -> enrich -> `done/`; при сбое retry другим провайдером или `failed/`
+  - *Queue* (`queue.py`): атомарные переходы (claim через `os.rename`), `reclaim_stuck`, `status_counts`
+  - watchdog-демон `queue_watcher.py` (PollingObserver, near-realtime) + cron `process-queue` /10мин (страховка)
 - Meeting protocol enrichment: source_file в frontmatter + wikilink на raw-файл в footer (BL-133)
 - Jira key sync для всех типов протоколов (BL-134)
 - Vault index: сканирование, in-memory индекс, keyword + tag matching
@@ -244,26 +249,29 @@ Configurable models per agent через pipeline.yaml. API key аутентиф
 Cron-контейнер для периодических задач:
 
 - Синтез: ежедневно 09:00
+- Meeting fetch (наполнение очереди): каждый час :15
+- Process queue (страховка/reclaim): каждые 10 минут (BL-145)
 - Jira sync: каждые 3 часа
 - Rebuild index: ежедневно 02:00
 - Lint: ежедневно 03:00
 - Vault health: ежедневно 04:00
 
-### shared (v0.2.0)
+### shared (v0.4.0)
 
 Общий модуль, единый источник для pm-bot, knowledge-engine и idea-pipeline.
 
-- llm_client: фабрика LLM-клиентов, маршрутизация по операциям, call_transcription (fallback chain)
+- llm_client: фабрика LLM-клиентов, маршрутизация по операциям, call (fallback chain), call_detailed (отдаёт provider_record — BL-145), call_transcription
+- meeting_queue: enqueue-ядро файловой очереди (Unit, make_unit_id, build_meta, enqueue, path-хелперы) — общее для KE-fetcher и pm-bot-watcher (BL-145)
 - openrouter_client: HTTP-клиент для OpenRouter API (6 моделей)
 - file_writer: file_lock, atomic_write, locked_append
 - vault_paths: 25 функций для путей vault
 - domain_config: загрузка/сохранение domain-config.yaml
 - frontmatter_utils: чтение/запись YAML frontmatter
-- settings: загрузка settings.yaml, dot-notation
+- settings: загрузка settings.yaml, dot-notation (секция queue — BL-145)
 
 ---
 
-## Web UI (v1.20.0)
+## Web UI (v1.25.0)
 
 SPA-дашборд на Vue 3 + vanilla JS. Статические HTML-страницы, данные через Vault API.
 
@@ -291,8 +299,8 @@ Drag-n-drop правила: readiness 100% для перехода в «Гото
 ## Потоки данных
 
 1. **Идеи**: Telegram/Web -> handlers -> claude_client.process_idea (->JSON) -> obsidian_writer.write_idea (template-based) -> `raw/inbound/ideas/` + `wiki/domains/<domain>/ideas/` -> knowledge-engine enrich
-2. **Транскрипты встреч**: .txt -> transcript_watcher -> process_meeting -> `raw/inbound/meeting-notes/` + `wiki/meetings/`
-3. **Meeting fetcher**: IMAP email -> fetch -> classify -> `raw/inbound/meeting-notes/` + `wiki/meetings/` -> enrich -> notify
+2. **Транскрипты встреч (локальные)**: .txt -> transcript_watcher -> `raw/meeting-queue/pending/` -> (Process-воркер) -> `wiki/meetings/` (BL-145)
+3. **Meeting fetcher (email)**: IMAP email -> fetch -> `raw/meeting-queue/pending/` (Fetch, без LLM) -> watchdog/cron Process-воркер -> LLM -> validate -> `wiki/meetings/` -> done/ (BL-145)
 4. **Jira-тикеты**: Telegram /jira -> process_jira_ticket -> `raw/inbound/tasks/` + `wiki/domains/<domain>/tasks/`
 5. **Daily-заметки**: Telegram /daily -> process_daily -> `raw/inbound/daily-logs/` + `wiki/daily-logs/`
 6. **Jira Sync** (cron 3ч или /jira_sync): fetch JQL -> diff state -> write `wiki/domains/<domain>/tasks/` + `raw/inbound/tasks/` -> notify
@@ -330,9 +338,9 @@ Drag-n-drop правила: readiness 100% для перехода в «Гото
 | Контейнер | Роль | Порты |
 |---|---|---|
 | pm-bot | Telegram polling + Vault API + Web UI | 8000 (API), 8080 (Web) |
-| knowledge-engine | HTTP API (:8001) + Watchdog на raw/inbound/ для auto-enrichment | 8001 (API) |
+| knowledge-engine | HTTP API (:8001) + Watchdog на raw/inbound/ (auto-enrichment) + queue-watch на meeting-queue/pending/ (BL-145) | 8001 (API) |
 | idea-pipeline | Оркестратор AI-агентов | 8100 |
-| ke-cron | Синтез (09:00) + Jira sync (каждые 3ч) | — |
+| ke-cron | Синтез (09:00) + Meeting fetch (:15) + Process queue (/10мин) + Jira sync (каждые 3ч) | — |
 
 ---
 
