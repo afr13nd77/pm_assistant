@@ -61,7 +61,8 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
     command: >
       sh -c "python -m knowledge_engine serve &
-             python -m knowledge_engine watch"
+             python -m knowledge_engine watch &
+             python -m knowledge_engine queue-watch"
 
   ke-cron:
     build:
@@ -88,12 +89,13 @@ services:
         env | grep -E '^(TZ|YANDEX_|CLAUDE_|BOT_|ALLOWED_|VAULT_|JIRA_|OPENROUTER_|PYTHONUNBUFFERED)' >> /etc/environment &&
         echo '0 9 * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine synthesize --notify >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-synth &&
         echo '15 * * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine fetch-meetings --notify >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-fetch &&
+        echo '*/10 * * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine process-queue >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-process-queue &&
         echo \"$JIRA_SYNC_CRON\"' root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine jira-sync --notify >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-jira &&
         echo '0 2 * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine rebuild-index >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-rebuild-index &&
         echo '0 3 * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine lint >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-lint &&
         echo '0 4 * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine health --save >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-health &&
         echo '0 5 * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine decay-recalc >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-decay &&
-        chmod 0644 /etc/cron.d/ke-synth /etc/cron.d/ke-fetch /etc/cron.d/ke-jira /etc/cron.d/ke-rebuild-index /etc/cron.d/ke-lint /etc/cron.d/ke-health /etc/cron.d/ke-decay &&
+        chmod 0644 /etc/cron.d/ke-synth /etc/cron.d/ke-fetch /etc/cron.d/ke-process-queue /etc/cron.d/ke-jira /etc/cron.d/ke-rebuild-index /etc/cron.d/ke-lint /etc/cron.d/ke-health /etc/cron.d/ke-decay &&
         touch /var/log/ke-cron.log &&
         cron && tail -f /var/log/ke-cron.log
       "

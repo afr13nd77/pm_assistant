@@ -20,7 +20,8 @@ pm_assistant/
 ├── shared/                         # общий модуль — единый источник для pm-bot, KE, idea-pipeline
 │   ├── __init__.py                 # __version__ = "0.1.0"
 │   ├── file_writer.py              # file_lock, atomic_write, locked_append, append_section
-│   ├── llm_client.py               # _load_llm_prefs, get_client, call (unified fallback chain), deprecated: call_with_fallback, call_transcription
+│   ├── llm_client.py               # _load_llm_prefs, get_client, call (unified fallback chain), call_detailed (отдаёт provider_record, BL-145), deprecated: call_with_fallback, call_transcription
+│   ├── meeting_queue.py            # enqueue-ядро файловой очереди: Unit, make_unit_id, build_meta, enqueue, path-хелперы (BL-145)
 │   ├── openrouter_client.py        # HTTP client for OpenRouter API (6 models, call, test_connection)
 │   ├── vault_paths.py              # superset путей vault (25 функций)
 │   ├── domain_config.py            # загрузка/сохранение domain-config.yaml (13 функций)
@@ -52,7 +53,7 @@ pm_assistant/
 │   ├── capture-terminal-redesign/   # BL-137 DONE: requirements.md, design.md, tasks.md (13 задач)
 │   ├── meeting-protocol-enrich/     # BL-133+BL-134 DONE: requirements.md, design.md, tasks.md (4 задачи)
 │   ├── openrouter-transcription/    # BL-138 DONE: requirements.md, design.md, tasks.md (10 задач)
-│   └── architecture/adr/           # 4 ADR (решения по архитектуре)
+│   └── architecture/adr/           # 5 ADR (решения по архитектуре)
 │
 ├── pm-bot/                         # Telegram-бот (capture)
 │   ├── Dockerfile                  # образ Python 3.12-slim + shared/
@@ -114,7 +115,7 @@ pm_assistant/
 │       ├── __init__.py
 │       ├── __main__.py             # точка входа: python -m app
 │       ├── cli.py                  # CLI: jira-sync, jira-import, jira-create, jira-projects, jira-epics, jira-issue-types, enrich, synthesize, watch, index, lint, status
-│       ├── api.py                  # FastAPI HTTP API (19 эндпоинтов, порт 8001)
+│       ├── api.py                  # FastAPI HTTP API (21 эндпоинт, порт 8001) — +meeting-queue/status, process-queue (BL-145)
 │       ├── enricher.py             # обогащение идеи связями из vault
 │       ├── synthesizer.py          # синтез: кластеризация + сводка
 │       ├── vault_index.py          # сканирование vault, in-memory индекс
@@ -133,12 +134,15 @@ pm_assistant/
 │       │   ├── state.py            # .jira-sync-state.json — отслеживание состояния
 │       │   ├── mapper.py           # Jira issue → Markdown с frontmatter + domain detection
 │       │   └── fetcher.py          # оркестратор: fetch → diff → write → log → notify
-│       ├── meeting_fetcher/        # модуль импорта транскриптов из email
+│       ├── meeting_fetcher/        # импорт транскриптов из email + файловая очередь обработки (BL-145)
 │       │   ├── __init__.py
 │       │   ├── imap_client.py      # IMAP клиент для почты
 │       │   ├── classifier.py       # классификация транскриптов
-│       │   ├── fetcher.py          # оркестратор: fetch → save raw → Claude → classify → write wiki → enrich → notify
-│       │   └── state.py            # состояние последнего fetch
+│       │   ├── fetcher.py          # Fetch-фаза (BL-145): fetch_emails → enqueue в pending/ (без LLM); дедуп is_enqueued OR is_processed
+│       │   ├── queue.py            # MeetingQueue: claim/claim_next/complete/fail/requeue/reclaim_stuck/status_counts (BL-145)
+│       │   ├── processor.py        # Process-воркер: process_one/process_pending + validate_protocol; LLM call_detailed → валидация → write wiki (BL-145)
+│       │   ├── queue_watcher.py    # watchdog-демон на pending/ (on_created+on_moved → claim → process_one), near-realtime (BL-145)
+│       │   └── state.py            # состояние fetch: processed + enqueued (постоянный дедуп-маркер, BL-145)
 │       └── prompts/                # 3 промпта (enrich, synthesize, meeting_protocol)
 │
 └── idea-pipeline/                  # сервис проработки идей (orchestrator)
@@ -171,12 +175,12 @@ pm_assistant/
 
 | Компонент | Версия | Последнее изменение | Описание |
 |---|---|---|---|
-| **pm-bot** | 1.14.0 | 2026-06-29 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. Настраиваемые fallback-цепочки LLM-провайдеров в Settings UI (BL-140, BL-141). Decision Journal: реестр решений из протоколов + просмотр протокола (BL-24). Timeout fetch_meetings 180s → 600s. |
-| **knowledge-engine** | 1.11.1 | 2026-06-29 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (19 эндпоинтов), jira-search endpoint. Импорты из shared/. Унификация LLM-вызовов через call() (BL-140, BL-141). Meeting protocol enrichment (BL-133, BL-134). Багфиксы: patch_jira_links startswith (BUG-016), footer append fallback (BUG-017). Фикс YAML injection в meeting fetcher (BUG). Фикс 3 багов линтера wikilinks: pipe order, .txt index, escaped pipe. |
+| **pm-bot** | 1.15.0 | 2026-06-30 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. Настраиваемые fallback-цепочки LLM-провайдеров в Settings UI (BL-140, BL-141). Decision Journal: реестр решений из протоколов + просмотр протокола (BL-24). transcript_watcher переведён на файловую очередь (кладёт .txt в pending/, без локального LLM); handlers fetch_meetings — текст «поставлено в очередь» + фикс KeyError на устаревших ключах details (BL-145). |
+| **knowledge-engine** | 1.12.0 | 2026-06-30 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (21 эндпоинт), jira-search endpoint. Импорты из shared/. Унификация LLM-вызовов через call() (BL-140, BL-141). Meeting protocol enrichment (BL-133, BL-134). Meeting Processing Queue (BL-145): queue.py (claim/complete/fail/requeue/reclaim_stuck), processor.py (process_one/process_pending + validate_protocol), queue_watcher.py (watchdog на pending/); fetch-meetings теперь только наполняет очередь без LLM; CLI process-queue/queue-watch/queue-status; API GET /meeting-queue/status, POST /process-queue. Багфиксы: patch_jira_links startswith (BUG-016), footer append fallback (BUG-017). Фикс YAML injection в meeting fetcher (BUG). |
 | **idea-pipeline** | 1.1.2 | 2026-06-14 | Orchestrator: Analyst → PM → Decomposer. Импорты vault_paths и file_writer из shared/. |
 | **web-ui** | 1.25.0 | 2026-06-30 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141), LLM Playground (BL-142). Decision Journal (BL-24): decisions.html + meeting.html + overview виджет RECENT DECISIONS. Process Catalog (processes.html, process.html). |
-| **инфраструктура** | 1.0.0 | 2026-06-11 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120) |
-| **shared** | 0.3.0 | 2026-06-23 | Общий модуль: llm_client (call с настраиваемыми fallback-цепочками, Ollama timeout ×5, call_transcription), openrouter_client, file_writer, vault_paths, domain_config, frontmatter_utils, settings. Единый источник для всех компонентов. Единый call() с настраиваемыми fallback-цепочками (BL-140, BL-141). |
+| **инфраструктура** | 1.1.0 | 2026-06-30 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120). KE-контейнер: процесс queue-watch (watchdog на pending/); ke-cron: process-queue каждые 10 мин — страховка/reclaim (BL-145). |
+| **shared** | 0.4.0 | 2026-06-30 | Общий модуль: llm_client (call с настраиваемыми fallback-цепочками, Ollama timeout ×5, call_transcription, call_detailed — additive, отдаёт provider_record), meeting_queue (enqueue-ядро файловой очереди: Unit, make_unit_id, build_meta, enqueue, path-хелперы — BL-145), openrouter_client, file_writer, vault_paths, domain_config, frontmatter_utils, settings. Единый источник для всех компонентов. |
 
 Схема: semver `MAJOR.MINOR.PATCH`. MAJOR — ломающие изменения API/контрактов. MINOR — новый функционал. PATCH — багофиксы.
 
@@ -339,7 +343,7 @@ pm_assistant/
 
 | Папка | Статус | Описание |
 |---|---|---|
-| architecture/adr/ | — | 4 ADR: CLI-over-HTTP, keyword-matching, vault-as-DB, monorepo |
+| architecture/adr/ | — | 5 ADR: CLI-over-HTTP, keyword-matching, vault-as-DB, monorepo, file-based-meeting-queue (ADR-005, BL-145) |
 | bugs/ | — | BUG-001..008 (fixed), BUG-009..010 (theme fixes), BUG-011 (jira-sync closed handler, fixed), BUG-012 (daily-log naming, fixed), BUG-013 (vault_index.py None in tags/keywords — fix: filter None before .lower(), fixed), BUG-014 (settings.html testOllamaConnection silent early return — fix: show error + log, fixed), BUG-015 (handlers.py Telegram Markdown parse error on jira reply — fix: try/except fallback to plain text, fixed), BUG-016 (patch_jira_links exact match не патчит ключи с комментариями, fixed), BUG-017 (_inject_source_file footer wikilink append fallback, fixed). Capture fix: vault_api.py — import _fallback_idea_data + dict→JSON serialization |
 | claude-code-cli-migration/ | ANALYSIS | Анализ миграции pm_assistant на Claude Code CLI / Claude Agent SDK (analysis, ollama-qwen3-analysis) |
 | context_compaction/ | DRAFT | LLM-оптимизированный контекстный слой модели знаний — PRD Layer 1' (PRD, design, SWOT, test results) |
@@ -368,6 +372,7 @@ pm_assistant/
 | knowledge-engine/ | APPROVED, IMPLEMENTED | Enrichment + synthesis (requirements, design, tasks) |
 | marketing_promo/ | — | Промо-материалы: презентации, слайды, обложки (PDF, PPTX, MD) |
 | meeting-fetcher/ | APPROVED, IMPLEMENTED | Импорт транскриптов из email (requirements, design, tasks) |
+| meeting-processing-queue/ | APPROVED, IMPLEMENTED (e2e pending rebuild) | BL-145: трёхфазная файловая очередь обработки протоколов (Fetch/Queue/Process), watchdog+cron, retry по fallback-цепочке (max_attempts=5), валидация ответа до записи в wiki (requirements, design, tasks, ADR-005) |
 | ollama-hybrid/ | APPROVED, IMPLEMENTED | Гибридная LLM-архитектура: Claude API + Ollama (requirements, design, tasks) |
 | overview-dashboard/ | APPROVED, IMPLEMENTED | Overview дашборд (requirements, tasks) |
 | overview-redesign/ | APPROVED, IMPLEMENTED | Редизайн overview (requirements, design, tasks) |

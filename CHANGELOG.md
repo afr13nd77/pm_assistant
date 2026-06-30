@@ -5,6 +5,41 @@
 
 ---
 
+## 30.06.2026 — Meeting Processing Queue (BL-145)
+
+Рефакторинг обработки протоколов встреч: синхронный `fetch_new_meetings` разрезан на три независимые фазы, связанные файловой очередью `raw/meeting-queue/{pending,processing,done,failed}/`. Получение транскриптов (IMAP + локальный watcher) развязано с тяжёлым LLM-этапом.
+
+### shared 0.4.0
+- **meeting_queue.py** (NEW): enqueue-ядро файловой очереди — `Unit`, `make_unit_id`, `build_meta`, `enqueue` (атомарная запись `.meta.json`→`.txt`, idempotent), path-хелперы. Доступно обоим контейнерам (KE + pm-bot линкуют shared/).
+- **llm_client.py**: `call_detailed()` (additive) — возвращает `(text, provider_record)` с перечнем испробованных провайдеров и сработавшим; `call()` стал тонкой обёрткой (поведение неизменно, 21 тест зелёный).
+- **settings.yaml / settings.py**: секция `queue` (max_attempts=5, stuck_threshold_seconds=1800, process_timeout=180, batch_limit=0); `timeouts.fetch_meetings` 600→120 (LLM ушёл из пути Fetch).
+
+### knowledge-engine 1.12.0
+- **queue.py** (NEW): `MeetingQueue` — claim/claim_next (атомарный `os.rename`, защита от гонки cron↔watchdog), complete/fail/requeue, reclaim_stuck (восстановление застрявших), status_counts. Повреждённый meta → карантин в `failed/`.
+- **processor.py** (NEW): Process-воркер — `process_one`/`process_pending`; LLM через `call_detailed` (retry по fallback-цепочке, max_attempts=5), `validate_protocol` (frontmatter + обязательные поля + длина≥200) ДО записи в wiki; миграция write→jira→enrich→LOG из старого fetcher (non-fatal post-processing).
+- **queue_watcher.py** (NEW): watchdog-демон на `pending/` (near-realtime). Слушает `on_created` И `on_moved` (т.к. `atomic_write` даёт событие move, не create).
+- **fetcher.py**: `fetch_new_meetings` теперь только наполняет очередь (без LLM); дедуп `is_enqueued OR is_processed`; совместимый ответ (AC-09).
+- **state.py**: секция `enqueued` (постоянный дедуп-маркер) + back-compat миграция.
+- **cli.py**: команды `process-queue`, `queue-watch`, `queue-status`.
+- **api.py**: `GET /api/v1/meeting-queue/status` (контракт наблюдаемости для BL-144), `POST /api/v1/process-queue`.
+
+### pm-bot 1.15.0
+- **transcript_watcher.py**: переведён на очередь — кладёт `.txt` в `pending/` (source=local) через `shared.meeting_queue.enqueue`, без локального LLM; убрана избыточная копия в `raw/inbound/meeting-notes`.
+- **handlers.py**: `handle_fetch_meetings` — текст «поставлено в очередь»; фикс KeyError на устаревших ключах `details` (`file`/`type` → `subject`/`source` после рефактора).
+
+### инфраструктура 1.1.0
+- **docker-compose.yml**: KE-контейнер получает процесс `queue-watch` (watchdog); ke-cron — строка `process-queue` каждые 10 мин (страховка/reclaim).
+
+### Документация
+- **ADR-005** (NEW): file-based meeting queue. requirements/design/tasks в `docs/meeting-processing-queue/`.
+
+### Заметки
+- По ходу реализации найдены и устранены 2 интеграционных бага: watchdog не срабатывал на `on_created` (atomic_write даёт `on_moved`); KeyError в Telegram-хендлере на устаревших ключах `details`.
+- Полный test suite: 0 новых падений (9 pre-existing — чужие модули). ≈121 новый тест зелёный.
+- **e2e live-тест выполняется после Docker rebuild** (топология KE-контейнера изменилась).
+
+---
+
 ## 30.06.2026 — Process Catalog + Playground UX
 
 ### web-ui 1.25.0
