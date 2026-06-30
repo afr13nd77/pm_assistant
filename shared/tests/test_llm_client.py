@@ -1,17 +1,18 @@
 """Tests for shared/llm_client.py"""
 
 import os
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from shared.llm_client import (
-    _migrate_legacy_prefs,
-    _resolve_group,
-    _resolve_chain,
     _is_provider_available,
+    _migrate_legacy_prefs,
+    _resolve_chain,
+    _resolve_group,
     call,
+    call_detailed,
 )
-
 
 # ---------------------------------------------------------------------------
 # _migrate_legacy_prefs
@@ -223,3 +224,108 @@ class TestCall:
             # _call_provider must have been called only once and with claude
             assert mock_call.call_count == 1
             assert mock_call.call_args[0][0] == "claude"
+
+
+# ---------------------------------------------------------------------------
+# call_detailed
+# ---------------------------------------------------------------------------
+
+class TestCallDetailed:
+    _MESSAGES = [{"role": "user", "content": "hello"}]
+
+    def test_first_provider_success_record(self):
+        """First provider succeeds: used==first, providers holds the chain, no errors."""
+        prefs = {
+            "llm_provider": "claude",
+            "capture_fallback": ["claude"],
+            "transcription_fallback": ["claude"],
+            "analysis_fallback": ["claude"],
+        }
+        with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
+             patch("shared.llm_client._is_provider_available", return_value=True), \
+             patch("shared.llm_client._call_provider", return_value="ok-response"):
+            text, record = call_detailed("idea", self._MESSAGES, max_tokens=100)
+            assert text == "ok-response"
+            assert record["used"] == "claude"
+            assert record["providers"] == ["claude"]
+            assert record["errors"] == []
+
+    def test_fallback_to_second_provider_record(self):
+        """First provider fails, second succeeds: used==second, errors has the first."""
+        prefs = {
+            "llm_provider": "claude",
+            "capture_fallback": ["ollama", "claude"],
+            "transcription_fallback": ["claude"],
+            "analysis_fallback": ["claude"],
+        }
+        call_results = [Exception("ollama down"), "fallback-response"]
+        call_iter = iter(call_results)
+
+        def fake_call_provider(provider, *args, **kwargs):
+            val = next(call_iter)
+            if isinstance(val, Exception):
+                raise val
+            return val
+
+        with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
+             patch("shared.llm_client._is_provider_available", return_value=True), \
+             patch("shared.llm_client._call_provider", side_effect=fake_call_provider):
+            text, record = call_detailed("idea", self._MESSAGES, max_tokens=100)
+            assert text == "fallback-response"
+            assert record["used"] == "ollama" or record["used"] == "claude"
+            # Second provider in the chain is the one that succeeded
+            assert record["used"] == "claude"
+            assert record["providers"] == ["ollama", "claude"]
+            assert len(record["errors"]) == 1
+            failed_provider, failed_msg = record["errors"][0]
+            assert failed_provider == "ollama"
+            assert "ollama down" in failed_msg
+
+    def test_used_always_set_on_success(self):
+        """provider_record['used'] is always populated (non-empty) on success."""
+        prefs = {
+            "llm_provider": "claude",
+            "capture_fallback": ["openrouter", "claude"],
+            "transcription_fallback": ["claude"],
+            "analysis_fallback": ["claude"],
+        }
+
+        def availability(provider, _prefs):
+            return provider == "claude"  # openrouter unavailable
+
+        with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
+             patch("shared.llm_client._is_provider_available", side_effect=availability), \
+             patch("shared.llm_client._call_provider", return_value="claude-result"):
+            text, record = call_detailed("idea", self._MESSAGES, max_tokens=100)
+            assert text == "claude-result"
+            assert record["used"]  # non-empty
+            assert record["used"] == "claude"
+
+    def test_all_providers_fail_raises_runtime_error(self):
+        """RuntimeError when every provider fails (same contract as call())."""
+        prefs = {
+            "llm_provider": "claude",
+            "capture_fallback": ["claude"],
+            "transcription_fallback": ["claude"],
+            "analysis_fallback": ["claude"],
+        }
+        with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
+             patch("shared.llm_client._is_provider_available", return_value=True), \
+             patch("shared.llm_client._call_provider", side_effect=Exception("always fails")):
+            with pytest.raises(RuntimeError, match="All providers failed"):
+                call_detailed("idea", self._MESSAGES, max_tokens=100)
+
+    def test_call_delegates_to_call_detailed(self):
+        """call() returns exactly call_detailed()[0] — behaviour unchanged."""
+        prefs = {
+            "llm_provider": "claude",
+            "capture_fallback": ["claude"],
+            "transcription_fallback": ["claude"],
+            "analysis_fallback": ["claude"],
+        }
+        with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
+             patch("shared.llm_client._is_provider_available", return_value=True), \
+             patch("shared.llm_client._call_provider", return_value="ok-response"):
+            text_only = call("idea", self._MESSAGES, max_tokens=100)
+            text_detailed, _ = call_detailed("idea", self._MESSAGES, max_tokens=100)
+            assert text_only == text_detailed == "ok-response"

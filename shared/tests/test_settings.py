@@ -1,6 +1,5 @@
 """Tests for shared.settings module."""
 
-import os
 import pytest
 import yaml
 
@@ -23,12 +22,21 @@ class TestDefaults:
         assert "rate_limits" in settings.DEFAULTS
         assert "paths" in settings.DEFAULTS
         assert "ports" in settings.DEFAULTS
+        assert "queue" in settings.DEFAULTS
 
     def test_defaults_timeout_values(self):
         t = settings.DEFAULTS["timeouts"]
         assert t["enrich"] == 30
         assert t["synthesize"] == 120
         assert t["default"] == 60
+        assert t["fetch_meetings"] == 120
+
+    def test_defaults_queue_values(self):
+        q = settings.DEFAULTS["queue"]
+        assert q["max_attempts"] == 5
+        assert q["stuck_threshold_seconds"] == 1800
+        assert q["process_timeout"] == 180
+        assert q["batch_limit"] == 0
 
 
 class TestLoadSettings:
@@ -88,6 +96,15 @@ class TestGet:
         result = settings.get("timeouts")
         assert isinstance(result, dict)
         assert "enrich" in result
+
+    def test_queue_dot_notation(self):
+        assert settings.get("queue.max_attempts") == 5
+        assert settings.get("queue.stuck_threshold_seconds") == 1800
+        assert settings.get("queue.process_timeout") == 180
+        assert settings.get("queue.batch_limit") == 0
+
+    def test_fetch_meetings_timeout(self):
+        assert settings.get("timeouts.fetch_meetings") == 120
 
 
 class TestGetSettings:

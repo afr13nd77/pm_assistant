@@ -311,6 +311,87 @@ def _call_provider(
     raise ValueError(f"Unknown provider: {provider}")
 
 
+def call_detailed(
+    operation: str,
+    messages: list[dict],
+    max_tokens: int,
+    system: str | None = None,
+    timeout: int | None = None,
+) -> tuple[str, dict]:
+    """Unified entry point for LLM calls; returns (text, provider_record).
+
+    Identical fallback behaviour to call(), but additionally reports which
+    providers were resolved, which one succeeded, and what errors occurred.
+
+    1. Determines the operation group (capture/transcription/analysis)
+    2. Reads the fallback chain for the group from prefs
+    3. Iterates providers, skipping unavailable ones
+    4. On error, falls back to the next provider
+    5. If all providers fail, raises RuntimeError
+
+    Returns:
+        (text, provider_record) where provider_record = {
+            'providers': <resolved fallback chain>,
+            'used': <name of the provider that succeeded>,
+            'errors': [(provider_name, str(exc)), ...],
+        }
+    """
+    prefs = _load_llm_prefs()
+    prefs = _migrate_legacy_prefs(prefs)
+
+    group = _resolve_group(operation)
+    chain = _resolve_chain(group, prefs)
+
+    logger.info("call_detailed: operation=%s, group=%s, chain=%s", operation, group, chain)
+
+    errors: list[tuple[str, str]] = []
+
+    for i, provider in enumerate(chain):
+        if not _is_provider_available(provider, prefs):
+            logger.info(
+                "call_detailed: skipping %s (not available), operation=%s",
+                provider, operation,
+            )
+            continue
+
+        try:
+            logger.info(
+                "call_detailed: trying provider=%s (%d/%d), operation=%s",
+                provider, i + 1, len(chain), operation,
+            )
+            result = _call_provider(provider, prefs, messages, max_tokens, system, timeout)
+            provider_record = {
+                "providers": chain,
+                "used": provider,
+                "errors": errors,
+            }
+            logger.info(
+                "call_detailed: success, operation=%s, provider=%s, output_len=%d",
+                operation, provider, len(result),
+            )
+            return result, provider_record
+
+        except Exception as exc:
+            errors.append((provider, str(exc)))
+            remaining = [p for p in chain[i + 1:] if _is_provider_available(p, prefs)]
+            if remaining:
+                logger.warning(
+                    "call_detailed: %s failed for operation=%s: %s. Falling back to %s",
+                    provider, operation, exc, remaining[0],
+                )
+            else:
+                logger.error(
+                    "call_detailed: %s failed for operation=%s: %s. No more providers in chain.",
+                    provider, operation, exc,
+                )
+
+    error_summary = "; ".join(f"{p}: {e}" for p, e in errors)
+    raise RuntimeError(
+        f"All providers failed for operation={operation} "
+        f"(group={group}, chain={chain}): {error_summary}"
+    )
+
+
 def call(
     operation: str,
     messages: list[dict],
@@ -320,58 +401,10 @@ def call(
 ) -> str:
     """Unified entry point for LLM calls with configurable fallback chain.
 
-    1. Determines the operation group (capture/transcription/analysis)
-    2. Reads the fallback chain for the group from prefs
-    3. Iterates providers, skipping unavailable ones
-    4. On error, falls back to the next provider
-    5. If all providers fail, raises RuntimeError
+    Thin wrapper over call_detailed() — returns only the response text.
+    External behaviour is unchanged.
     """
-    prefs = _load_llm_prefs()
-    prefs = _migrate_legacy_prefs(prefs)
-
-    group = _resolve_group(operation)
-    chain = _resolve_chain(group, prefs)
-
-    logger.info("call: operation=%s, group=%s, chain=%s", operation, group, chain)
-
-    errors: list[tuple[str, Exception]] = []
-
-    for i, provider in enumerate(chain):
-        if not _is_provider_available(provider, prefs):
-            logger.info("call: skipping %s (not available), operation=%s", provider, operation)
-            continue
-
-        try:
-            logger.info(
-                "call: trying provider=%s (%d/%d), operation=%s",
-                provider, i + 1, len(chain), operation,
-            )
-            result = _call_provider(provider, prefs, messages, max_tokens, system, timeout)
-            logger.info(
-                "call: success, operation=%s, provider=%s, output_len=%d",
-                operation, provider, len(result),
-            )
-            return result
-
-        except Exception as exc:
-            errors.append((provider, exc))
-            remaining = [p for p in chain[i + 1:] if _is_provider_available(p, prefs)]
-            if remaining:
-                logger.warning(
-                    "call: %s failed for operation=%s: %s. Falling back to %s",
-                    provider, operation, exc, remaining[0],
-                )
-            else:
-                logger.error(
-                    "call: %s failed for operation=%s: %s. No more providers in chain.",
-                    provider, operation, exc,
-                )
-
-    error_summary = "; ".join(f"{p}: {e}" for p, e in errors)
-    raise RuntimeError(
-        f"All providers failed for operation={operation} "
-        f"(group={group}, chain={chain}): {error_summary}"
-    )
+    return call_detailed(operation, messages, max_tokens, system, timeout)[0]
 
 
 def call_with_fallback(

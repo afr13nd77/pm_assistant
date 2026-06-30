@@ -15,7 +15,7 @@ DEFAULTS: dict[str, Any] = {
     "timeouts": {
         "enrich": 30,
         "synthesize": 120,
-        "fetch_meetings": 180,
+        "fetch_meetings": 120,
         "jira_sync": 120,
         "jira_import": 60,
         "jira_create": 120,
@@ -49,6 +49,12 @@ DEFAULTS: dict[str, Any] = {
     },
     "ports": {
         "ke_api": 8001,
+    },
+    "queue": {
+        "max_attempts": 5,
+        "stuck_threshold_seconds": 1800,
+        "process_timeout": 180,
+        "batch_limit": 0,
     },
 }
 
