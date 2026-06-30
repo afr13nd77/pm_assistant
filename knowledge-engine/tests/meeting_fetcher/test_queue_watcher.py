@@ -12,6 +12,8 @@ processor.process_one замоканы. Проверяется:
 from types import SimpleNamespace
 from unittest import mock
 
+from watchdog.observers.polling import PollingObserver
+
 from app.meeting_fetcher.queue_watcher import PendingHandler, start_queue_watch
 
 
@@ -144,12 +146,18 @@ def test_process_exception_not_propagated(tmp_path):
     instance.claim.assert_called_once_with(unit_id)
 
 
-def test_start_queue_watch_returns_observer(tmp_path):
-    """start_queue_watch создаёт, запускает и возвращает Observer; затем останавливаем."""
-    observer = start_queue_watch(str(tmp_path))
-    try:
-        assert observer is not None
-        assert observer.is_alive()
-    finally:
-        observer.stop()
-        observer.join(timeout=5)
+def test_start_queue_watch_returns_polling_observer(tmp_path):
+    """start_queue_watch возвращает инстанс PollingObserver.
+
+    PollingObserver критичен для bind-mount Windows→Linux: нативный inotify-Observer
+    не получает события на смонтированной ФС (BL-145 E2E). Мокаем schedule/start,
+    чтобы не поднимать реальный поллинг-поток в юнит-тесте.
+    """
+    with mock.patch.object(PollingObserver, "schedule") as schedule, mock.patch.object(
+        PollingObserver, "start"
+    ) as start:
+        observer = start_queue_watch(str(tmp_path))
+
+    assert isinstance(observer, PollingObserver)
+    schedule.assert_called_once()
+    start.assert_called_once()

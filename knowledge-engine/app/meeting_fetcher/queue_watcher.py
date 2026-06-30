@@ -27,8 +27,8 @@ import logging
 from pathlib import Path
 
 from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
 from watchdog.observers.api import BaseObserver
+from watchdog.observers.polling import PollingObserver
 
 from shared.meeting_queue import meeting_queue_pending
 
@@ -132,12 +132,15 @@ def start_queue_watch(vault_path: str, notify: bool = False) -> BaseObserver:
         Запущенный watchdog Observer.
     """
     logger.info(
-        "start_queue_watch: starting (vault_path=%s, notify=%s)", vault_path, notify
+        "start_queue_watch: starting polling observer (interval 5s) "
+        "(vault_path=%s, notify=%s)",
+        vault_path,
+        notify,
     )
     try:
         pending_dir = meeting_queue_pending(vault_path)
         handler = PendingHandler(vault_path, notify=notify)
-        observer = Observer()
+        observer = PollingObserver(timeout=5)
         observer.schedule(handler, str(pending_dir), recursive=False)
         observer.start()
         logger.info("start_queue_watch: watching pending dir %s", pending_dir)
