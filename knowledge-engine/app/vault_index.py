@@ -133,7 +133,10 @@ def _index_file(filepath: Path, vault_root: Path, category: str, domain: str) ->
             body = filepath.read_text(encoding="utf-8")
 
         title = _extract_title(body, filepath)
-        tags = metadata.get("tags", [])
+        # BUG-019: same None-trap as enricher — empty `tags:` yields None, which
+        # would later crash VaultIndex.search() iterating entry.tags. `or []`
+        # coerces missing-key and null to an empty list.
+        tags = metadata.get("tags") or []
         if isinstance(tags, str):
             tags = [t.strip() for t in tags.split(",")]
 

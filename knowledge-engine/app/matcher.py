@@ -20,6 +20,10 @@ def find_links(
     tags: list[str],
     index: VaultIndex,
 ) -> list[tuple[VaultEntry, int, str]]:
+    # BUG-019: defensive coercion — callers may pass None for tags (empty YAML
+    # `tags:` frontmatter). Without this, index.search() iterates None and raises
+    # "'NoneType' object is not iterable".
+    tags = tags or []
     logger.info(f"Finding links for text ({len(text)} chars), tags={tags}")
 
     keywords = extract_keywords(text)

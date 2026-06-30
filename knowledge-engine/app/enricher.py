@@ -41,7 +41,11 @@ def enrich(filepath: str | Path, vault_path: str = "", dry_run: bool = False) ->
         logger.error(f"Failed to build vault index: {e}")
         return {"status": "error", "message": f"Index build failed: {e}"}
 
-    tags = metadata.get("tags", [])
+    # BUG-019: `.get("tags", [])` returns None when the YAML key `tags:` exists
+    # but is empty/null (the default is not applied). `or []` coerces both a
+    # missing key and an explicit None to an empty list, preventing
+    # "'NoneType' object is not iterable" downstream in find_links/search.
+    tags = metadata.get("tags") or []
     if isinstance(tags, str):
         tags = [t.strip() for t in tags.split(",")]
 
