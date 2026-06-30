@@ -205,7 +205,7 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 - APScheduler: weekly report (Mon 09:00), enrichment reminders (daily)
 - SQLite: дедупликация enrichment-напоминаний (cooldown 24ч)
 
-### knowledge-engine (v1.12.0)
+### knowledge-engine (v1.12.1)
 
 Сервис обогащения и синтеза знаний.
 

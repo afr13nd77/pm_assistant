@@ -5,6 +5,13 @@
 
 ---
 
+## 30.06.2026 — BUG-019: enrich NoneType на пустом frontmatter tags
+
+### knowledge-engine 1.12.1
+- **enricher.py / vault_index.py / matcher.py**: фикс `'NoneType' object is not iterable` при enrichment протоколов с пустым `tags:` во frontmatter (PyYAML → `None`, `.get("tags", [])` не применял дефолт). Защита `or []` в 3 точках. Затрагивало enrichment всех протоколов встреч (non-fatal). Обнаружен на e2e BL-145. Регресс-тест (7 кейсов).
+
+---
+
 ## 30.06.2026 — Meeting Processing Queue (BL-145)
 
 Рефакторинг обработки протоколов встреч: синхронный `fetch_new_meetings` разрезан на три фазы (Fetch / Queue / Process), связанные файловой очередью `raw/meeting-queue/{pending,processing,done,failed}/`. Получение транскриптов (IMAP + локальный watcher) развязано с LLM-этапом. E2E пройден на Docker.
