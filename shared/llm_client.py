@@ -93,7 +93,7 @@ def get_client(operation: str) -> tuple[anthropic.Anthropic, str, dict]:
     if provider == "ollama" and ollama_url:
         use_ollama = True
     elif provider == "hybrid" and ollama_url:
-        use_ollama = operation in {"idea", "daily", "jira_ticket", "meeting"}
+        use_ollama = operation in {"idea", "daily", "jira_ticket", "meeting", "digest"}
 
     if use_ollama:
         logger.info("get_client: operation=%s, provider=ollama, url=%s, model=%s",

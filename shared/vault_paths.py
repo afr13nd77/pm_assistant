@@ -84,6 +84,35 @@ def wiki_reports() -> Path:
     return _ensure_dir(VAULT_PATH / "wiki" / "reports")
 
 
+def llm_wiki_root() -> Path:
+    return _ensure_dir(VAULT_PATH / "llm_wiki")
+
+
+def llm_wiki_domain_dir(domain: str, artifact_type: str) -> Path:
+    if artifact_type not in _VALID_ARTIFACT_TYPES:
+        raise ValueError(
+            f"Invalid artifact_type '{artifact_type}'. "
+            f"Must be one of: {', '.join(sorted(_VALID_ARTIFACT_TYPES))}"
+        )
+    return _ensure_dir(VAULT_PATH / "llm_wiki" / "domains" / domain / artifact_type)
+
+
+def llm_wiki_meetings() -> Path:
+    return _ensure_dir(VAULT_PATH / "llm_wiki" / "meetings")
+
+
+def llm_wiki_daily_logs() -> Path:
+    return _ensure_dir(VAULT_PATH / "llm_wiki" / "daily-logs")
+
+
+def llm_wiki_reports() -> Path:
+    return _ensure_dir(VAULT_PATH / "llm_wiki" / "reports")
+
+
+def llm_wiki_index_file() -> Path:
+    return VAULT_PATH / "llm_wiki" / "_index.md"
+
+
 def wiki_concepts() -> Path:
     """Return path to wiki/concepts/ directory, ensuring it exists."""
     logger.info("wiki_concepts: resolving wiki/concepts/ directory")

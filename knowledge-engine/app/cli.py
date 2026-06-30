@@ -187,6 +187,26 @@ def main():
     audit_parser.add_argument("--source", default="general", help="Source domain (default: general)")
     audit_parser.add_argument("--vault", default=None, help="Vault root path")
 
+    digest_parser = subparsers.add_parser("digest", help="Generate digest for a single wiki file")
+    digest_parser.add_argument("filepath", help="Path to .md file in wiki/")
+    digest_parser.add_argument("--vault", default=None, help="Vault root path")
+    digest_parser.add_argument("--force", action="store_true", help="Force regeneration even if up to date")
+
+    digest_bulk_parser = subparsers.add_parser("digest-bulk", help="Bulk generate digests for all wiki artifacts")
+    digest_bulk_parser.add_argument("--domain", default=None, help="Filter by domain")
+    digest_bulk_parser.add_argument("--type", dest="artifact_type", default=None, help="Filter by artifact type")
+    digest_bulk_parser.add_argument("--vault", default=None, help="Vault root path")
+    digest_bulk_parser.add_argument("--force", action="store_true", help="Force regeneration of all")
+
+    digest_index_parser = subparsers.add_parser("digest-index", help="Regenerate llm_wiki/_index.md")
+    digest_index_parser.add_argument("--vault", default=None, help="Vault root path")
+
+    digest_audit_parser = subparsers.add_parser("digest-audit", help="Check integrity of llm_wiki/ vs wiki/")
+    digest_audit_parser.add_argument("--vault", default=None, help="Vault root path")
+
+    digest_status_parser = subparsers.add_parser("digest-status", help="Show digest coverage statistics")
+    digest_status_parser.add_argument("--vault", default=None, help="Vault root path")
+
     serve_parser = subparsers.add_parser("serve", help="Start HTTP API server")
     serve_parser.add_argument("--vault", default=None, help="Vault root path")
     serve_parser.add_argument("--host", default="0.0.0.0")
@@ -809,6 +829,110 @@ def main():
             logger.error("queue-status: failed: %s", exc)
             _output_json({"status": "error", "message": str(exc)})
             sys.exit(1)
+
+    elif args.command == "digest":
+        from .digest.generator import generate_digest
+        logger.info("digest: generating for %s (force=%s)", args.filepath, args.force)
+        result = generate_digest(
+            source_path=__import__("pathlib").Path(args.filepath),
+            vault_path=vault_path,
+            force=args.force,
+        )
+        logger.info("digest: completed, status=%s", result.get("status"))
+        _output_json(result)
+
+    elif args.command == "digest-bulk":
+        from .digest.generator import generate_bulk
+        logger.info("digest-bulk: starting (domain=%s, type=%s, force=%s)",
+                    args.domain, args.artifact_type, args.force)
+        result = generate_bulk(
+            vault_path=vault_path,
+            domain=args.domain,
+            artifact_type=args.artifact_type,
+            force=args.force,
+        )
+        logger.info("digest-bulk: completed, generated=%d, skipped=%d, failed=%d",
+                    result.get("generated", 0), result.get("skipped", 0), result.get("failed", 0))
+        _output_json(result)
+
+    elif args.command == "digest-index":
+        from .digest.generator import regenerate_index
+        logger.info("digest-index: regenerating _index.md")
+        result = regenerate_index(vault_path=vault_path)
+        logger.info("digest-index: completed, entries=%d", result.get("entries", 0))
+        _output_json(result)
+
+    elif args.command == "digest-audit":
+        from shared.frontmatter_utils import read_frontmatter as _read_fm
+        logger.info("digest-audit: checking integrity, vault=%s", vault_path)
+        vault_root = __import__("pathlib").Path(vault_path)
+        llm_wiki = vault_root / "llm_wiki"
+        orphans = []
+        broken = []
+        if llm_wiki.exists():
+            for md in sorted(llm_wiki.rglob("*.md")):
+                if md.name == "_index.md":
+                    continue
+                try:
+                    meta, _ = _read_fm(md)
+                    source = meta.get("source", "")
+                    wiki_file = vault_root / source if source else None
+                    if not wiki_file or not wiki_file.exists():
+                        orphans.append(str(md.relative_to(vault_root)))
+                    if meta.get("validation") == "failed":
+                        broken.append(str(md.relative_to(vault_root)))
+                except Exception as e:
+                    broken.append(f"{md.relative_to(vault_root)}: {e}")
+        result = {
+            "status": "ok",
+            "total_digests": len(list(llm_wiki.rglob("*.md"))) - (1 if (llm_wiki / "_index.md").exists() else 0) if llm_wiki.exists() else 0,
+            "orphans": orphans,
+            "broken": broken,
+            "orphan_count": len(orphans),
+            "broken_count": len(broken),
+        }
+        logger.info("digest-audit: completed, orphans=%d, broken=%d", len(orphans), len(broken))
+        _output_json(result)
+
+    elif args.command == "digest-status":
+        from shared.frontmatter_utils import read_frontmatter as _read_fm
+        logger.info("digest-status: collecting statistics, vault=%s", vault_path)
+        vault_root = __import__("pathlib").Path(vault_path)
+        llm_wiki = vault_root / "llm_wiki"
+        total_digests = 0
+        passed = 0
+        failed = 0
+        total_wiki = 0
+        if llm_wiki.exists():
+            for md in llm_wiki.rglob("*.md"):
+                if md.name == "_index.md":
+                    continue
+                total_digests += 1
+                try:
+                    meta, _ = _read_fm(md)
+                    if meta.get("validation") == "passed":
+                        passed += 1
+                    else:
+                        failed += 1
+                except Exception:
+                    failed += 1
+        wiki_dir = vault_root / "wiki"
+        if wiki_dir.exists():
+            for md in wiki_dir.rglob("*.md"):
+                if md.name.upper() in {"INDEX.MD", "LOG.MD"} or md.name.startswith("_"):
+                    continue
+                total_wiki += 1
+        coverage = f"{(total_digests / total_wiki * 100):.1f}%" if total_wiki > 0 else "0%"
+        result = {
+            "status": "ok",
+            "total_wiki_artifacts": total_wiki,
+            "total_digests": total_digests,
+            "coverage": coverage,
+            "passed": passed,
+            "failed": failed,
+        }
+        logger.info("digest-status: wiki=%d, digests=%d, coverage=%s", total_wiki, total_digests, coverage)
+        _output_json(result)
 
 
 def _collect_queue_units(vault_path: str) -> list:
