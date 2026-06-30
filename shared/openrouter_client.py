@@ -18,7 +18,6 @@ AVAILABLE_MODELS: list[dict[str, str]] = [
     {"id": "qwen/qwen3-next-80b-a3b-instruct:free", "name": "Qwen3 Next 80B A3B Instruct (free)"},
     {"id": "openai/gpt-oss-120b:free", "name": "GPT-OSS 120B (free)"},
     {"id": "openai/gpt-oss-20b:free", "name": "GPT-OSS 20B (free)"},
-    {"id": "openrouter/owl-alpha", "name": "Owl Alpha"},
 ]
 
 
