@@ -5,6 +5,36 @@
 
 ---
 
+## 30.06.2026 — Meeting Processing Queue (BL-145)
+
+Рефакторинг обработки протоколов встреч: синхронный `fetch_new_meetings` разрезан на три фазы (Fetch / Queue / Process), связанные файловой очередью `raw/meeting-queue/{pending,processing,done,failed}/`. Получение транскриптов (IMAP + локальный watcher) развязано с LLM-этапом. E2E пройден на Docker.
+
+### knowledge-engine 1.12.0
+- **queue.py** (NEW): `MeetingQueue` — claim/claim_next (атомарный rename), complete/fail/requeue, reclaim_stuck, status_counts
+- **processor.py** (NEW): Process-воркер — `process_one`/`process_pending`; LLM через fallback chain (`call_detailed`, max_attempts=5), `validate_protocol` (frontmatter type/date + H1 + длина) до записи в wiki
+- **queue_watcher.py** (NEW): watchdog-демон на `pending/` (PollingObserver, near-realtime)
+- **fetcher.py**: `fetch-meetings` теперь только наполняет очередь (без LLM); дедуп `is_enqueued OR is_processed`
+- **cli.py**: команды `process-queue`, `queue-watch`, `queue-status`
+- **api.py**: `GET /api/v1/meeting-queue/status`, `POST /api/v1/process-queue`
+
+### pm-bot 1.15.0
+- **transcript_watcher.py**: переведён на очередь — кладёт `.txt` в `pending/` (source=local) без локального LLM
+- **handlers.py**: `handle_fetch_meetings` — текст «поставлено в очередь» + фикс KeyError на устаревших ключах `details`
+
+### shared 0.4.0
+- **meeting_queue.py** (NEW): enqueue-ядро файловой очереди (Unit, make_unit_id, build_meta, enqueue, path-хелперы) — общее для KE и pm-bot
+- **llm_client.py**: `call_detailed()` (additive) — возвращает `(text, provider_record)` с перебором провайдеров
+- **settings**: секция `queue` (max_attempts=5, stuck_threshold=1800, process_timeout=180); `timeouts.fetch_meetings` 600→120
+
+### инфраструктура 1.1.0
+- **docker-compose.yml**: KE-контейнер +`queue-watch` (watchdog); ke-cron +`process-queue` каждые 10 мин (страховка)
+
+### Заметки
+- E2E поймал 4 интеграционных бага (исправлены): watchdog `on_moved`; нативный Observer мёртв на bind-mount → PollingObserver; `validate_protocol` требовал несуществующее frontmatter-поле `title` → `('type','date')`+H1; KeyError в Telegram-хендлере.
+- ADR-005 (file-based meeting queue). 0 новых падений тестов; ≈121 новый тест зелёный.
+
+---
+
 ## 30.06.2026 — Process Catalog + Playground UX
 
 ### web-ui 1.25.0
