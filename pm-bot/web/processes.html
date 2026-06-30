@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru" class="theme-matrix">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Board — Processes</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+  <script>
+  (function() {
+    try {
+      var t = localStorage.getItem('pm_theme');
+      if (t === 'light') {
+        document.documentElement.className = 'theme-light';
+        document.getElementById('theme-css').href = 'style-light.css';
+      }
+    } catch(e) {}
+  })();
+  </script>
+  <style>
+  .process-section-title {
+    font-size: 13px;
+    letter-spacing: 2px;
+    opacity: 0.6;
+    text-transform: uppercase;
+    margin: 24px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .process-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  .process-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .process-card:hover {
+    border-color: var(--cyan);
+  }
+  a.process-card {
+    text-decoration: none;
+    color: var(--text);
+    display: block;
+  }
+  .process-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .process-icon {
+    font-size: 20px;
+  }
+  .process-name {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .process-num {
+    font-size: 11px;
+    opacity: 0.4;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .process-trigger {
+    font-size: 11px;
+    opacity: 0.6;
+    margin-top: 8px;
+  }
+  </style>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <app-sidebar active="about"></app-sidebar>
+    <main class="page-content" style="position: relative; overflow: hidden;">
+      <div class="scan-line"></div>
+      <div class="text-page-title">PROCESSES</div>
+
+      <div class="process-section-title">БИЗНЕС-ПРОЦЕССЫ</div>
+      <div class="process-grid">
+        <a v-for="p in businessProcesses" :key="p.id"
+           :href="'process.html?id=' + p.id"
+           class="process-card">
+          <div class="process-card-header">
+            <span class="process-num">#{{ String(p.id).padStart(2, '0') }}</span>
+            <span class="process-icon">{{ p.icon }}</span>
+            <span class="process-name">{{ p.name }}</span>
+          </div>
+          <div class="process-trigger">{{ p.trigger }}</div>
+        </a>
+      </div>
+
+      <div class="process-section-title">ТЕХНИЧЕСКИЕ ПРОЦЕССЫ</div>
+      <div class="process-grid">
+        <a v-for="p in techProcesses" :key="p.id"
+           :href="'process.html?id=' + p.id"
+           class="process-card">
+          <div class="process-card-header">
+            <span class="process-num">#{{ String(p.id).padStart(2, '0') }}</span>
+            <span class="process-icon">{{ p.icon }}</span>
+            <span class="process-name">{{ p.name }}</span>
+          </div>
+          <div class="process-trigger">{{ p.trigger }}</div>
+        </a>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="api.js"></script>
+  <script src="components.js"></script>
+  <script>
+  const { createApp, ref, computed } = Vue;
+
+  const app = createApp({
+    setup() {
+      var processes = ref([
+        { id: 1, section: 'business', icon: '\u{1F4A1}', name: 'Capture идеи', trigger: 'Telegram текст/голос, Web UI', flow: 'Пользователь (текст или голос) → STT (faster-whisper, если голос) → LLM (Claude/Ollama/OpenRouter) → raw/inbound/ideas/ → wiki/domains/{d}/ideas/', description: 'Захват продуктовых идей из Telegram (текст и голос) и Web UI. Голосовые сообщения транскрибируются через STT, затем LLM структурирует идею и сохраняет в vault.', components: ['pm-bot', 'knowledge-engine'] },
+        { id: 2, section: 'business', icon: '\u{1F4CB}', name: 'Capture задачи', trigger: 'Telegram /jira, Web UI', flow: 'Пользователь → LLM → raw/inbound/tasks/ → wiki/domains/{d}/tasks/', description: 'Быстрое создание задач через Telegram-команду /jira или Web UI. LLM классифицирует задачу по домену и сохраняет в vault.', components: ['pm-bot', 'knowledge-engine'] },
+        { id: 3, section: 'business', icon: '\u{1F3A4}', name: 'Capture встречи', trigger: 'Watchdog (транскрипт .txt)', flow: 'Файл в inbox → LLM → raw/inbound/meetings/ → wiki/meetings/', description: 'Автоматическая обработка транскриптов встреч (Яндекс Телемост). Watchdog отслеживает папку inbox, LLM извлекает ключевые решения и action items.', components: ['pm-bot'] },
+        { id: 4, section: 'business', icon: '\u{1F4E7}', name: 'Email fetch протоколов', trigger: 'Telegram, Settings UI, cron', flow: 'IMAP → классификация → LLM → raw/ → wiki/ → enrich → notify', description: 'Получение протоколов совещаний из email по IMAP. Классификация, обработка LLM, сохранение в vault с обогащением и нотификацией.', components: ['knowledge-engine', 'pm-bot'] },
+        { id: 5, section: 'business', icon: '\u{1F504}', name: 'Jira sync', trigger: 'Cron 3ч, Telegram, Settings UI', flow: 'JQL fetch → diff state → domain detection → vault write → Telegram notify', description: 'Периодическая синхронизация задач из Jira (каждые 3 часа). Определение изменений, маппинг по доменам, запись в vault и Telegram-уведомления.', components: ['knowledge-engine', 'pm-bot'] },
+        { id: 6, section: 'business', icon: '\u{1F4E5}', name: 'Jira import', trigger: 'Telegram /jira_import, Web UI, API', flow: 'Ключ тикета → Jira REST → vault write', description: 'Импорт конкретного тикета из Jira по ключу (например PROJ-123). Загрузка данных через Jira REST API и сохранение в vault.', components: ['knowledge-engine', 'pm-bot'] },
+        { id: 7, section: 'business', icon: '\u{1F4E4}', name: 'Jira create', trigger: 'Telegram /jira_create, API', flow: 'Vault-артефакт → Jira REST → создание issue', description: 'Создание нового issue в Jira на основе артефакта из vault. Маппинг полей, отправка через REST API.', components: ['knowledge-engine', 'pm-bot'] },
+        { id: 8, section: 'business', icon: '\u{1F517}', name: 'Daily Jira sync', trigger: 'При обработке протоколов', flow: 'Извлечение Jira-ключей из протокола → авто-импорт → wikilinks', description: 'Автоматическое извлечение Jira-ключей из протоколов совещаний. Импорт упомянутых тикетов и создание wikilinks между документами.', components: ['knowledge-engine'] },
+        { id: 9, section: 'business', icon: '\u{2728}', name: 'Обогащение идеи', trigger: 'Watchdog, ручной запуск', flow: 'Идея → keyword/tag matching → связи из vault → обновление frontmatter', description: 'Обогащение идей контекстом из vault: keyword/tag matching, поиск связанных артефактов, обновление frontmatter с метаданными.', components: ['knowledge-engine'] },
+        { id: 10, section: 'business', icon: '\u{1F9EC}', name: 'Синтез идей', trigger: 'Telegram /synthesize, API', flow: 'Кластеризация идей по домену → LLM сводка → wiki/reports/', description: 'Кластеризация идей по домену и генерация сводного отчёта через LLM. Помогает увидеть паттерны и приоритеты.', components: ['knowledge-engine', 'pm-bot'] },
+        { id: 11, section: 'business', icon: '\u{1F680}', name: 'Idea Pipeline', trigger: 'Telegram /pipeline, API', flow: 'Analyst analysis → PRD → Epic + Tasks (JSON) → vault', description: 'Полный цикл проработки идеи: анализ аналитиком -> формирование PRD -> декомпозиция на Epic и Tasks в формате JSON.', components: ['idea-pipeline'] },
+        { id: 12, section: 'business', icon: '\u{1F4CA}', name: 'Weekly report', trigger: 'Cron (Mon 09:00)', flow: 'Сбор данных за неделю → LLM → отчёт → Telegram', description: 'Автоматический сбор данных за неделю и генерация аналитического отчёта через LLM. Отправка в Telegram каждый понедельник.', components: ['pm-bot'] },
+        { id: 13, section: 'business', icon: '\u{1F514}', name: 'Daily alert', trigger: 'Cron (18:00 МСК, пн-пт)', flow: 'Проверка наличия daily-протокола → Telegram alert при отсутствии', description: 'Ежедневная проверка наличия протокола дневного совещания. Telegram-alert при отсутствии (пн-пт, 18:00 МСК).', components: ['pm-bot'] },
+        { id: 14, section: 'business', icon: '\u{1F4EC}', name: 'Enrichment reminder', trigger: 'Cron (ежедневно)', flow: 'Скан идей по readiness % → Telegram напоминание (cooldown 24ч)', description: 'Напоминание об идеях с низким уровнем проработки (readiness %). Cooldown 24 часа между напоминаниями.', components: ['pm-bot'] },
+        { id: 15, section: 'business', icon: '\u{1F3B2}', name: 'Creative recall', trigger: 'Telegram /creative, Web UI', flow: 'Случайная выборка из cold/archive tier → «забытые идеи»', description: 'Случайная выборка идей из cold/archive tier -- "забытые идеи", которые могут быть актуальны. Стимулирует креативное мышление.', components: ['knowledge-engine', 'pm-bot'] },
+        { id: 16, section: 'tech', icon: '\u{23F3}', name: 'Decay recalc', trigger: 'Cron (05:00)', flow: 'Пересчёт relevance (модель Эббингауза) и tier для всех артефактов', description: 'Ежедневный пересчёт relevance по модели Эббингауза. Автоматическое перемещение артефактов между tier (hot -> warm -> cold -> archive).', components: ['knowledge-engine'] },
+        { id: 17, section: 'tech', icon: '\u{1F446}', name: 'Touch', trigger: 'При обращении к артефакту', flow: 'Инкремент access_count, refresh last_accessed, promote tier', description: 'При обращении к артефакту обновляются access_count и last_accessed. Артефакт может быть промоутирован в более высокий tier.', components: ['knowledge-engine', 'pm-bot'] },
+        { id: 18, section: 'tech', icon: '\u{1F3E5}', name: 'Vault health scoring', trigger: 'API запрос, cron (04:00)', flow: '7 категорий штрафов → score 0-100, grade, trend 7d/30d', description: 'Оценка здоровья vault по 7 категориям штрафов. Score 0-100, буквенная оценка, тренды за 7 и 30 дней.', components: ['knowledge-engine'] },
+        { id: 19, section: 'tech', icon: '\u{1F50D}', name: 'Vault linting', trigger: 'Telegram /lint, API', flow: 'Broken links, orphans, dead-ends, stale drafts, unsorted misc', description: 'Проверка целостности vault: битые ссылки, orphan-файлы, dead-end артефакты, stale drafts, неклассифицированные файлы.', components: ['knowledge-engine'] },
+        { id: 20, section: 'tech', icon: '\u{2699}\u{FE0F}', name: 'Domain config management', trigger: 'Web UI, API', flow: 'CRUD доменов, scaffold (index.md, log.md), keyword/tag rules', description: 'Управление доменной конфигурацией: создание, редактирование, удаление доменов. Scaffold структуры (index.md, log.md), правила keyword/tag.', components: ['knowledge-engine', 'pm-bot'] },
+        { id: 21, section: 'tech', icon: '\u{1F500}', name: 'LLM fallback chains', trigger: 'При каждом LLM-вызове', flow: '3 группы (Capture, Transcription, Analysis) × настраиваемые цепочки провайдеров', description: 'Три группы LLM-вызовов (Capture, Transcription, Analysis) с настраиваемыми цепочками провайдеров и автоматическим fallback.', components: ['shared', 'pm-bot', 'knowledge-engine'] },
+        { id: 22, section: 'tech', icon: '\u{26A1}', name: 'TTL cache + invalidation', trigger: 'API запросы', flow: 'In-memory кэш (30с vault, 300с Jira, 60с domains) с invalidation при записи', description: 'In-memory кэш API-ответов с TTL (vault 30с, Jira 300с, domains 60с). Автоматическая инвалидация при записи.', components: ['pm-bot'] },
+        { id: 23, section: 'tech', icon: '\u{1F6A6}', name: 'Rate limiting', trigger: 'Telegram-отправка', flow: 'Token bucket для Telegram API (1 msg/s, retry, queue)', description: 'Token bucket для Telegram API: ограничение 1 сообщение/сек, автоматический retry, очередь отправки.', components: ['pm-bot'] },
+        { id: 24, section: 'tech', icon: '\u{1F4C8}', name: 'Health history', trigger: 'Cron (04:00)', flow: 'Запись score в .health-history.json (TTL 90д) для трендов', description: 'Запись score здоровья vault в .health-history.json с TTL 90 дней. Используется для отображения трендов на дашборде.', components: ['knowledge-engine'] },
+        { id: 25, section: 'tech', icon: '\u{1F504}', name: 'Status migration', trigger: 'CLI', flow: 'Миграция legacy-статусов идей → каноничные (STATUS_MAP)', description: 'Миграция legacy-статусов идей в каноничные значения по STATUS_MAP. Одноразовый CLI-инструмент.', components: ['knowledge-engine'] }
+      ]);
+
+      var businessProcesses = computed(function() {
+        return processes.value.filter(function(p) { return p.section === 'business'; });
+      });
+
+      var techProcesses = computed(function() {
+        return processes.value.filter(function(p) { return p.section === 'tech'; });
+      });
+
+      return { processes, businessProcesses, techProcesses };
+    }
+  });
+
+  registerComponents(app);
+  applyPageTheme().then(function() {
+    app.mount('#app');
+  });
+  </script>
+</body>
+</html>

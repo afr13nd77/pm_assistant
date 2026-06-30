@@ -92,6 +92,8 @@ pm_assistant/
 │       ├── playground.html         # LLM Playground: тестирование провайдеров и моделей
 │       ├── report.html             # просмотр отчётов (marked.js для MD)
 │       ├── settings.html           # настройки (theme, refresh mode, LLM Providers с fallback chains drag-and-drop, prompts, Jira sync)
+│       ├── processes.html          # каталог системных процессов
+│       ├── process.html            # детальная страница процесса
 │       ├── api.js                  # fetch-клиент к vault_api (cancellation, caching, user-prefs, decay snapshot)
 │       ├── components.js           # shared Vue 3 компоненты (sidebar, cards, drawer)
 │       ├── style.css               # базовая тема (flat)
@@ -172,7 +174,7 @@ pm_assistant/
 | **pm-bot** | 1.14.0 | 2026-06-29 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. Настраиваемые fallback-цепочки LLM-провайдеров в Settings UI (BL-140, BL-141). Decision Journal: реестр решений из протоколов + просмотр протокола (BL-24). Timeout fetch_meetings 180s → 600s. |
 | **knowledge-engine** | 1.11.1 | 2026-06-29 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (19 эндпоинтов), jira-search endpoint. Импорты из shared/. Унификация LLM-вызовов через call() (BL-140, BL-141). Meeting protocol enrichment (BL-133, BL-134). Багфиксы: patch_jira_links startswith (BUG-016), footer append fallback (BUG-017). Фикс YAML injection в meeting fetcher (BUG). Фикс 3 багов линтера wikilinks: pipe order, .txt index, escaped pipe. |
 | **idea-pipeline** | 1.1.2 | 2026-06-14 | Orchestrator: Analyst → PM → Decomposer. Импорты vault_paths и file_writer из shared/. |
-| **web-ui** | 1.24.0 | 2026-06-29 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141), LLM Playground (BL-142). Decision Journal (BL-24): decisions.html + meeting.html + overview виджет RECENT DECISIONS. |
+| **web-ui** | 1.25.0 | 2026-06-30 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141), LLM Playground (BL-142). Decision Journal (BL-24): decisions.html + meeting.html + overview виджет RECENT DECISIONS. Process Catalog (processes.html, process.html). |
 | **инфраструктура** | 1.0.0 | 2026-06-11 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120) |
 | **shared** | 0.3.0 | 2026-06-23 | Общий модуль: llm_client (call с настраиваемыми fallback-цепочками, Ollama timeout ×5, call_transcription), openrouter_client, file_writer, vault_paths, domain_config, frontmatter_utils, settings. Единый источник для всех компонентов. Единый call() с настраиваемыми fallback-цепочками (BL-140, BL-141). |
 
@@ -239,6 +241,8 @@ pm_assistant/
 | report.html | Просмотр еженедельных отчётов (Markdown → HTML через marked.js) |
 | settings.html | Настройки: тема, refresh mode, LLM Provider (Claude/Ollama/Hybrid + Test Connection), prompts, Jira sync, Email Fetch |
 | playground.html | LLM Playground: тестирование провайдеров и моделей |
+| processes.html | Каталог системных процессов |
+| process.html | Детальная страница процесса |
 | about.html | О сервисе: версии компонентов, история изменений (CHANGES.md → marked.js) |
 
 **Тема**: dual-theme — MATRIX (dark, glow/neon) и LIGHT (cream, warm). Переключается в settings.html, хранится серверно.

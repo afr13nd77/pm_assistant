@@ -3243,3 +3243,47 @@ html, body {
   color: var(--text-muted);
   font-size: 10px;
 }
+
+/* ============================================================
+   SHARED FORM CONTROLS
+   (provider toggles, model selects — used in playground, settings)
+   ============================================================ */
+.field-select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-body);
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 6px 8px;
+  outline: none;
+}
+
+.toggle-row {
+  display: flex;
+  gap: 0;
+  margin-top: 4px;
+}
+
+.toggle-btn {
+  font-family: var(--font);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  padding: 5px 16px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.toggle-btn:first-child {
+  border-right: none;
+}
+.toggle-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text-body);
+}
+.toggle-btn.active {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  background: var(--cyan-bg);
+}

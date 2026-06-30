@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ru" class="theme-matrix">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Board — Process</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+  <script>
+  (function() {
+    try {
+      var t = localStorage.getItem('pm_theme');
+      if (t === 'light') {
+        document.documentElement.className = 'theme-light';
+        document.getElementById('theme-css').href = 'style-light.css';
+      }
+    } catch(e) {}
+  })();
+  </script>
+  <style>
+  .process-page {
+    max-width: 1020px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  .process-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    opacity: 0.6;
+    text-decoration: none;
+    color: var(--text);
+    margin-bottom: 24px;
+  }
+  .process-back:hover { opacity: 1; color: var(--cyan); }
+  .process-hero {
+    text-align: center;
+    padding: 32px 0 24px;
+  }
+  .process-hero-icon {
+    font-size: 48px;
+    display: block;
+    margin-bottom: 12px;
+  }
+  .process-hero-num {
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    opacity: 0.4;
+    letter-spacing: 2px;
+  }
+  .process-hero-name {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    margin-top: 4px;
+  }
+  .process-hero-type {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    opacity: 0.5;
+    margin-top: 8px;
+  }
+  .process-hero-divider {
+    width: 60px;
+    height: 2px;
+    background: var(--cyan);
+    margin: 16px auto;
+  }
+  .process-content {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+  }
+  .process-main {
+    flex: 1;
+    min-width: 0;
+  }
+  .process-sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 20px;
+  }
+  .process-description-text {
+    font-size: 13px;
+    line-height: 1.7;
+    opacity: 0.8;
+  }
+  .process-block {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+  }
+  .process-block-title {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    opacity: 0.5;
+    margin-bottom: 12px;
+  }
+  .process-trigger-text {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .process-flow-visual {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px 0;
+  }
+  .process-step {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-family: 'JetBrains Mono', monospace;
+    text-align: center;
+    min-width: 60px;
+  }
+  .process-arrow {
+    color: var(--cyan);
+    font-size: 18px;
+    padding: 0 8px;
+    flex-shrink: 0;
+  }
+  .process-component-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .process-comp-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    background: var(--bg);
+  }
+  .process-comp-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .process-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .process-nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    text-decoration: none;
+    color: var(--text);
+    opacity: 0.6;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    transition: all 0.2s;
+  }
+  .process-nav a:hover {
+    opacity: 1;
+    border-color: var(--cyan);
+    color: var(--cyan);
+  }
+  </style>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <app-sidebar active="about"></app-sidebar>
+    <main class="page-content" style="position: relative; overflow: hidden;">
+      <div class="scan-line"></div>
+      <div class="process-page" v-if="process">
+        <a href="processes.html" class="process-back">&larr; КАТАЛОГ ПРОЦЕССОВ</a>
+
+        <div class="process-hero">
+          <span class="process-hero-icon">{{ process.icon }}</span>
+          <span class="process-hero-num">#{{ String(process.id).padStart(2, '0') }}</span>
+          <div class="process-hero-name">{{ process.name }}</div>
+          <div class="process-hero-divider"></div>
+          <div class="process-hero-type">{{ process.section === 'business' ? 'Бизнес-процесс' : 'Технический процесс' }}</div>
+        </div>
+
+        <div class="process-content">
+          <div class="process-main">
+            <div class="process-block">
+              <div class="process-block-title">Триггер</div>
+              <div class="process-trigger-text">{{ process.trigger }}</div>
+            </div>
+
+            <div class="process-block">
+              <div class="process-block-title">{{ process.section === 'business' ? 'Поток' : 'Описание' }}</div>
+              <div class="process-flow-visual">
+                <template v-for="(step, i) in flowSteps" :key="i">
+                  <span v-if="i > 0" class="process-arrow">&rarr;</span>
+                  <div class="process-step">{{ step }}</div>
+                </template>
+              </div>
+            </div>
+
+            <div class="process-block">
+              <div class="process-block-title">Компоненты</div>
+              <div class="process-component-badges">
+                <span v-for="c in process.components" :key="c" class="process-comp-badge">
+                  <span class="process-comp-dot" :style="{background: compColor(c)}"></span>
+                  {{ c }}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="process-sidebar">
+            <div class="process-block">
+              <div class="process-block-title">Описание</div>
+              <div class="process-description-text">{{ process.description }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="process-nav">
+          <a v-if="prevProcess" :href="'process.html?id=' + prevProcess.id">
+            &laquo; #{{ String(prevProcess.id).padStart(2, '0') }} {{ prevProcess.name }}
+          </a>
+          <span v-else></span>
+          <a v-if="nextProcess" :href="'process.html?id=' + nextProcess.id">
+            {{ nextProcess.name }} #{{ String(nextProcess.id).padStart(2, '0') }} &raquo;
+          </a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="api.js"></script>
+  <script src="components.js"></script>
+  <script>
+  const { createApp, ref, computed, onMounted } = Vue;
+
+  const app = createApp({
+    setup() {
+      var processes = ref([
+        { id: 1, section: 'business', icon: '\u{1F4A1}', name: 'Capture идеи', trigger: 'Telegram текст/голос, Web UI', flow: 'Пользователь (текст или голос) → STT (faster-whisper, если голос) → LLM (Claude/Ollama/OpenRouter) → raw/inbound/ideas/ → wiki/domains/{d}/ideas/', description: 'Захват продуктовых идей из Telegram (текст и голос) и Web UI. Голосовые сообщения транскрибируются через STT, затем LLM структурирует идею и сохраняет в vault.', components: ['pm-bot', 'knowledge-engine'] },
+        { id: 2, section: 'business', icon: '\u{1F4CB}', name: 'Capture задачи', trigger: 'Telegram /jira, Web UI', flow: 'Пользователь → LLM → raw/inbound/tasks/ → wiki/domains/{d}/tasks/', description: 'Быстрое создание задач через Telegram-команду /jira или Web UI. LLM классифицирует задачу по домену и сохраняет в vault.', components: ['pm-bot', 'knowledge-engine'] },
+        { id: 3, section: 'business', icon: '\u{1F3A4}', name: 'Capture встречи', trigger: 'Watchdog (транскрипт .txt)', flow: 'Файл в inbox → LLM → raw/inbound/meetings/ → wiki/meetings/', description: 'Автоматическая обработка транскриптов встреч (Яндекс Телемост). Watchdog отслеживает папку inbox, LLM извлекает ключевые решения и action items.', components: ['pm-bot'] },
+        { id: 4, section: 'business', icon: '\u{1F4E7}', name: 'Email fetch протоколов', trigger: 'Telegram, Settings UI, cron', flow: 'IMAP → классификация → LLM → raw/ → wiki/ → enrich → notify', description: 'Получение протоколов совещаний из email по IMAP. Классификация, обработка LLM, сохранение в vault с обогащением и нотификацией.', components: ['knowledge-engine', 'pm-bot'] },
+        { id: 5, section: 'business', icon: '\u{1F504}', name: 'Jira sync', trigger: 'Cron 3ч, Telegram, Settings UI', flow: 'JQL fetch → diff state → domain detection → vault write → Telegram notify', description: 'Периодическая синхронизация задач из Jira (каждые 3 часа). Определение изменений, маппинг по доменам, запись в vault и Telegram-уведомления.', components: ['knowledge-engine', 'pm-bot'] },
+        { id: 6, section: 'business', icon: '\u{1F4E5}', name: 'Jira import', trigger: 'Telegram /jira_import, Web UI, API', flow: 'Ключ тикета → Jira REST → vault write', description: 'Импорт конкретного тикета из Jira по ключу (например PROJ-123). Загрузка данных через Jira REST API и сохранение в vault.', components: ['knowledge-engine', 'pm-bot'] },
+        { id: 7, section: 'business', icon: '\u{1F4E4}', name: 'Jira create', trigger: 'Telegram /jira_create, API', flow: 'Vault-артефакт → Jira REST → создание issue', description: 'Создание нового issue в Jira на основе артефакта из vault. Маппинг полей, отправка через REST API.', components: ['knowledge-engine', 'pm-bot'] },
+        { id: 8, section: 'business', icon: '\u{1F517}', name: 'Daily Jira sync', trigger: 'При обработке протоколов', flow: 'Извлечение Jira-ключей из протокола → авто-импорт → wikilinks', description: 'Автоматическое извлечение Jira-ключей из протоколов совещаний. Импорт упомянутых тикетов и создание wikilinks между документами.', components: ['knowledge-engine'] },
+        { id: 9, section: 'business', icon: '\u{2728}', name: 'Обогащение идеи', trigger: 'Watchdog, ручной запуск', flow: 'Идея → keyword/tag matching → связи из vault → обновление frontmatter', description: 'Обогащение идей контекстом из vault: keyword/tag matching, поиск связанных артефактов, обновление frontmatter с метаданными.', components: ['knowledge-engine'] },
+        { id: 10, section: 'business', icon: '\u{1F9EC}', name: 'Синтез идей', trigger: 'Telegram /synthesize, API', flow: 'Кластеризация идей по домену → LLM сводка → wiki/reports/', description: 'Кластеризация идей по домену и генерация сводного отчёта через LLM. Помогает увидеть паттерны и приоритеты.', components: ['knowledge-engine', 'pm-bot'] },
+        { id: 11, section: 'business', icon: '\u{1F680}', name: 'Idea Pipeline', trigger: 'Telegram /pipeline, API', flow: 'Analyst analysis → PRD → Epic + Tasks (JSON) → vault', description: 'Полный цикл проработки идеи: анализ аналитиком -> формирование PRD -> декомпозиция на Epic и Tasks в формате JSON.', components: ['idea-pipeline'] },
+        { id: 12, section: 'business', icon: '\u{1F4CA}', name: 'Weekly report', trigger: 'Cron (Mon 09:00)', flow: 'Сбор данных за неделю → LLM → отчёт → Telegram', description: 'Автоматический сбор данных за неделю и генерация аналитического отчёта через LLM. Отправка в Telegram каждый понедельник.', components: ['pm-bot'] },
+        { id: 13, section: 'business', icon: '\u{1F514}', name: 'Daily alert', trigger: 'Cron (18:00 МСК, пн-пт)', flow: 'Проверка наличия daily-протокола → Telegram alert при отсутствии', description: 'Ежедневная проверка наличия протокола дневного совещания. Telegram-alert при отсутствии (пн-пт, 18:00 МСК).', components: ['pm-bot'] },
+        { id: 14, section: 'business', icon: '\u{1F4EC}', name: 'Enrichment reminder', trigger: 'Cron (ежедневно)', flow: 'Скан идей по readiness % → Telegram напоминание (cooldown 24ч)', description: 'Напоминание об идеях с низким уровнем проработки (readiness %). Cooldown 24 часа между напоминаниями.', components: ['pm-bot'] },
+        { id: 15, section: 'business', icon: '\u{1F3B2}', name: 'Creative recall', trigger: 'Telegram /creative, Web UI', flow: 'Случайная выборка из cold/archive tier → «забытые идеи»', description: 'Случайная выборка идей из cold/archive tier -- "забытые идеи", которые могут быть актуальны. Стимулирует креативное мышление.', components: ['knowledge-engine', 'pm-bot'] },
+        { id: 16, section: 'tech', icon: '\u{23F3}', name: 'Decay recalc', trigger: 'Cron (05:00)', flow: 'Пересчёт relevance (модель Эббингауза) и tier для всех артефактов', description: 'Ежедневный пересчёт relevance по модели Эббингауза. Автоматическое перемещение артефактов между tier (hot -> warm -> cold -> archive).', components: ['knowledge-engine'] },
+        { id: 17, section: 'tech', icon: '\u{1F446}', name: 'Touch', trigger: 'При обращении к артефакту', flow: 'Инкремент access_count, refresh last_accessed, promote tier', description: 'При обращении к артефакту обновляются access_count и last_accessed. Артефакт может быть промоутирован в более высокий tier.', components: ['knowledge-engine', 'pm-bot'] },
+        { id: 18, section: 'tech', icon: '\u{1F3E5}', name: 'Vault health scoring', trigger: 'API запрос, cron (04:00)', flow: '7 категорий штрафов → score 0-100, grade, trend 7d/30d', description: 'Оценка здоровья vault по 7 категориям штрафов. Score 0-100, буквенная оценка, тренды за 7 и 30 дней.', components: ['knowledge-engine'] },
+        { id: 19, section: 'tech', icon: '\u{1F50D}', name: 'Vault linting', trigger: 'Telegram /lint, API', flow: 'Broken links, orphans, dead-ends, stale drafts, unsorted misc', description: 'Проверка целостности vault: битые ссылки, orphan-файлы, dead-end артефакты, stale drafts, неклассифицированные файлы.', components: ['knowledge-engine'] },
+        { id: 20, section: 'tech', icon: '\u{2699}\u{FE0F}', name: 'Domain config management', trigger: 'Web UI, API', flow: 'CRUD доменов, scaffold (index.md, log.md), keyword/tag rules', description: 'Управление доменной конфигурацией: создание, редактирование, удаление доменов. Scaffold структуры (index.md, log.md), правила keyword/tag.', components: ['knowledge-engine', 'pm-bot'] },
+        { id: 21, section: 'tech', icon: '\u{1F500}', name: 'LLM fallback chains', trigger: 'При каждом LLM-вызове', flow: '3 группы (Capture, Transcription, Analysis) × настраиваемые цепочки провайдеров', description: 'Три группы LLM-вызовов (Capture, Transcription, Analysis) с настраиваемыми цепочками провайдеров и автоматическим fallback.', components: ['shared', 'pm-bot', 'knowledge-engine'] },
+        { id: 22, section: 'tech', icon: '\u{26A1}', name: 'TTL cache + invalidation', trigger: 'API запросы', flow: 'In-memory кэш (30с vault, 300с Jira, 60с domains) с invalidation при записи', description: 'In-memory кэш API-ответов с TTL (vault 30с, Jira 300с, domains 60с). Автоматическая инвалидация при записи.', components: ['pm-bot'] },
+        { id: 23, section: 'tech', icon: '\u{1F6A6}', name: 'Rate limiting', trigger: 'Telegram-отправка', flow: 'Token bucket для Telegram API (1 msg/s, retry, queue)', description: 'Token bucket для Telegram API: ограничение 1 сообщение/сек, автоматический retry, очередь отправки.', components: ['pm-bot'] },
+        { id: 24, section: 'tech', icon: '\u{1F4C8}', name: 'Health history', trigger: 'Cron (04:00)', flow: 'Запись score в .health-history.json (TTL 90д) для трендов', description: 'Запись score здоровья vault в .health-history.json с TTL 90 дней. Используется для отображения трендов на дашборде.', components: ['knowledge-engine'] },
+        { id: 25, section: 'tech', icon: '\u{1F504}', name: 'Status migration', trigger: 'CLI', flow: 'Миграция legacy-статусов идей → каноничные (STATUS_MAP)', description: 'Миграция legacy-статусов идей в каноничные значения по STATUS_MAP. Одноразовый CLI-инструмент.', components: ['knowledge-engine'] }
+      ]);
+
+      var processId = ref(1);
+      var process = computed(function() {
+        return processes.value.find(function(p) { return p.id === processId.value; }) || processes.value[0];
+      });
+      var prevProcess = computed(function() {
+        var idx = processes.value.findIndex(function(p) { return p.id === processId.value; });
+        return idx > 0 ? processes.value[idx - 1] : null;
+      });
+      var nextProcess = computed(function() {
+        var idx = processes.value.findIndex(function(p) { return p.id === processId.value; });
+        return idx < processes.value.length - 1 ? processes.value[idx + 1] : null;
+      });
+      var flowSteps = computed(function() {
+        return process.value.flow.split(' → ');
+      });
+
+      var COMP_COLORS = {
+        'pm-bot': '#00bcd4',
+        'knowledge-engine': '#ff9800',
+        'idea-pipeline': '#9c27b0',
+        'shared': '#4caf50'
+      };
+
+      function compColor(name) { return COMP_COLORS[name] || '#607d8b'; }
+
+      onMounted(function() {
+        var params = new URLSearchParams(window.location.search);
+        var id = parseInt(params.get('id'));
+        if (id && !isNaN(id)) processId.value = id;
+      });
+
+      return { process, prevProcess, nextProcess, flowSteps, compColor };
+    }
+  });
+
+  registerComponents(app);
+  applyPageTheme().then(function() {
+    app.mount('#app');
+  });
+  </script>
+</body>
+</html>

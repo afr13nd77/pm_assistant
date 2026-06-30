@@ -5,6 +5,20 @@
 
 ---
 
+## 30.06.2026 — Process Catalog + Playground UX
+
+### web-ui 1.25.0
+- **processes.html** (NEW): каталог 25 системных процессов (бизнес + технические) с карточками-ссылками
+- **process.html** (NEW): детальная презентация процесса — hero, описание, триггер, визуальный поток, компоненты, навигация ◄►
+- **about.html**: ссылка «Каталог процессов» в меню About
+- **style.css**: общие стили `.toggle-btn`, `.field-select` вынесены из settings.html для переиспользования (playground fix)
+- **playground.html**: кнопки провайдеров и select моделей теперь стилизованы под активную тему
+
+### shared
+- **openrouter_client.py**: добавлена модель `openrouter/owl-alpha` в AVAILABLE_MODELS
+
+---
+
 ## 30.06.2026 — Dashboard Health + Email Fetch + UX fixes (BL-136, BL-148)
 
 ### pm-bot 1.14.0
