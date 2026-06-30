@@ -139,6 +139,7 @@
 | BL-61 | ✅ Inline Editing | web-ui | Click-to-edit полей (status, domain, priority, tags, tier) в drawer'ах + body editor (split view markdown/preview). PATCH /artifact/{filename}/field и /body endpoints |
 | BL-64 | ✅ Scroll-to-Card Highlight | web-ui | ?highlight=filename → авто-скролл + cyan/gold pulse анимация на карточке. Интеграция с поиском Ctrl+K |
 | BL-135 | ✅ Forgotten Gems Popup | web-ui | Popup деталей артефакта на decay.html: метаданные + rendered Markdown body через marked.js |
+| BL-137 | ✅ Редизайн CAPTURE_TERMINAL | web-ui | Редизайн capture drawer (chat-style терминал на board.html, ideas.html). В Settings переключатель «Тип терминала»: простой / расширенный |
 
 ### 5.2 Идеи
 
@@ -151,7 +152,6 @@
 | BL-65 | Time Machine | web-ui | Таймлайн фичи: IDEA -> Jira task -> PR -> release. Визуализация пути от заметки до прода |
 | BL-100 | Board: фильтрация по типу задачи | web-ui | Фильтр-табы по типу (JIRA_TASK, JIRA_BUG, MEETING_SUMMARY, NOTE и т.д.) на board.html. Режим «И»: при выборе нескольких типов показываются только задачи, соответствующие всем выбранным |
 | BL-136 | Vault Health на dashboard | web-ui | Перенести информацию о здоровье хранилища на dashboard.html. Визуализация — карточка в стиле остальных элементов страницы (score, грейд, тренд). При клике — popup с детализацией по категориям штрафов (broken links, orphans, dead ends и т.д.) |
-| BL-137 | ✅ Редизайн CAPTURE_TERMINAL | web-ui | Редизайн capture drawer (chat-style терминал на board.html, ideas.html). В Settings добавить переключатель «Тип терминала»: простой (текущий) / расширенный (новый дизайн). Позволяет откатиться если новый вариант не понравится |
 | BL-148 | Запуск fetch_meetings из Settings | web-ui, pm-bot | Кнопка на странице Settings для ручного запуска fetch_meetings (обработка почты на новые транскрибации). Индикатор статуса выполнения. Требует прокси-endpoint в vault_api.py → ke_client.fetch_meetings() |
 
 ---
