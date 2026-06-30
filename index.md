@@ -59,14 +59,14 @@ pm_assistant/
 │
 ├── pm-bot/                         # Telegram-бот (capture)
 │   ├── Dockerfile                  # образ Python 3.12-slim + shared/
-│   ├── requirements.txt            # 4 зависимости
+│   ├── requirements.txt            # 11 зависимостей (+tiktoken для BL-147)
 │   ├── CLAUDE.md                   # инструкции для Claude Code
 │   ├── CONTEXT.md                  # история проектных решений
 │   └── app/                        # исходный код
 │       ├── __init__.py
 │       ├── main.py                 # точка входа: запуск бота + watcher
 │       ├── handlers.py             # Telegram: /start, /idea, /jira, /daily, /synthesize, /jira_sync, /jira_import, /jira_create, /pipeline, /domain, /lint, /status, /test_enrichment, текст, голос
-│       ├── claude_client.py        # Claude/Ollama: process_idea (→dict/JSON), process_meeting, process_jira_ticket, process_daily (через llm_client)
+│       ├── claude_client.py        # Claude/Ollama: process_idea (→dict/JSON + digest context injection), process_meeting, process_jira_ticket, process_daily (через llm_client)
 │       ├── obsidian_writer.py      # запись .md: write_idea (template-based), write_meeting, write_jira_draft, write_daily, write_report
 │       ├── pipeline_client.py      # HTTP-клиент к idea-pipeline API
 │       ├── reporter.py             # генерация еженедельных отчётов через Claude
@@ -74,7 +74,8 @@ pm_assistant/
 │       ├── stt.py                  # Speech-to-Text (faster-whisper, lazy import, env STT_ENABLED)
 │       ├── transcript_watcher.py   # watchdog: транскрипты .txt → Meetings/
 │       ├── vault_api.py            # FastAPI REST сервер: vault API + user-prefs API + capture + test-ollama + in-memory TTL cache
-│       ├── ke_client.py            # HTTP-клиент к KE API (19 функций, заменяет subprocess)
+│       ├── context_assembler.py    # Waterfall context assembly из llm_wiki/ (one-liners→core→extended), kill switch DIGEST_CONTEXT_SOURCE, enrich_creative_recall (BL-147)
+│       ├── ke_client.py            # HTTP-клиент к KE API (22 функции, +digest_generate, digest_bulk, digest_status)
 │       ├── rate_limiter.py         # TelegramRateLimiter (token bucket, params из settings)
 │       ├── enrichment_reminder.py  # ЖЦ идей: скан по доменам, readiness %, Telegram-напоминания
 │       ├── enrichment_db.py        # SQLite: дедупликация напоминаний (cooldown 24ч, cleanup 90д)
@@ -118,7 +119,7 @@ pm_assistant/
 │       ├── __init__.py
 │       ├── __main__.py             # точка входа: python -m app
 │       ├── cli.py                  # CLI: jira-sync, jira-import, jira-create, jira-projects, jira-epics, jira-issue-types, enrich, synthesize, watch, index, lint, status, digest, digest-bulk, digest-index, digest-audit, digest-status
-│       ├── api.py                  # FastAPI HTTP API (21 эндпоинт, порт 8001) — +meeting-queue/status, process-queue (BL-145)
+│       ├── api.py                  # FastAPI HTTP API (28 эндпоинтов, порт 8001) — +digest/generate, digest/bulk, digest/status (BL-147)
 │       ├── enricher.py             # обогащение идеи связями из vault
 │       ├── synthesizer.py          # синтез: кластеризация + сводка
 │       ├── vault_index.py          # сканирование vault, in-memory индекс
@@ -126,7 +127,7 @@ pm_assistant/
 │       ├── matcher.py              # keyword + tag matching
 │       ├── claude_client.py        # Claude API для enrichment/synthesis/meeting_protocol, min response length validation
 │       ├── notifier.py             # Telegram уведомления через Bot API
-│       ├── watcher.py              # watchdog: Inbox/ → auto-enrichment
+│       ├── watcher.py              # watchdog: InboxHandler (auto-enrichment), ClippingsHandler (ingest), DigestHandler (auto-digest при DIGEST_ENABLED=1, debounce 5s)
 │       ├── artifact_extractor.py   # извлечение артефактов
 │       ├── linter.py               # линтер vault-файлов
 │       ├── status_migrator.py          # миграция статусов идей: STATUS_MAP + VALID_STATUSES + migrate_statuses()
@@ -185,12 +186,12 @@ pm_assistant/
 
 | Компонент | Версия | Последнее изменение | Описание |
 |---|---|---|---|
-| **pm-bot** | 1.15.0 | 2026-06-30 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. Настраиваемые fallback-цепочки LLM-провайдеров в Settings UI (BL-140, BL-141). Decision Journal: реестр решений из протоколов + просмотр протокола (BL-24). transcript_watcher переведён на файловую очередь (кладёт .txt в pending/, без локального LLM); handlers fetch_meetings — текст «поставлено в очередь» + фикс KeyError на устаревших ключах details (BL-145). |
-| **knowledge-engine** | 1.12.1 | 2026-06-30 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (21 эндпоинт), jira-search endpoint. Импорты из shared/. Унификация LLM-вызовов через call() (BL-140, BL-141). Meeting protocol enrichment (BL-133, BL-134). Meeting Processing Queue (BL-145): queue.py (claim/complete/fail/requeue/reclaim_stuck), processor.py (process_one/process_pending + validate_protocol), queue_watcher.py (watchdog на pending/); fetch-meetings теперь только наполняет очередь без LLM; CLI process-queue/queue-watch/queue-status; API GET /meeting-queue/status, POST /process-queue. Багфиксы: patch_jira_links startswith (BUG-016), footer append fallback (BUG-017), enrich NoneType на пустом frontmatter tags (BUG-019). Фикс YAML injection в meeting fetcher (BUG). |
+| **pm-bot** | 1.16.0 | 2026-07-01 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py, 22 функции). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. context_assembler: waterfall сборка контекста из llm_wiki/ (kill switch DIGEST_CONTEXT_SOURCE), enrich_creative_recall (BL-147 Phase 2). Digest context injection в process_idea и weekly report. |
+| **knowledge-engine** | 1.14.0 | 2026-07-01 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (28 эндпоинтов). DigestHandler в watcher.py (DIGEST_ENABLED env, debounce 5s, body_hash check). 3 API endpoints: digest/generate, digest/bulk, digest/status (BL-147 Phase 2). |
 | **idea-pipeline** | 1.1.2 | 2026-06-14 | Orchestrator: Analyst → PM → Decomposer. Импорты vault_paths и file_writer из shared/. |
 | **web-ui** | 1.25.0 | 2026-06-30 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141), LLM Playground (BL-142). Decision Journal (BL-24): decisions.html + meeting.html + overview виджет RECENT DECISIONS. Process Catalog (processes.html, process.html). |
 | **инфраструктура** | 1.1.0 | 2026-06-30 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120). KE-контейнер: процесс queue-watch (watchdog на pending/); ke-cron: process-queue каждые 10 мин — страховка/reclaim (BL-145). |
-| **shared** | 0.5.0 | 2026-06-30 | Общий модуль: llm_client (call с настраиваемыми fallback-цепочками, Ollama timeout ×5, call_transcription, call_detailed — additive, отдаёт provider_record + автоматический LLM trace в system_log), meeting_queue (enqueue-ядро файловой очереди: Unit, make_unit_id, build_meta, enqueue, path-хелперы — BL-145), openrouter_client, system_log (12 process types, LoggedProcess, per-unit details), file_writer, vault_paths, domain_config, frontmatter_utils, settings. Единый источник для всех компонентов. |
+| **shared** | 0.5.1 | 2026-07-01 | Общий модуль: llm_client (call с настраиваемыми fallback-цепочками, Ollama timeout ×5, call_transcription, call_detailed — additive, отдаёт provider_record + автоматический LLM trace в system_log), meeting_queue (enqueue-ядро файловой очереди: Unit, make_unit_id, build_meta, enqueue, path-хелперы — BL-145), openrouter_client, system_log (12 process types, LoggedProcess, per-unit details), file_writer, vault_paths, domain_config, frontmatter_utils, settings. Единый источник для всех компонентов. |
 
 Схема: semver `MAJOR.MINOR.PATCH`. MAJOR — ломающие изменения API/контрактов. MINOR — новый функционал. PATCH — багофиксы.
 

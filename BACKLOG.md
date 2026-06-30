@@ -1,7 +1,7 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.12.0 / knowledge-engine 1.13.0 / idea-pipeline 1.1.2 / web-ui 1.21.0 / shared 0.5.1
-**Обновлён:** 01.07.2026 (BL-147 Phase 1 ✅)
+**Версии:** pm-bot 1.16.0 / knowledge-engine 1.14.0 / idea-pipeline 1.1.2 / web-ui 1.25.0 / shared 0.5.1
+**Обновлён:** 01.07.2026 (BL-154 добавлен)
 
 ---
 
@@ -50,7 +50,7 @@
 | BL-134 | ✅ Линковка Jira-задач во всех протоколах | knowledge-engine | Jira sync для ВСЕХ типов протоколов (daily, sync, review, planning, other). Переименование sync_daily_jira_keys → sync_jira_keys + backward-compatible alias |
 | BL-24 | ✅ Decision Journal | pm-bot | Единый реестр решений из протоколов встреч: API endpoint GET /api/v1/decisions + Web UI страница decisions.html + виджет на overview. Полнотекстовый поиск, фильтрация по домену/дате, expand карточки с контекстом |
 | BL-145 | ✅ Meeting Processing Queue | knowledge-engine, pm-bot | Трёхфазная файловая очередь обработки протоколов (`raw/meeting-queue/{pending,processing,done,failed}/`): Fetch (IMAP + transcript_watcher → enqueue в pending/ без LLM), Process-воркер (watchdog PollingObserver near-realtime + cron-страховка /10мин, по одному юниту, LLM через fallback chain max_attempts=5, validate_protocol до записи в wiki), Queue (атомарный claim через rename, reclaim_stuck, status_counts). shared/meeting_queue (enqueue-ядро) + call_detailed (provider_history). CLI process-queue/queue-watch/queue-status, API GET /meeting-queue/status + POST /process-queue. ADR-005. E2E verified на Docker 30.06.2026 |
-| BL-147 | ✅ Слой 1' Phase 1 — digest pipeline | knowledge-engine | Offline-генерация LLM-оптимизированных дайджестов из wiki/ в vault/llm_wiki/. 3 уровня (one-liner/core-digest/extended-digest), body_hash для change detection, decay engine интеграция (tier/relevance). 6 модулей digest/, 13 промптов, 5 CLI команд. 39 unit-тестов. Phase 2 (автоматизация: watcher, context_assembler) — отдельная задача |
+| BL-147 | ✅ Слой 1' Context Compaction (Phase 1+2) | knowledge-engine, pm-bot | Phase 1: offline-генерация LLM-дайджестов wiki/ → llm_wiki/ (3 уровня, body_hash, decay). Phase 2: DigestHandler в watcher (auto-digest при DIGEST_ENABLED=1), context_assembler (waterfall сборка: one-liners→core→extended, kill switch DIGEST_CONTEXT_SOURCE), 3 API endpoints (digest/generate, bulk, status), digest context injection в process_idea и weekly report, enrich_creative_recall. 80 unit-тестов, 11 API тестов |
 
 ### 2.2 Идеи
 
@@ -63,6 +63,7 @@
 | BL-23 | Action Items Aggregator | knowledge-engine | Извлечь task/@assignee из протоколов -> агрегация по людям, трекинг overdue |
 | BL-146 | Temporal Summarization — периодические отчёты по wiki | knowledge-engine | Cron-job (раз в неделю/месяц): собирает все wiki-документы за период (встречи, дейли, идеи, решения), отправляет в LLM, генерирует суммаризацию → `wiki/reports/weekly/YYYY-WW.md` / `monthly/YYYY-MM.md`. Отвечает на вопросы "что сделали за май", "какие решения в Q1". Один дополнительный пайплайн поверх существующей архитектуры. Связан с BL-23 (Action Items) и BL-24 (Decision Journal) |
 | BL-151 | llm_wiki как контекст для Claude Cowork | knowledge-engine | Расширение BL-147: добавить в пайплайн генерации llm_wiki/ два артефакта для Claude Cowork как основного потребителя (90% запросов). (1) `llm_wiki/_index.md` — все one-liner'ы всех wiki-артефактов в одном файле, читается одним Read-вызовом; (2) `llm_wiki/_cowork-session.md` — сборка актуального контекста сессии: последние 5 дейли, открытые задачи, активные эпики, последние решения. Обновляется ночным джобом (ke-cron). Claude Cowork читает `_cowork-session.md` при старте сессии вместо ручного сканирования wiki/domains/*/index.md. Зависит от BL-147. |
+| BL-153 | Семантический поиск + векторное хранилище | knowledge-engine, pm-bot | Внедрение семантического поиска по смыслу (а не по ключевым словам) поверх vault. **Триггер внедрения: vault достиг 3000+ артефактов И появилась потребность в кросс-доменных запросах без явных тегов** (пример: «найди всё, что связано с проблемой конверсии»). До этого момента — не реализовывать. Архитектура: (1) Эмбеддинги считаются по `llm_wiki/` one-liner'ам и core-digest'ам (BL-147), не по сырым wiki-файлам — это сокращает объём и повышает качество векторов. (2) Хранилище — ChromaDB (embedded, без сервера, один файл `.chroma/`) или LanceDB — оба работают локально без Docker-сервиса. (3) Индекс перестраивается инкрементально при обновлении llm_wiki/ (тот же триггер, что и digest-генерация). Применение: enricher.py (связи между идеями по смыслу вместо keyword matching), context_assembler.py в pm-bot (выбор релевантных digest'ов по смыслу запроса), endpoint `/search` в vault_api.py (качественнее текущего _SearchIndex). Зависит от BL-147 (llm_wiki/ как источник текстов для эмбеддингов) и BL-152 (index_store.py как инфраструктура инкрементального обновления). |
 
 ---
 
@@ -180,6 +181,7 @@
 | BL-71 | A/B-тестирование качества между провайдерами | pm-bot | Сравнение качества Claude vs Ollama (упомянуто в Out of Scope ollama-hybrid) |
 | BL-72 | idea-pipeline через Ollama | idea-pipeline | Сейчас всегда Claude API (упомянуто в Out of Scope ollama-hybrid) |
 | BL-73 | Multi-Agent Shared Vault | pm-bot | Расширить на команду PM-ов, агент находит пересечения и конфликты идей между участниками |
+| BL-154 | Telegram Q&A по базе знаний через Claude CLI | pm-bot | Новая команда `/ask <вопрос>` в Telegram-боте. pm-bot запускает `claude --print -p "<вопрос>"` как subprocess с `cwd=VAULT_PATH`. Claude CLI подхватывает CLAUDE.md + читает wiki/ и возвращает ответ в stdout. pm-bot отправляет stdout обратно в Telegram. Авторизация CLI — через подписку (claude login). Каждый вопрос = отдельная сессия CLI, память между запросами не нужна. Таймаут subprocess: 120с. Вызов оборачивается в `asyncio.get_event_loop().run_in_executor()` чтобы не блокировать event loop бота. |
 | BL-139 | Перенос идеи при смене домена | web-ui, knowledge-engine | При смене домена идеи через Web UI (editable-field domain) — физически перемещать файл из wiki/domains/старый/ideas/ в wiki/domains/новый/ideas/. Обновлять log.md и index.md обоих доменов. Сейчас меняется только frontmatter, файл остаётся в старой папке |
 
 ---
@@ -314,6 +316,6 @@
 |:---|:---|:---|
 | ✅ Реализовано | 89 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143 |
 | ✅ Баги исправлены | 24 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129 |
-| Идея | 30 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-152 |
+| Идея | 32 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **145** | |
+| **Итого** | **146** | |

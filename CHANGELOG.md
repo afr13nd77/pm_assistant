@@ -5,6 +5,30 @@
 
 ---
 
+## 01.07.2026 — Context Compaction Phase 2: Автоматизация (BL-147)
+
+Автоматическая генерация дайджестов при изменении wiki/ + waterfall context assembly для LLM-вызовов. Kill switch через env переменные (DIGEST_ENABLED, DIGEST_CONTEXT_SOURCE) — по default ничего не меняется.
+
+### knowledge-engine 1.14.0
+- **watcher.py**: DigestHandler — auto-digest при DIGEST_ENABLED=1, debounce 5s, body_hash check, условная регистрация на все wiki/ директории
+- **api.py**: 3 новых эндпоинта — POST /api/v1/digest/generate, POST /api/v1/digest/bulk, GET /api/v1/digest/status
+
+### pm-bot 1.16.0
+- **context_assembler.py** (NEW): waterfall сборка контекста из llm_wiki/ — 3 уровня (one-liners ≤3000 tok, core-digests ≤10000 tok, extended-digests ≤6000 tok). Kill switch DIGEST_CONTEXT_SOURCE=wiki (default). Fallback на wiki/ в режиме auto. touch() для core/extended, НЕ для one-liners.
+- **claude_client.py**: _get_digest_context() injection в _build_idea_prompt() — digest context подмешивается в промпт перед raw_text
+- **reporter.py**: digest context injection в generate_weekly_report() — one-liners добавляются в контекст отчёта
+- **ke_client.py**: +3 функции: digest_generate, digest_bulk, digest_status
+- **enrich_creative_recall()**: обогащение creative recall one-liner'ами из llm_wiki/ (touch NOT called)
+- **requirements.txt**: +tiktoken>=0.7.0
+
+### Тесты
+- test_digest_watcher.py: 18 тестов (debounce, should_process, start_watch)
+- test_context_assembler.py: 37 тестов (waterfall, tier filter, fallback, creative recall)
+- test_digest_context_integration.py: 14 тестов (kill switch, injection, reporter)
+- test_api_digest.py: 11 тестов (status, generate, bulk)
+
+---
+
 ## 01.07.2026 — Context Compaction Phase 1 (BL-147)
 
 Offline-пайплайн генерации LLM-оптимизированных дайджестов из wiki-артефактов. 3-уровневая структура: one-liner (≤30 токенов), core-digest (200-500 токенов), extended-digest (≤2000 токенов). Digest'ы хранятся в vault/llm_wiki/, зеркалируя структуру wiki/. Интеграция с decay engine (BL-110): tier/relevance из оригиналов wiki/.
