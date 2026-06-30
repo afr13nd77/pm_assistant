@@ -1,16 +1,14 @@
 import asyncio
 import logging
 import os
-import shutil
+from datetime import datetime
 from pathlib import Path
 
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-from shared import vault_paths
+from shared import meeting_queue, vault_paths
 
-from .claude_client import process_meeting
-from .obsidian_writer import write_meeting
 from .rate_limiter import TelegramRateLimiter
 
 _rate_limiter = TelegramRateLimiter()
@@ -22,7 +20,14 @@ PROCESSED_MARKER = ".processed"
 
 
 class TranscriptHandler(FileSystemEventHandler):
-    """Следит за папкой транскриптов. При появлении .txt файла — обрабатывает."""
+    """Следит за папкой транскриптов. При появлении .txt файла — кладёт его в
+    файловую очередь обработки встреч (raw/meeting-queue/pending/).
+
+    Тонкий локальный источник (design §3.6): НЕ вызывает LLM и НЕ пишет протокол.
+    Сырьё ставится в очередь через shared.meeting_queue.enqueue (source='local'),
+    а саму обработку (LLM → протокол) выполняет KE Process-воркер, читающий из
+    общего /vault. pm-bot не импортирует код knowledge-engine.
+    """
 
     def __init__(self, bot=None, chat_id: int = 0):
         self.bot = bot
@@ -36,43 +41,64 @@ class TranscriptHandler(FileSystemEventHandler):
             asyncio.run(self._process(path))
 
     async def _process(self, path: Path):
-        logger.info(f"Обрабатываю транскрипт: {path.name}")
+        logger.info(f"Ставлю транскрипт в очередь: {path.name}")
         try:
-            # Копируем оригинал в raw/ для сохранения неизменной копии
-            try:
-                raw_dest = vault_paths.raw_meetings() / path.name
-                shutil.copy2(path, raw_dest)
-                logger.info(f"Оригинал скопирован в raw: {raw_dest}")
-            except Exception as copy_err:
-                logger.error(f"Не удалось скопировать в raw: {copy_err}")
-
             text = path.read_text(encoding="utf-8")
-            result = process_meeting(text)
-            filepath = write_meeting(result, path.name)
+            # mtime файла как дата встречи (design §3.6)
+            file_date = datetime.fromtimestamp(path.stat().st_mtime)
 
-            # Переименовываем оригинал чтобы не обработать повторно
+            # vault_path берём из shared.vault_paths (env VAULT_PATH) — единый
+            # способ получения пути к vault в проекте. enqueue пишет пару
+            # <unit_id>.txt + <unit_id>.meta.json атомарно в pending/.
+            unit = meeting_queue.enqueue(
+                vault_paths.VAULT_PATH,
+                raw_text=text,
+                source="local",
+                subject=path.stem,
+                date=file_date,
+                source_filename=path.name,
+            )
+
+            # Переименовываем оригинал чтобы не обработать повторно (дедуп local).
             path.rename(path.with_stem(path.stem + PROCESSED_MARKER))
 
-            logger.info(f"Заметка встречи сохранена: {filepath}")
+            if unit is None:
+                logger.warning(
+                    f"Транскрипт {path.name} пуст — юнит не создан, файл помечен "
+                    f"как .processed"
+                )
+                return
 
-            # Уведомляем в Telegram если бот передан
+            logger.info(
+                f"Транскрипт поставлен в очередь: unit_id={unit.unit_id} "
+                f"(source=local, {path.name} → .processed)"
+            )
+
+            # Лёгкое Telegram-уведомление (без деталей обработки — её делает KE).
             if self.bot and self.chat_id:
                 await _rate_limiter.acquire()
                 await self.bot.send_message(
                     chat_id=self.chat_id,
-                    text=f"✅ Транскрипт обработан:\n`{filepath.name}`",
-                    parse_mode="Markdown"
+                    text=(
+                        "📥 Транскрипт поставлен в очередь обработки:\n"
+                        f"`{path.name}`"
+                    ),
+                    parse_mode="Markdown",
                 )
         except Exception as e:
-            logger.error(f"Ошибка обработки транскрипта {path.name}: {e}")
+            logger.error(f"Ошибка постановки транскрипта {path.name} в очередь: {e}")
 
 
 def start_watcher(bot=None, chat_id: int = 0):
     """Запускает watchdog в фоне."""
-    INBOX.mkdir(parents=True, exist_ok=True)
-    handler = TranscriptHandler(bot=bot, chat_id=chat_id)
-    observer = Observer()
-    observer.schedule(handler, str(INBOX), recursive=False)
-    observer.start()
-    logger.info(f"Слежу за папкой транскриптов: {INBOX}")
-    return observer
+    try:
+        INBOX.mkdir(parents=True, exist_ok=True)
+        handler = TranscriptHandler(bot=bot, chat_id=chat_id)
+        observer = Observer()
+        observer.schedule(handler, str(INBOX), recursive=False)
+        observer.start()
+        logger.info(f"Слежу за папкой транскриптов: {INBOX}")
+        return observer
+    except Exception as e:
+        logger.error(f"Не удалось запустить watcher транскриптов ({INBOX}): {e}")
+        raise

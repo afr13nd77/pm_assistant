@@ -314,19 +314,28 @@ async def handle_fetch_meetings(update: Update, context: ContextTypes.DEFAULT_TY
 
     try:
         data = ke_client.fetch_meetings(notify=True)
-        logger.info("fetch-meetings completed: newly_processed=%s", data.get("newly_processed", 0))
+        enqueued = data.get("enqueued", data.get("newly_processed", 0))
+        already = data.get("already_processed", 0)
+        logger.info(
+            "fetch-meetings completed: enqueued=%s, already_processed=%s",
+            enqueued,
+            already,
+        )
 
-        if data.get("newly_processed", 0) > 0:
+        if enqueued > 0:
             details = "\n".join(
-                f"  {d['file']} ({d['type']})"
+                f"  {d.get('subject', '?')} ({d.get('source', '?')})"
                 for d in data.get("details", [])
             )
-            await update.message.reply_text(
-                f"Обработано протоколов: {data['newly_processed']}\n{details}"
-            )
+            text = f"Поставлено в очередь: {enqueued} писем"
+            if already:
+                text += f"\nУже в очереди (пропущено): {already}"
+            if details:
+                text += f"\n{details}"
+            await update.message.reply_text(text)
         else:
             await update.message.reply_text(
-                "Новых транскрибаций не найдено"
+                "Новых транскрибаций для очереди не найдено"
             )
 
     except requests.RequestException as e:
