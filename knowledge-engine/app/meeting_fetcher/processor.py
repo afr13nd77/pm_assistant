@@ -59,17 +59,24 @@ def _load_meeting_prompt() -> str:
 MIN_PROTOCOL_LEN = 200
 
 # Обязательные поля YAML frontmatter протокола (design §3.4).
-REQUIRED_FM = ("type", "title", "date")
+# Только поля, которые реально генерит промпт meeting_protocol.txt и нужны downstream:
+#   - type  → classify_type / route_protocol / make_filename;
+#   - date  → имя файла, сортировка протоколов.
+# Поля 'title' во frontmatter НЕТ (промпт кладёт название как H1 '# ...' в тело,
+# а не в YAML) — наличие заголовка проверяется отдельно ниже (H1-проверка).
+REQUIRED_FM = ("type", "date")
 
 
 def validate_protocol(md: str) -> tuple[bool, str]:
     """Проверяет, что markdown-протокол пригоден для записи в wiki (US-05, AC-06).
 
-    Проверки (design §3.4):
+    Проверки (design §3.4, схема промпта meeting_protocol.txt):
       1. len(md) >= MIN_PROTOCOL_LEN (200).
       2. Парсится YAML frontmatter (--- ... ---) через python-frontmatter.
-      3. Обязательные поля frontmatter присутствуют и непустые: REQUIRED_FM.
-      4. Тело после frontmatter содержит хотя бы один markdown-заголовок '## '.
+      3. Обязательные поля frontmatter присутствуют и непустые: REQUIRED_FM (type, date).
+      4. Тело содержит H1-заголовок '# <название>' (строка, начинающаяся с '# ',
+         но НЕ с '## '/'### ') — это название встречи из промпта.
+      5. Тело содержит хотя бы один markdown-подзаголовок '## ' (структура секций).
 
     Returns:
         (True, '') при успехе, иначе (False, '<человекочитаемая причина>').
@@ -109,10 +116,21 @@ def validate_protocol(md: str) -> tuple[bool, str]:
                 logger.warning("validate_protocol: invalid — %s", reason)
                 return False, reason
 
-        # 4. Тело содержит хотя бы один markdown-заголовок '## '.
+        # 4. Тело содержит H1-заголовок '# <название>' (название встречи из промпта).
+        #    H1 = строка, начинающаяся с '# ', но НЕ с '## '/'### ' (любой уровень >1).
         body = post.content or ""
-        has_heading = any(line.lstrip().startswith("## ") for line in body.splitlines())
-        if not has_heading:
+        has_h1 = any(
+            line.lstrip().startswith("# ") and not line.lstrip().startswith("##")
+            for line in body.splitlines()
+        )
+        if not has_h1:
+            reason = "missing H1 title heading"
+            logger.warning("validate_protocol: invalid — %s", reason)
+            return False, reason
+
+        # 5. Тело содержит хотя бы один markdown-подзаголовок '## '.
+        has_section = any(line.lstrip().startswith("## ") for line in body.splitlines())
+        if not has_section:
             reason = "body has no markdown section heading ('## ')"
             logger.warning("validate_protocol: invalid — %s", reason)
             return False, reason

@@ -28,13 +28,21 @@ from shared.meeting_queue import (
 
 
 def _valid_protocol() -> str:
-    """Полноценный валидный протокол: frontmatter + '## ' секции + длина > 200."""
+    """Полноценный валидный протокол по схеме промпта meeting_protocol.txt:
+
+    frontmatter (tags/date/type/participants/source/status) + H1 '# Название' +
+    '## ' секции + длина > 200. Поля 'title' во frontmatter НЕТ — название это H1.
+    """
     return (
         "---\n"
-        "type: sync\n"
-        "title: Sync команды\n"
+        "tags: [meeting, протокол]\n"
         "date: 2026-06-30\n"
+        "type: sync\n"
+        "participants: [Иван, Пётр]\n"
+        "source: telemost-transcript\n"
+        "status: inbox\n"
         "---\n\n"
+        "# Sync команды\n\n"
         "## Решения\n"
         "- Договорились о сроках релиза.\n\n"
         "## Action items\n"
@@ -46,7 +54,7 @@ def _valid_protocol() -> str:
 class TestValidateProtocol:
     def test_constants(self):
         assert MIN_PROTOCOL_LEN == 200
-        assert REQUIRED_FM == ("type", "title", "date")
+        assert REQUIRED_FM == ("type", "date")
 
     def test_too_short(self):
         ok, reason = validate_protocol("коротко")
@@ -61,38 +69,68 @@ class TestValidateProtocol:
         assert ok is False
         assert "frontmatter" in reason
 
-    def test_missing_required_field_title(self):
+    def test_missing_required_field_type(self):
+        # Нет 'type' во frontmatter (есть только date) → invalid.
         md = (
             "---\n"
-            "type: sync\n"
             "date: 2026-06-30\n"
             "---\n\n"
+            "# Название\n\n"
             "## Решения\n" + "x" * 250
         )
         ok, reason = validate_protocol(md)
         assert ok is False
-        assert "title" in reason
+        assert "type" in reason
+
+    def test_missing_required_field_date(self):
+        # Нет 'date' во frontmatter (есть только type) → invalid.
+        md = (
+            "---\n"
+            "type: sync\n"
+            "---\n\n"
+            "# Название\n\n"
+            "## Решения\n" + "x" * 250
+        )
+        ok, reason = validate_protocol(md)
+        assert ok is False
+        assert "date" in reason
 
     def test_empty_required_field(self):
         md = (
             "---\n"
-            "type: sync\n"
-            "title: ''\n"
+            "type: ''\n"
             "date: 2026-06-30\n"
             "---\n\n"
+            "# Название\n\n"
             "## Решения\n" + "x" * 250
         )
         ok, reason = validate_protocol(md)
         assert ok is False
-        assert "title" in reason
+        assert "type" in reason
 
-    def test_body_without_heading(self):
+    def test_missing_h1_title_heading(self):
+        # Frontmatter валиден, '## ' секция есть, но H1 '# ' отсутствует → invalid.
         md = (
             "---\n"
             "type: sync\n"
-            "title: Sync\n"
             "date: 2026-06-30\n"
             "---\n\n"
+            "## Решения\n"
+            "- Договорились о сроках.\n" + "x" * 250
+        )
+        assert len(md) >= MIN_PROTOCOL_LEN
+        ok, reason = validate_protocol(md)
+        assert ok is False
+        assert reason == "missing H1 title heading"
+
+    def test_body_without_section_heading(self):
+        # H1 есть, но нет ни одного '## ' подзаголовка → invalid.
+        md = (
+            "---\n"
+            "type: sync\n"
+            "date: 2026-06-30\n"
+            "---\n\n"
+            "# Sync\n\n"
             "Просто текст без markdown-заголовка второго уровня. " * 6
         )
         assert len(md) >= MIN_PROTOCOL_LEN
