@@ -18,6 +18,7 @@ AVAILABLE_MODELS: list[dict[str, str]] = [
     {"id": "qwen/qwen3-next-80b-a3b-instruct:free", "name": "Qwen3 Next 80B A3B Instruct (free)"},
     {"id": "openai/gpt-oss-120b:free", "name": "GPT-OSS 120B (free)"},
     {"id": "openai/gpt-oss-20b:free", "name": "GPT-OSS 20B (free)"},
+    {"id": "openrouter/owl-alpha", "name": "Owl Alpha"},
 ]
 
 
@@ -156,12 +157,32 @@ def test_connection(api_key: str, model: str = DEFAULT_MODEL) -> dict:
             "model": model,
             "model_name": model_name,
         }
-    else:
-        logger.warning("test_connection: model %s not found in %d models", model, len(models_list))
-        return {
-            "status": "error",
-            "detail": f"Model '{model}' not found on OpenRouter",
-        }
+
+    logger.info("test_connection: model %s not in /models listing, trying probe request", model)
+    try:
+        probe_resp = requests.post(
+            f"{BASE_URL}/chat/completions",
+            headers=headers,
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": "Hi"}],
+                "max_tokens": 1,
+            },
+            timeout=15,
+        )
+        if probe_resp.status_code == 200:
+            logger.info("test_connection: probe success, model=%s is available", model)
+            return {
+                "status": "ok",
+                "model": model,
+                "model_name": model,
+            }
+        error_detail = probe_resp.json().get("error", {}).get("message", probe_resp.text[:200])
+        logger.warning("test_connection: probe failed %d: %s", probe_resp.status_code, error_detail)
+        return {"status": "error", "detail": f"Model '{model}': {error_detail}"}
+    except Exception as exc:
+        logger.warning("test_connection: probe error for %s: %s", model, exc)
+        return {"status": "error", "detail": f"Model '{model}' not found on OpenRouter"}
 
 
 # Prevent pytest from collecting test_connection() as a test case
