@@ -113,11 +113,11 @@ pm_assistant/
 │
 ├── knowledge-engine/               # сервис обогащения и синтеза
 │   ├── Dockerfile                  # образ Python 3.12-slim
-│   ├── requirements.txt            # 5 зависимостей
+│   ├── requirements.txt            # 9 зависимостей (+ tiktoken для BL-147)
 │   └── app/                        # исходный код
 │       ├── __init__.py
 │       ├── __main__.py             # точка входа: python -m app
-│       ├── cli.py                  # CLI: jira-sync, jira-import, jira-create, jira-projects, jira-epics, jira-issue-types, enrich, synthesize, watch, index, lint, status
+│       ├── cli.py                  # CLI: jira-sync, jira-import, jira-create, jira-projects, jira-epics, jira-issue-types, enrich, synthesize, watch, index, lint, status, digest, digest-bulk, digest-index, digest-audit, digest-status
 │       ├── api.py                  # FastAPI HTTP API (21 эндпоинт, порт 8001) — +meeting-queue/status, process-queue (BL-145)
 │       ├── enricher.py             # обогащение идеи связями из vault
 │       ├── synthesizer.py          # синтез: кластеризация + сводка
@@ -146,7 +146,14 @@ pm_assistant/
 │       │   ├── processor.py        # Process-воркер: process_one/process_pending + validate_protocol; LLM call_detailed → валидация → write wiki (BL-145)
 │       │   ├── queue_watcher.py    # watchdog-демон на pending/ (on_created+on_moved → claim → process_one), near-realtime (BL-145)
 │       │   └── state.py            # состояние fetch: processed + enqueued (постоянный дедуп-маркер, BL-145)
-│       └── prompts/                # 3 промпта (enrich, synthesize, meeting_protocol)
+│       ├── digest/                 # генерация LLM-дайджестов для llm_wiki/ (BL-147)
+│       │   ├── __init__.py         # экспорты: generate_digest, validate, count_tokens, detect_type и др.
+│       │   ├── generator.py        # generate_digest, generate_bulk, regenerate_index
+│       │   ├── paths.py            # wiki_to_llm_wiki, llm_wiki_to_wiki, ensure_llm_wiki_structure
+│       │   ├── templates.py        # detect_type, get_template, ARTIFACT_TYPE_MAP
+│       │   ├── token_counter.py    # count_tokens, count_sections (tiktoken cl100k_base)
+│       │   └── validator.py        # validate: token budgets, required fields, key-value format
+│       └── prompts/                # 16 промптов (enrich, synthesize, meeting_protocol, digest + 12 type-specific)
 │
 └── idea-pipeline/                  # сервис проработки идей (orchestrator)
     ├── Dockerfile                  # образ Python 3.12-slim + knowledge-engine
@@ -274,6 +281,11 @@ pm_assistant/
 | CLI jira-sync | `python -m app jira-sync --notify` | knowledge-engine/ |
 | CLI jira-sync (dry) | `python -m app jira-sync --dry-run` | knowledge-engine/ |
 | CLI jira-import | `python -m app jira-import <ISSUE-KEY>` | knowledge-engine/ |
+| CLI digest | `python -m app digest <path>` | knowledge-engine/ |
+| CLI digest-bulk | `python -m app digest-bulk [--domain X] [--type Y]` | knowledge-engine/ |
+| CLI digest-index | `python -m app digest-index` | knowledge-engine/ |
+| CLI digest-audit | `python -m app digest-audit` | knowledge-engine/ |
+| CLI digest-status | `python -m app digest-status` | knowledge-engine/ |
 | Запуск pipeline сервера | `python -m idea_pipeline serve` | idea-pipeline/ |
 | CLI запуск pipeline | `python -m idea_pipeline run --text "..."` | idea-pipeline/ |
 | CLI статус pipeline | `python -m idea_pipeline status <id>` | idea-pipeline/ |

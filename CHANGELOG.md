@@ -5,6 +5,32 @@
 
 ---
 
+## 01.07.2026 — Context Compaction Phase 1 (BL-147)
+
+Offline-пайплайн генерации LLM-оптимизированных дайджестов из wiki-артефактов. 3-уровневая структура: one-liner (≤30 токенов), core-digest (200-500 токенов), extended-digest (≤2000 токенов). Digest'ы хранятся в vault/llm_wiki/, зеркалируя структуру wiki/. Интеграция с decay engine (BL-110): tier/relevance из оригиналов wiki/.
+
+### shared 0.5.1
+- **vault_paths.py**: 6 новых функций llm_wiki_*() — пути для слоя 1' (llm_wiki_root, llm_wiki_domain_dir, llm_wiki_meetings, llm_wiki_daily_logs, llm_wiki_reports, llm_wiki_index_file)
+- **llm_client.py**: операция "digest" добавлена в hybrid routing (Ollama для генерации дайджестов)
+
+### knowledge-engine 1.13.0
+- **digest/** (NEW, 6 модулей): пакет генерации дайджестов
+  - `generator.py`: generate_digest (единичная генерация + retry с feedback), generate_bulk (массовая с фильтрами), regenerate_index (сортировка по tier priority)
+  - `paths.py`: wiki_to_llm_wiki / llm_wiki_to_wiki path mapping, ensure_llm_wiki_structure
+  - `templates.py`: detect_type (frontmatter → path → fallback), 15 типов артефактов, required fields
+  - `token_counter.py`: tiktoken cl100k_base, count_tokens / count_sections (4 секции)
+  - `validator.py`: 6 проверок — token budgets, required fields (regex), source exists, changelog, key-value format (≥70%), dependency warnings
+  - `__init__.py`: 11 экспортов
+- **prompts/**: digest.txt (base) + 12 type-specific промптов (prd, decision, sprint, meeting, competitor, jira, idea, epic, daily, bug, knowledge, userstory)
+- **cli.py**: 5 новых команд — digest, digest-bulk, digest-index, digest-audit, digest-status
+- **requirements.txt**: + tiktoken>=0.7.0
+
+### Тесты
+- `test_digest.py`: 39 unit-тестов (paths, token_counter, templates, validator, generator). 0 new failures.
+- Pre-existing: 3 failure в test_jira_search.py (JQL quoting), не связаны с BL-147.
+
+---
+
 ## 30.06.2026 — BUG-019: enrich NoneType на пустом frontmatter tags
 
 ### knowledge-engine 1.12.1

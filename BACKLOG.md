@@ -1,7 +1,7 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.12.0 / knowledge-engine 1.11.0 / idea-pipeline 1.1.2 / web-ui 1.21.0 / shared 0.5.0
-**Обновлён:** 30.06.2026 (BL-143 ✅)
+**Версии:** pm-bot 1.12.0 / knowledge-engine 1.13.0 / idea-pipeline 1.1.2 / web-ui 1.21.0 / shared 0.5.1
+**Обновлён:** 01.07.2026 (BL-147 Phase 1 ✅)
 
 ---
 
@@ -50,6 +50,7 @@
 | BL-134 | ✅ Линковка Jira-задач во всех протоколах | knowledge-engine | Jira sync для ВСЕХ типов протоколов (daily, sync, review, planning, other). Переименование sync_daily_jira_keys → sync_jira_keys + backward-compatible alias |
 | BL-24 | ✅ Decision Journal | pm-bot | Единый реестр решений из протоколов встреч: API endpoint GET /api/v1/decisions + Web UI страница decisions.html + виджет на overview. Полнотекстовый поиск, фильтрация по домену/дате, expand карточки с контекстом |
 | BL-145 | ✅ Meeting Processing Queue | knowledge-engine, pm-bot | Трёхфазная файловая очередь обработки протоколов (`raw/meeting-queue/{pending,processing,done,failed}/`): Fetch (IMAP + transcript_watcher → enqueue в pending/ без LLM), Process-воркер (watchdog PollingObserver near-realtime + cron-страховка /10мин, по одному юниту, LLM через fallback chain max_attempts=5, validate_protocol до записи в wiki), Queue (атомарный claim через rename, reclaim_stuck, status_counts). shared/meeting_queue (enqueue-ядро) + call_detailed (provider_history). CLI process-queue/queue-watch/queue-status, API GET /meeting-queue/status + POST /process-queue. ADR-005. E2E verified на Docker 30.06.2026 |
+| BL-147 | ✅ Слой 1' Phase 1 — digest pipeline | knowledge-engine | Offline-генерация LLM-оптимизированных дайджестов из wiki/ в vault/llm_wiki/. 3 уровня (one-liner/core-digest/extended-digest), body_hash для change detection, decay engine интеграция (tier/relevance). 6 модулей digest/, 13 промптов, 5 CLI команд. 39 unit-тестов. Phase 2 (автоматизация: watcher, context_assembler) — отдельная задача |
 
 ### 2.2 Идеи
 
@@ -60,8 +61,8 @@
 | BL-21 | Ночной линтер | knowledge-engine | Проверка битых ссылок, сирот, протухших черновиков по cron (упомянуто в analysis миграции) |
 | BL-22 | Enrichment с семантическим поиском | knowledge-engine | При capture автоматически линковать к похожим существующим заметкам в vault |
 | BL-23 | Action Items Aggregator | knowledge-engine | Извлечь task/@assignee из протоколов -> агрегация по людям, трекинг overdue |
-| BL-147 | Слой 1' — LLM-оптимизированный контекстный слой модели знаний | knowledge-engine, pm-bot | Offline-генерация digest'ов из wiki-артефактов (слой 1 → слой 1'). Фиксированный token envelope, машиночитаемая структура, TTL для актуальности, явные связи между артефактами. pm-bot использует только слой 1' для сборки контекста LLM-вызовов. Основан на статье Parallel Context Compaction (Cim et al., 2026). Спека: docs/context_compaction/ (PRD, design, SWOT, test results) — статус DRAFT |
 | BL-146 | Temporal Summarization — периодические отчёты по wiki | knowledge-engine | Cron-job (раз в неделю/месяц): собирает все wiki-документы за период (встречи, дейли, идеи, решения), отправляет в LLM, генерирует суммаризацию → `wiki/reports/weekly/YYYY-WW.md` / `monthly/YYYY-MM.md`. Отвечает на вопросы "что сделали за май", "какие решения в Q1". Один дополнительный пайплайн поверх существующей архитектуры. Связан с BL-23 (Action Items) и BL-24 (Decision Journal) |
+| BL-151 | llm_wiki как контекст для Claude Cowork | knowledge-engine | Расширение BL-147: добавить в пайплайн генерации llm_wiki/ два артефакта для Claude Cowork как основного потребителя (90% запросов). (1) `llm_wiki/_index.md` — все one-liner'ы всех wiki-артефактов в одном файле, читается одним Read-вызовом; (2) `llm_wiki/_cowork-session.md` — сборка актуального контекста сессии: последние 5 дейли, открытые задачи, активные эпики, последние решения. Обновляется ночным джобом (ke-cron). Claude Cowork читает `_cowork-session.md` при старте сессии вместо ручного сканирования wiki/domains/*/index.md. Зависит от BL-147. |
 
 ---
 
@@ -203,6 +204,7 @@
 | # | Название | Компонент | Описание |
 |---|:---|:---|:---|
 | BL-81 | Мониторинг и алерты по доступности Ollama | pm-bot | Health check, uptime tracking (упомянуто в Out of Scope ollama-hybrid) |
+| BL-152 | Рефакторинг vault_api.py — разбивка на роутеры | pm-bot | 3883-строчный God File (51 эндпоинт) разбить на 9 FastAPI APIRouter-модулей: `routers/{jira,config,system,meetings,tasks,epics,reports,ideas,vault,playground}.py`. Параллельно вынести вспомогательные слои: `cache.py` (_VaultCache), `parsers.py` (parse_note, _calculate_readiness и др.), `scanner.py` (_scan_domain_folders), `search_index.py` (_SearchIndex). Порядок: сначала cache/parsers/scanner (чистый перенос без изменения логики), затем роутеры от простых к сложным (jira → config → system → meetings → tasks → epics → reports → ideas → vault). Каждый шаг атомарен и не ломает API. Репозиторный слой и сервисные абстракции не вводить — избыточны для однопользовательской системы. |
 | BL-144 | Pipeline Monitor — интерактивная визуализация обработки | web-ui, pm-bot, knowledge-engine | Расширение system-log (BL-143) до realtime pipeline view: текущий этап обработки для каждого элемента (fetch → parse → LLM call → write), elapsed time, provider chain, retry counts. Мотивация: BL-143 покрывает журнал завершённых операций, BL-144 — визуализацию процесса в реальном времени |
 
 ---
@@ -312,6 +314,6 @@
 |:---|:---|:---|
 | ✅ Реализовано | 89 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143 |
 | ✅ Баги исправлены | 24 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129 |
-| Идея | 28 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-150 |
+| Идея | 30 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-152 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **143** | |
+| **Итого** | **145** | |
