@@ -169,6 +169,7 @@
 | BL-138 | ✅ OpenRouter для транскрибаций | pm-bot, knowledge-engine, shared, web-ui | openrouter_client.py (shared/), call_transcription() в llm_client.py — fallback chain OpenRouter → Ollama → Claude API. Settings UI: toggle DEFAULT/OPENROUTER, model dropdown (6 моделей), test connection. Endpoints: /openrouter-key-status, /openrouter-models, /test-openrouter. Env: OPENROUTER_API_KEY |
 | BL-140 | ✅ OpenRouter для enrichment протоколов | knowledge-engine, shared | Унификация LLM-вызовов: call_with_fallback() + call_transcription() → единый call() с настраиваемыми fallback-цепочками. Enrichment протоколов маршрутизируется через те же цепочки, что и транскрибация |
 | BL-141 | ✅ Настраиваемые fallback-цепочки провайдеров | shared, pm-bot, web-ui, knowledge-engine | OpenRouter как альтернатива для capture. 3 группы операций (Capture, Transcription, Analysis) с per-group fallback-цепочкой. Drag-and-drop в Settings UI. Обратная совместимость с legacy prefs. 21 unit-тест |
+| BL-142 | ✅ LLM Playground — страница тестирования моделей | web-ui, pm-bot | playground.html: чат-интерфейс для тестирования LLM. Выбор провайдера (Claude/Ollama/OpenRouter), модели, температуры. API: GET /playground/providers, POST /playground/chat. Sidebar ссылка PLAYGROUND |
 
 ### 6.2 Идеи
 
@@ -179,7 +180,6 @@
 | BL-72 | idea-pipeline через Ollama | idea-pipeline | Сейчас всегда Claude API (упомянуто в Out of Scope ollama-hybrid) |
 | BL-73 | Multi-Agent Shared Vault | pm-bot | Расширить на команду PM-ов, агент находит пересечения и конфликты идей между участниками |
 | BL-139 | Перенос идеи при смене домена | web-ui, knowledge-engine | При смене домена идеи через Web UI (editable-field domain) — физически перемещать файл из wiki/domains/старый/ideas/ в wiki/domains/новый/ideas/. Обновлять log.md и index.md обоих доменов. Сейчас меняется только frontmatter, файл остаётся в старой папке |
-| BL-142 | LLM Playground — страница тестирования моделей | web-ui, pm-bot | Отдельная страница Web UI для проверки работы доступных LLM. Выбор модели (Claude/Ollama/OpenRouter), текстовое поле с предзаполненным тестовым запросом, кнопка отправки, чат-подобный интерфейс с отображением ответа. Цель: проверить на тестовых запросах ответы LLM, используемых в разных частях решения (capture идей, протоколы встреч, enrichment и т.п.) |
 
 ---
 
