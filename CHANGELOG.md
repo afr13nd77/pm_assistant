@@ -34,9 +34,11 @@
 - **ADR-005** (NEW): file-based meeting queue. requirements/design/tasks в `docs/meeting-processing-queue/`.
 
 ### Заметки
-- По ходу реализации найдены и устранены 2 интеграционных бага: watchdog не срабатывал на `on_created` (atomic_write даёт `on_moved`); KeyError в Telegram-хендлере на устаревших ключах `details`.
 - Полный test suite: 0 новых падений (9 pre-existing — чужие модули). ≈121 новый тест зелёный.
-- **e2e live-тест выполняется после Docker rebuild** (топология KE-контейнера изменилась).
+- **e2e пройден на живом Docker (30.06.2026)**: юнит прошёл pending → polling watchdog → LLM(ollama) → валидация → `wiki/meetings/...` → done.
+- E2E + реализация поймали 4 интеграционных бага (исправлены): watchdog `on_created`→ нужен `on_moved` (atomic_write даёт move); KeyError в Telegram-хендлере на устаревших ключах `details`; нативный `Observer` не получает inotify на bind-mount Windows→Linux → `PollingObserver(timeout=5)`; `validate_protocol` требовал несуществующее frontmatter-поле `title` → `REQUIRED_FM=('type','date')` + проверка H1 (иначе каждый протокол падал бы в `failed/`).
+- Подтверждено работающим в проде: cron-страховка `process-queue`, AC-05 (failed/ + сохранение `.txt`), AC-04 (`provider_history`: openrouter 429 → fallback ollama).
+- Известное (не блокер): `enrich()` на протоколе кидает `'NoneType' object is not iterable` (non-fatal, протокол создаётся) — кандидат на отдельный багфикс.
 
 ---
 

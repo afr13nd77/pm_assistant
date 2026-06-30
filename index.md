@@ -372,7 +372,7 @@ pm_assistant/
 | knowledge-engine/ | APPROVED, IMPLEMENTED | Enrichment + synthesis (requirements, design, tasks) |
 | marketing_promo/ | — | Промо-материалы: презентации, слайды, обложки (PDF, PPTX, MD) |
 | meeting-fetcher/ | APPROVED, IMPLEMENTED | Импорт транскриптов из email (requirements, design, tasks) |
-| meeting-processing-queue/ | APPROVED, IMPLEMENTED (e2e pending rebuild) | BL-145: трёхфазная файловая очередь обработки протоколов (Fetch/Queue/Process), watchdog+cron, retry по fallback-цепочке (max_attempts=5), валидация ответа до записи в wiki (requirements, design, tasks, ADR-005) |
+| meeting-processing-queue/ | APPROVED, IMPLEMENTED, e2e VERIFIED | BL-145: трёхфазная файловая очередь обработки протоколов (Fetch/Queue/Process), watchdog (PollingObserver) + cron, retry по fallback-цепочке (max_attempts=5), валидация ответа до записи в wiki. E2E пройден на Docker 30.06.2026 (requirements, design, tasks, ADR-005) |
 | ollama-hybrid/ | APPROVED, IMPLEMENTED | Гибридная LLM-архитектура: Claude API + Ollama (requirements, design, tasks) |
 | overview-dashboard/ | APPROVED, IMPLEMENTED | Overview дашборд (requirements, tasks) |
 | overview-redesign/ | APPROVED, IMPLEMENTED | Редизайн overview (requirements, design, tasks) |
