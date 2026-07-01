@@ -205,7 +205,7 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 - APScheduler: weekly report (Mon 09:00), enrichment reminders (daily)
 - SQLite: дедупликация enrichment-напоминаний (cooldown 24ч)
 
-### knowledge-engine (v1.12.1)
+### knowledge-engine (v1.15.0)
 
 Сервис обогащения и синтеза знаний.
 
@@ -284,7 +284,7 @@ SPA-дашборд на Vue 3 + vanilla JS. Статические HTML-стра
 | roadmap.html | Roadmap: эпики с прогрессом, колонки Backlog/Todo/In Progress/Done |
 | timeline.html | Таймлайн фич |
 | report.html | Просмотр еженедельных отчетов (Markdown -> HTML через marked.js) |
-| settings.html | Настройки: тема, refresh mode, LLM Provider (Claude/Ollama/Hybrid), Transcription Provider (Default/OpenRouter), prompts, Jira sync |
+| settings.html | Настройки: тема, refresh mode, LLM Provider (Claude/Ollama/Hybrid), Transcription Provider (Default/OpenRouter), мультимодельные OpenRouter fallback-цепочки с inline model selector, prompts, Jira sync |
 | decay.html | Decay state dashboard: bubble scatter, tier distribution, projection, domain bars, forgotten gems |
 | about.html | О сервисе: версии компонентов, история изменений |
 
@@ -489,7 +489,7 @@ API возвращает `trend_7d` и `trend_30d` — история score за
 - 27 идей в бэклоге
 - 139 пунктов бэклога всего
 
-Разработка ведется с 07.05.2026. Текущие версии: pm-bot 1.11.0, knowledge-engine 1.10.0, idea-pipeline 1.1.2, web-ui 1.20.0, shared 0.2.0.
+Разработка ведется с 07.05.2026. Текущие версии: pm-bot 1.17.0, knowledge-engine 1.15.0, idea-pipeline 1.1.2, web-ui 1.25.0, shared 0.7.0.
 
 ---
 
