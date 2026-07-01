@@ -95,7 +95,7 @@ Vault подключен к **Яндекс.Диск** и автоматичес�
 - **pm-bot** — Telegram-бот, Vault API (FastAPI) и Web UI сервер. Точка входа для всех взаимодействий пользователя с системой
 - **knowledge-engine** — сервис обогащения и синтеза знаний, watchdog на входящие файлы, Jira-интеграция, линтер, индексатор
 - **idea-pipeline** — оркестратор проработки идей через цепочку AI-агентов (Analyst -> PM -> Decomposer)
-- **ke-cron** — cron-контейнер для периодических задач (синтез, Jira sync, rebuild index, lint, vault health)
+- **ke-cron** — cron-контейнер для периодических задач (синтез, Jira sync, rebuild index, lint, vault health, cowork-context)
 
 Все сервисы работают с одним и тем же Obsidian vault, смонтированным как Docker volume.
 
@@ -340,7 +340,7 @@ Drag-n-drop правила: readiness 100% для перехода в «Гото
 | pm-bot | Telegram polling + Vault API + Web UI | 8000 (API), 8080 (Web) |
 | knowledge-engine | HTTP API (:8001) + Watchdog на raw/inbound/ (auto-enrichment) + queue-watch на meeting-queue/pending/ (BL-145) | 8001 (API) |
 | idea-pipeline | Оркестратор AI-агентов | 8100 |
-| ke-cron | Синтез (09:00) + Meeting fetch (:15) + Process queue (/10мин) + Jira sync (каждые 3ч) | — |
+| ke-cron | Синтез (09:00) + Cowork-context (01:00) + Meeting fetch (:15) + Process queue (/10мин) + Jira sync (каждые 3ч) | — |
 
 ---
 
