@@ -1034,3 +1034,41 @@ def digest_status():
     except Exception as exc:
         logger.error("API digest/status error: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# 29. POST /api/v1/cowork-context  (BL-151)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/cowork-context")
+def cowork_context():
+    """Обновить оба llm_wiki файла: _index.md и _cowork-session.md."""
+    logger.info("API cowork-context: starting")
+    try:
+        from .cowork_context import generate_cowork_session
+        from .digest.generator import regenerate_index
+
+        from shared.system_log import LoggedProcess
+
+        with LoggedProcess("cowork-context", source="ke-api") as lp:
+            index_result = regenerate_index(vault_path=_vault_path_str())
+            session_result = generate_cowork_session(_vault_path_str())
+            lp.summary = f"Cowork context: {session_result.get('status', 'unknown')}"
+            lp.details = {
+                "index_entries": index_result.get("entries", 0),
+                "session_sections": session_result.get("session_sections", {}),
+            }
+            if session_result.get("status") == "error":
+                lp.status = "error"
+
+        result = {
+            "status": session_result.get("status", "error"),
+            "index_entries": index_result.get("entries", 0),
+            "session_sections": session_result.get("session_sections", {}),
+            "generated_at": session_result.get("generated_at", ""),
+        }
+        logger.info(f"API cowork-context: completed, status={result['status']}")
+        return result
+    except Exception as exc:
+        logger.error(f"API cowork-context error: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))

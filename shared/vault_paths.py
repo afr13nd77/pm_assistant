@@ -113,6 +113,11 @@ def llm_wiki_index_file() -> Path:
     return VAULT_PATH / "llm_wiki" / "_index.md"
 
 
+def llm_wiki_cowork_session() -> Path:
+    """Return path to llm_wiki/_cowork-session.md."""
+    return VAULT_PATH / "llm_wiki" / "_cowork-session.md"
+
+
 def wiki_concepts() -> Path:
     """Return path to wiki/concepts/ directory, ensuring it exists."""
     logger.info("wiki_concepts: resolving wiki/concepts/ directory")

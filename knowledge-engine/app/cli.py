@@ -207,6 +207,12 @@ def main():
     digest_status_parser = subparsers.add_parser("digest-status", help="Show digest coverage statistics")
     digest_status_parser.add_argument("--vault", default=None, help="Vault root path")
 
+    cowork_parser = subparsers.add_parser(
+        "cowork-context",
+        help="Generate _cowork-session.md for Claude Cowork (BL-151)"
+    )
+    cowork_parser.add_argument("--vault", default=None, help="Vault root path")
+
     serve_parser = subparsers.add_parser("serve", help="Start HTTP API server")
     serve_parser.add_argument("--vault", default=None, help="Vault root path")
     serve_parser.add_argument("--host", default="0.0.0.0")
@@ -933,6 +939,34 @@ def main():
         }
         logger.info("digest-status: wiki=%d, digests=%d, coverage=%s", total_wiki, total_digests, coverage)
         _output_json(result)
+
+    elif args.command == "cowork-context":
+        from shared import vault_paths as _vp
+        _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
+        from .cowork_context import generate_cowork_session
+        from .digest.generator import regenerate_index
+        from shared.system_log import LoggedProcess
+        logger.info(f"cowork-context: starting, vault={vault_path}")
+        with LoggedProcess("cowork-context", source="ke-cron") as lp:
+            # Step 1: update _index.md
+            index_result = regenerate_index(vault_path=vault_path)
+            # Step 2: generate _cowork-session.md
+            session_result = generate_cowork_session(vault_path)
+            lp.summary = f"Cowork context: {session_result.get('status', 'unknown')}"
+            lp.details = {
+                "index_entries": index_result.get("entries", 0),
+                "session_sections": session_result.get("session_sections", {}),
+            }
+            if session_result.get("status") == "error":
+                lp.status = "error"
+        result = {
+            "status": session_result.get("status", "error"),
+            "index_entries": index_result.get("entries", 0),
+            "session_sections": session_result.get("session_sections", {}),
+            "generated_at": session_result.get("generated_at", ""),
+        }
+        _output_json(result)
+        sys.exit(0 if result["status"] == "ok" else 1)
 
 
 def _collect_queue_units(vault_path: str) -> list:
