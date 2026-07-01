@@ -230,6 +230,10 @@
                 <span class="syslog-detail-label">{{ key.toUpperCase() }}</span>
                 <span class="syslog-detail-value">{{ formatDetailValue(val) }}</span>
               </div>
+              <div v-if="e.details && e.details.fallback_errors && e.details.fallback_errors.length" class="syslog-detail-row" style="opacity: 0.6;">
+                <span class="syslog-detail-label">FALLBACK</span>
+                <span class="syslog-detail-value">{{ e.details.fallback_errors.map(function(f) { return f.provider + ': ' + f.error; }).join('; ') }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -425,7 +429,7 @@
           if (!details) return {};
           var result = {};
           Object.keys(details).forEach(function(key) {
-            if (key !== 'duration_ms') result[key] = details[key];
+            if (key !== 'duration_ms' && key !== 'fallback_errors') result[key] = details[key];
           });
           return result;
         }

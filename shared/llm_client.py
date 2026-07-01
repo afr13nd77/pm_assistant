@@ -385,7 +385,7 @@ def call_detailed(
                         "provider_chain": chain,
                         "used_provider": provider,
                         "fallback_count": len(errors),
-                        "errors": [{"provider": p, "error": e} for p, e in errors],
+                        "fallback_errors": [{"provider": p, "error": e} for p, e in errors],
                         "output_len": len(result),
                     },
                     duration_ms=_duration,
