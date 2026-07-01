@@ -20,9 +20,9 @@ pm_assistant/
 ├── shared/                         # общий модуль — единый источник для pm-bot, KE, idea-pipeline
 │   ├── __init__.py                 # __version__ = "0.1.0"
 │   ├── file_writer.py              # file_lock, atomic_write, locked_append, append_section
-│   ├── llm_client.py               # _load_llm_prefs, get_client, call (unified fallback chain), call_detailed (отдаёт provider_record, BL-145), deprecated: call_with_fallback, call_transcription
+│   ├── llm_client.py               # _load_llm_prefs, get_client, call (unified fallback chain), call_detailed (отдаёт provider_record, BL-145), мультимодельные fallback-цепочки с нормализацией шага {provider, model} (BL-155), backoff 429 между openrouter-шагами, deprecated: call_with_fallback, call_transcription
 │   ├── meeting_queue.py            # enqueue-ядро файловой очереди: Unit, make_unit_id, build_meta, enqueue, path-хелперы (BL-145)
-│   ├── openrouter_client.py        # HTTP client for OpenRouter API (6 models, call, test_connection)
+│   ├── openrouter_client.py        # HTTP client for OpenRouter API (list_models с live-запросом и TTL-кэшем, call, test_connection, BL-156)
 │   ├── vault_paths.py              # superset путей vault (26 функций, +llm_wiki_cowork_session)
 │   ├── domain_config.py            # загрузка/сохранение domain-config.yaml (13 функций)
 │   ├── frontmatter_utils.py        # read_frontmatter, update_frontmatter

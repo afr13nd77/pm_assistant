@@ -38,6 +38,7 @@ DEFAULTS: dict[str, Any] = {
         "vault_api_seconds": 30,
         "jira_cache_seconds": 300,
         "domains_cache_seconds": 60,
+        "openrouter_models_seconds": 3600,
     },
     "rate_limits": {
         "telegram_messages_per_second": 1,

@@ -5,6 +5,8 @@ Used by llm_client.call_transcription() for meeting transcript processing.
 
 import logging
 import os
+import time
+from datetime import datetime, timezone
 
 import requests
 
@@ -13,12 +15,17 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "qwen/qwen3-next-80b-a3b-instruct:free"
 DEFAULT_TIMEOUT = 120
+MODELS_LIST_TIMEOUT = 10
 
 AVAILABLE_MODELS: list[dict[str, str]] = [
     {"id": "qwen/qwen3-next-80b-a3b-instruct:free", "name": "Qwen3 Next 80B A3B Instruct (free)"},
     {"id": "openai/gpt-oss-120b:free", "name": "GPT-OSS 120B (free)"},
     {"id": "openai/gpt-oss-20b:free", "name": "GPT-OSS 20B (free)"},
 ]
+
+# Module-level TTL cache for list_models() (design.md §3.1: in-memory, single-process).
+_models_cache: dict | None = None
+_models_cache_ts: float = 0.0
 
 
 def _get_api_key() -> str | None:
@@ -182,6 +189,108 @@ def test_connection(api_key: str, model: str = DEFAULT_MODEL) -> dict:
     except Exception as exc:
         logger.warning("test_connection: probe error for %s: %s", model, exc)
         return {"status": "error", "detail": f"Model '{model}' not found on OpenRouter"}
+
+
+def _fallback_models_result() -> dict:
+    """Build the fallback response payload from AVAILABLE_MODELS.
+
+    Not cached as live (design.md §3.1) -- next call will retry the network
+    if TTL for the (absent) live cache has expired, so we don't stay stuck
+    in degraded mode longer than necessary.
+    """
+    return {
+        "models": AVAILABLE_MODELS,
+        "source": "fallback",
+        "cached": False,
+        "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "count": len(AVAILABLE_MODELS),
+    }
+
+
+def list_models(api_key: str | None, ttl_seconds: int = 3600) -> dict:
+    """Return the list of available OpenRouter models with TTL cache + fallback.
+
+    Behavior (design.md §1.2, §2.3, §3.1):
+    - If a live cache entry exists and is not older than ttl_seconds, return it
+      (with cached=True).
+    - If api_key is empty/None, skip the network call entirely and return the
+      AVAILABLE_MODELS fallback.
+    - Otherwise call GET {BASE_URL}/models using the same headers/parsing
+      pattern as test_connection(). On success, cache the result and return it
+      (source="live", cached=False). On any error (timeout, ConnectionError,
+      non-200 status, parse error), log a warning and return the fallback.
+
+    Returns:
+        {"models": [{"id": ..., "name": ...}, ...], "source": "live"|"fallback",
+         "cached": bool, "fetched_at": iso8601, "count": int}
+    """
+    global _models_cache, _models_cache_ts
+
+    now = time.time()
+    cache_age = now - _models_cache_ts
+    cache_hit = _models_cache is not None and cache_age < ttl_seconds
+
+    logger.info(
+        "list_models: operation=list_models, cache_hit=%s, ttl_seconds=%d",
+        cache_hit, ttl_seconds,
+    )
+
+    if cache_hit:
+        result = dict(_models_cache)
+        result["cached"] = True
+        logger.info(
+            "list_models: returning cached result, count=%d, age=%.1fs",
+            result["count"], cache_age,
+        )
+        return result
+
+    if not api_key:
+        logger.warning("list_models: no api_key provided, using fallback (no network call)")
+        return _fallback_models_result()
+
+    headers = _build_headers(api_key)
+
+    try:
+        resp = requests.get(
+            f"{BASE_URL}/models",
+            headers=headers,
+            timeout=MODELS_LIST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        raw_models = data["data"]
+        models = [
+            {"id": m["id"], "name": m.get("name") or m["id"]}
+            for m in raw_models
+        ]
+    except requests.Timeout as exc:
+        logger.warning("list_models: timeout fetching /models, using fallback: %s", exc)
+        return _fallback_models_result()
+    except requests.ConnectionError as exc:
+        logger.warning("list_models: connection error fetching /models, using fallback: %s", exc)
+        return _fallback_models_result()
+    except requests.HTTPError as exc:
+        status_code = exc.response.status_code if exc.response is not None else "unknown"
+        logger.warning("list_models: HTTP error %s fetching /models, using fallback: %s", status_code, exc)
+        return _fallback_models_result()
+    except Exception as exc:
+        logger.warning("list_models: unexpected error fetching /models, using fallback: %s", exc)
+        return _fallback_models_result()
+
+    fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    result = {
+        "models": models,
+        "source": "live",
+        "cached": False,
+        "fetched_at": fetched_at,
+        "count": len(models),
+    }
+
+    _models_cache = dict(result)
+    _models_cache_ts = now
+
+    logger.info("list_models: live fetch success, count=%d", len(models))
+    return result
 
 
 # Prevent pytest from collecting test_connection() as a test case

@@ -5,6 +5,8 @@ from pathlib import Path
 
 import anthropic
 
+from shared import openrouter_client
+
 logger = logging.getLogger(__name__)
 
 _OPERATION_GROUPS: dict[str, str] = {
@@ -38,6 +40,12 @@ _DEFAULT_LLM_PREFS = {
 
 _OLLAMA_TIMEOUT_MULTIPLIER = 5
 _OPENROUTER_DEFAULT_TIMEOUT = 120
+
+# T-05 (design.md §6.3): short fixed backoff applied only between two ADJACENT
+# openrouter steps in a fallback chain, when the first one failed with a 429
+# (rate limit). Keeps us from immediately hammering the same rate-limited
+# provider with the very next request.
+OPENROUTER_429_BACKOFF_SECONDS = 0.7
 
 _cached_prefs: dict | None = None
 _cached_mtime: float = 0.0
@@ -159,8 +167,73 @@ def _resolve_group(operation: str) -> str:
     return group
 
 
-def _resolve_chain(group: str, prefs: dict) -> list[str]:
-    """Get the fallback chain for a group from prefs."""
+def _default_model_for(provider: str, prefs: dict) -> str | None:
+    """Return the default model for a fallback-chain step lacking one (design.md §2.1).
+
+    - openrouter: prefs["openrouter_model"] if set (legacy global model),
+      else openrouter_client.DEFAULT_MODEL as a last resort.
+    - claude/ollama: these providers are single-model -- they take their
+      model from their own prefs fields, so no per-step default applies.
+    - unknown provider: None.
+    """
+    if provider == "openrouter":
+        model = prefs.get("openrouter_model")
+        if model:
+            logger.debug("_default_model_for: openrouter -> prefs.openrouter_model=%s", model)
+            return model
+        logger.debug(
+            "_default_model_for: openrouter -> openrouter_client.DEFAULT_MODEL=%s",
+            openrouter_client.DEFAULT_MODEL,
+        )
+        return openrouter_client.DEFAULT_MODEL
+
+    if provider in ("claude", "ollama"):
+        return None
+
+    logger.warning("_default_model_for: unknown provider '%s', returning None", provider)
+    return None
+
+
+def _normalize_step(el, prefs: dict) -> dict | None:
+    """Normalize one fallback-chain element to the canonical {provider, model} form.
+
+    Accepts the legacy plain-string form ("openrouter") or the new object
+    form ({"provider": ..., "model": ...}). In-memory only -- does not
+    mutate the caller's prefs or write anything to disk (same convention
+    as _migrate_legacy_prefs).
+
+    Returns None (and logs a warning) for unsupported/malformed elements
+    instead of raising, so a single bad entry doesn't crash chain resolution.
+    """
+    if isinstance(el, str):
+        return {"provider": el, "model": _default_model_for(el, prefs)}
+
+    if isinstance(el, dict):
+        provider = el.get("provider")
+        if not provider:
+            logger.warning("_normalize_step: dict step missing 'provider', skipping: %s", el)
+            return None
+        return {
+            "provider": provider,
+            "model": el.get("model") or _default_model_for(provider, prefs),
+        }
+
+    logger.warning(
+        "_normalize_step: unsupported step type %s, skipping: %r",
+        type(el).__name__, el,
+    )
+    return None
+
+
+def _resolve_chain(group: str, prefs: dict) -> list[dict]:
+    """Get the normalized fallback chain for a group from prefs.
+
+    Returns a list of normalized steps [{"provider": ..., "model": ...}, ...].
+    Each raw element in prefs may be a legacy provider-name string or a
+    new-format {"provider", "model"} object -- both are normalized via
+    _normalize_step() (design.md §2.1, §3.2). Normalization happens purely
+    in memory; the prefs dict / file on disk are never rewritten here.
+    """
     key = f"{group}_fallback"
     chain = prefs.get(key, _DEFAULT_FALLBACK.get(group, ["claude"]))
 
@@ -168,16 +241,21 @@ def _resolve_chain(group: str, prefs: dict) -> list[str]:
         logger.warning("_resolve_chain: invalid chain for %s, using default", group)
         chain = ["claude"]
 
-    valid = [p for p in chain if p in ("claude", "ollama", "openrouter")]
-    if not valid:
+    steps = [_normalize_step(el, prefs) for el in chain]
+    steps = [s for s in steps if s is not None and s["provider"] in ("claude", "ollama", "openrouter")]
+
+    if not steps:
         logger.warning(
             "_resolve_chain: no valid providers in chain for %s, falling back to claude",
             group,
         )
-        valid = ["claude"]
+        steps = [_normalize_step("claude", prefs)]
 
-    logger.info("_resolve_chain: group=%s, chain=%s", group, valid)
-    return valid
+    logger.info(
+        "_resolve_chain: group=%s, chain=%s",
+        group, [s["provider"] for s in steps],
+    )
+    return steps
 
 
 def _is_provider_available(provider: str, prefs: dict) -> bool:
@@ -202,6 +280,25 @@ def _is_provider_available(provider: str, prefs: dict) -> bool:
 
     logger.warning("_is_provider_available: unknown provider '%s', skipping", provider)
     return False
+
+
+def _is_rate_limit_error(exc: Exception) -> bool:
+    """Detect an HTTP 429 (rate limit) error raised from an OpenRouter call.
+
+    `openrouter_client.call()` calls `response.raise_for_status()`, which
+    raises `requests.HTTPError` carrying the original `response` object with
+    `.status_code`. We check that first; as a defensive fallback (e.g. if the
+    response object is missing, or the error text was wrapped by another
+    layer), we also match on the textual markers OpenRouter/requests use for
+    429 responses (design.md §6.3, T-05).
+    """
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None) if response is not None else None
+    if status_code == 429:
+        return True
+
+    text = str(exc)
+    return "429" in text or "Too Many Requests" in text
 
 
 def _call_claude(
@@ -267,11 +364,19 @@ def _call_openrouter(
     max_tokens: int,
     system: str | None,
     timeout: int | None,
+    model: str | None = None,
 ) -> str:
-    """Call OpenRouter via shared.openrouter_client."""
+    """Call OpenRouter via shared.openrouter_client.
+
+    `model` is the model resolved for this specific fallback-chain step
+    (design.md §1.4, §3.5, T-04) -- it takes precedence so that a chain
+    with multiple OpenRouter steps can use a different model per step.
+    If not provided (e.g. legacy direct callers), falls back to the
+    global prefs["openrouter_model"] as before.
+    """
     from shared import openrouter_client
 
-    openrouter_model = prefs.get("openrouter_model", "qwen/qwen3-32b")
+    openrouter_model = model or prefs.get("openrouter_model", "qwen/qwen3-32b")
 
     or_messages = list(messages)
     if system:
@@ -291,14 +396,25 @@ def _call_openrouter(
 
 
 def _call_provider(
-    provider: str,
+    step: dict,
     prefs: dict,
     messages: list[dict],
     max_tokens: int,
     system: str | None,
     timeout: int | None,
 ) -> str:
-    """Dispatch a call to a specific provider. Raises on error."""
+    """Dispatch a call to a specific provider. Raises on error.
+
+    `step` is a normalized fallback-chain step {"provider": ..., "model": ...}
+    (see _normalize_step/_resolve_chain, design.md §2.1). claude/ollama are
+    single-model providers and keep taking their model from their own prefs
+    fields (unchanged in substance) -- they accept the same step-shaped
+    argument purely for a uniform call signature. openrouter uses
+    step["model"] so that multiple OpenRouter steps in one chain can each
+    use a different model (T-04, fixes BL-155 root cause).
+    """
+    provider = step["provider"]
+
     if provider == "claude":
         return _call_claude(messages, max_tokens, system, timeout)
 
@@ -306,7 +422,7 @@ def _call_provider(
         return _call_ollama(prefs, messages, max_tokens, system, timeout)
 
     if provider == "openrouter":
-        return _call_openrouter(prefs, messages, max_tokens, system, timeout)
+        return _call_openrouter(prefs, messages, max_tokens, system, timeout, model=step.get("model"))
 
     raise ValueError(f"Unknown provider: {provider}")
 
@@ -326,21 +442,40 @@ def call_detailed(
     1. Determines the operation group (capture/transcription/analysis)
     2. Reads the fallback chain for the group from prefs
     3. Iterates providers, skipping unavailable ones
-    4. On error, falls back to the next provider
+    4. On error, falls back to the next provider (T-05: a short fixed
+       backoff is inserted before the next attempt if it is an ADJACENT
+       openrouter step and the previous openrouter step failed with a 429 --
+       design.md §6.3)
     5. If all providers fail, raises RuntimeError
 
     Returns:
         (text, provider_record) where provider_record = {
-            'providers': <resolved fallback chain>,
-            'used': <name of the provider that succeeded>,
-            'errors': [(provider_name, str(exc)), ...],
+            'providers': <resolved fallback chain, list[str] of provider names -- unchanged form>,
+            'chain': <resolved fallback chain, list[{"provider", "model"}] -- NEW, T-05>,
+            'used': <name of the provider that succeeded -- unchanged form>,
+            'used_model': <model of the winning step, None for claude/ollama -- NEW, T-05>,
+            'used_step_index': <0-based index of the winning step in 'chain' -- NEW, T-05>,
+            'errors': [(error_key, str(exc)), ...],
+                # error_key is "provider" for claude/ollama (unchanged), and
+                # "openrouter:<model>" for openrouter steps (T-05, design.md §6.4) --
+                # e.g. ("openrouter:qwen/qwen3-32b", "429 Too Many Requests")
         }
     """
     prefs = _load_llm_prefs()
     prefs = _migrate_legacy_prefs(prefs)
 
     group = _resolve_group(operation)
-    chain = _resolve_chain(group, prefs)
+    # T-03: _resolve_chain returns normalized steps [{"provider", "model"}, ...].
+    # T-04: step["model"] is now threaded through _call_provider/_call_openrouter
+    # (see below), so a chain with multiple openrouter steps can each use a
+    # different model instead of the single global prefs["openrouter_model"].
+    # `chain` (list[str] of provider names) is kept as-is for
+    # _is_provider_available()/logging/the 'providers' key of provider_record.
+    # T-05 additionally threads the full `steps` (with models) into
+    # provider_record as 'chain', plus 'used_model'/'used_step_index', and
+    # applies a short backoff between adjacent openrouter steps after a 429.
+    steps = _resolve_chain(group, prefs)
+    chain = [step["provider"] for step in steps]
 
     logger.info("call_detailed: operation=%s, group=%s, chain=%s", operation, group, chain)
 
@@ -348,8 +483,13 @@ def call_detailed(
     _t0 = _time.monotonic_ns()
 
     errors: list[tuple[str, str]] = []
+    # T-05: set when an openrouter step just failed with a 429 -- consumed
+    # (and reset) at the start of the next attempted step if that step is
+    # also openrouter, to insert a short backoff before hammering it again.
+    pending_openrouter_429_backoff = False
 
-    for i, provider in enumerate(chain):
+    for i, step in enumerate(steps):
+        provider = step["provider"]
         if not _is_provider_available(provider, prefs):
             logger.info(
                 "call_detailed: skipping %s (not available), operation=%s",
@@ -357,20 +497,33 @@ def call_detailed(
             )
             continue
 
+        if pending_openrouter_429_backoff and provider == "openrouter":
+            logger.info(
+                "call_detailed: applying %.1fs backoff before next openrouter step "
+                "(model=%s) after previous openrouter step hit 429, operation=%s",
+                OPENROUTER_429_BACKOFF_SECONDS, step.get("model"), operation,
+            )
+            _time.sleep(OPENROUTER_429_BACKOFF_SECONDS)
+        pending_openrouter_429_backoff = False
+
         try:
             logger.info(
                 "call_detailed: trying provider=%s (%d/%d), operation=%s",
                 provider, i + 1, len(chain), operation,
             )
-            result = _call_provider(provider, prefs, messages, max_tokens, system, timeout)
+            result = _call_provider(step, prefs, messages, max_tokens, system, timeout)
+            used_model = step.get("model")
             provider_record = {
                 "providers": chain,
+                "chain": steps,
                 "used": provider,
+                "used_model": used_model,
+                "used_step_index": i,
                 "errors": errors,
             }
             logger.info(
-                "call_detailed: success, operation=%s, provider=%s, output_len=%d",
-                operation, provider, len(result),
+                "call_detailed: success, operation=%s, provider=%s, model=%s, output_len=%d",
+                operation, provider, used_model, len(result),
             )
             _duration = (_time.monotonic_ns() - _t0) // 1_000_000
             try:
@@ -383,7 +536,9 @@ def call_detailed(
                         "operation": operation,
                         "group": group,
                         "provider_chain": chain,
+                        "chain_steps": steps,
                         "used_provider": provider,
+                        "used_model": used_model,
                         "fallback_count": len(errors),
                         "fallback_errors": [{"provider": p, "error": e} for p, e in errors],
                         "output_len": len(result),
@@ -396,7 +551,17 @@ def call_detailed(
             return result, provider_record
 
         except Exception as exc:
-            errors.append((provider, str(exc)))
+            if provider == "openrouter":
+                error_key = f"openrouter:{step.get('model')}"
+                if _is_rate_limit_error(exc):
+                    pending_openrouter_429_backoff = True
+                    logger.warning(
+                        "call_detailed: openrouter step model=%s hit a 429 rate limit, "
+                        "operation=%s", step.get("model"), operation,
+                    )
+            else:
+                error_key = provider
+            errors.append((error_key, str(exc)))
             remaining = [p for p in chain[i + 1:] if _is_provider_available(p, prefs)]
             if remaining:
                 logger.warning(
@@ -420,6 +585,7 @@ def call_detailed(
                 "operation": operation,
                 "group": group,
                 "provider_chain": chain,
+                "chain_steps": steps,
                 "errors": [{"provider": p, "error": e} for p, e in errors],
             },
             duration_ms=_duration,

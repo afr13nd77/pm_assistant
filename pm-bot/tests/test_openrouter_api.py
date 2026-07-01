@@ -77,28 +77,110 @@ class TestOpenRouterKeyStatus:
 
 class TestOpenRouterModels:
 
-    def test_returns_models_list(self, client):
-        """Should return 200 with a 'models' list of 6 entries."""
-        resp = client.get("/api/v1/openrouter-models")
+    def test_returns_live_models_list(self, client):
+        """Should return 200 with the live 'models' list and full metadata schema
+        when list_models() succeeds (T-06: endpoint now delegates to
+        openrouter_client.list_models() instead of a hardcoded AVAILABLE_MODELS)."""
+        mock_result = {
+            "models": [
+                {"id": "qwen/qwen3-32b", "name": "Qwen3 32B"},
+                {"id": "openai/gpt-4o", "name": "GPT-4o"},
+            ],
+            "source": "live",
+            "cached": False,
+            "fetched_at": "2026-07-01T09:00:00Z",
+            "count": 2,
+        }
+        with patch("shared.openrouter_client.list_models", return_value=mock_result) as mock_list:
+            resp = client.get("/api/v1/openrouter-models")
         assert resp.status_code == 200
         data = resp.json()
-        assert "models" in data
-        assert len(data["models"]) == 6
+        assert data["models"] == mock_result["models"]
+        assert data["source"] == "live"
+        assert data["cached"] is False
+        assert data["fetched_at"] == "2026-07-01T09:00:00Z"
+        assert data["count"] == 2
+        mock_list.assert_called_once()
 
-    def test_first_model_is_qwen3_32b(self, client):
-        """First model should be qwen/qwen3-32b (the default)."""
-        resp = client.get("/api/v1/openrouter-models")
+    def test_first_model_matches_live_list_order(self, client):
+        """First model in the response must match the order returned by list_models()."""
+        mock_result = {
+            "models": [
+                {"id": "google/gemini-2.5-flash", "name": "Gemini 2.5 Flash"},
+                {"id": "qwen/qwen3-32b", "name": "Qwen3 32B"},
+            ],
+            "source": "live",
+            "cached": False,
+            "fetched_at": "2026-07-01T09:00:00Z",
+            "count": 2,
+        }
+        with patch("shared.openrouter_client.list_models", return_value=mock_result):
+            resp = client.get("/api/v1/openrouter-models")
         assert resp.status_code == 200
         first = resp.json()["models"][0]
-        assert first["id"] == "qwen/qwen3-32b"
+        assert first["id"] == "google/gemini-2.5-flash"
 
     def test_each_model_has_id_and_name(self, client):
         """Every model entry must have both 'id' and 'name' keys."""
-        resp = client.get("/api/v1/openrouter-models")
+        mock_result = {
+            "models": [
+                {"id": "qwen/qwen3-32b", "name": "Qwen3 32B"},
+                {"id": "openai/gpt-4o", "name": "GPT-4o"},
+            ],
+            "source": "live",
+            "cached": False,
+            "fetched_at": "2026-07-01T09:00:00Z",
+            "count": 2,
+        }
+        with patch("shared.openrouter_client.list_models", return_value=mock_result):
+            resp = client.get("/api/v1/openrouter-models")
         assert resp.status_code == 200
         for model in resp.json()["models"]:
             assert "id" in model
             assert "name" in model
+
+    def test_no_key_returns_fallback_with_200(self, client):
+        """AC-02: when OPENROUTER_API_KEY is unset/invalid, list_models() returns
+        the fallback list, but the endpoint must still respond with HTTP 200 and
+        source='fallback' (not an error status)."""
+        from shared.openrouter_client import AVAILABLE_MODELS
+        mock_result = {
+            "models": AVAILABLE_MODELS,
+            "source": "fallback",
+            "cached": False,
+            "fetched_at": "2026-07-01T09:00:00Z",
+            "count": len(AVAILABLE_MODELS),
+        }
+        with patch("app.vault_api.os.getenv", return_value=None), \
+             patch("shared.openrouter_client.list_models", return_value=mock_result) as mock_list:
+            resp = client.get("/api/v1/openrouter-models")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["source"] == "fallback"
+        assert data["models"] == AVAILABLE_MODELS
+        assert data["count"] == len(AVAILABLE_MODELS)
+        # api_key resolved via os.getenv must be forwarded (None here) — no network call
+        # is expected to happen since list_models itself is mocked, but the call must
+        # still have happened with the (None) key so list_models can decide the fallback.
+        mock_list.assert_called_once_with(None, 3600)
+
+    def test_ttl_read_from_settings(self, client):
+        """The TTL passed to list_models() must come from
+        cache_ttl.openrouter_models_seconds (T-02), not be hardcoded ad-hoc."""
+        mock_result = {
+            "models": [],
+            "source": "fallback",
+            "cached": False,
+            "fetched_at": "2026-07-01T09:00:00Z",
+            "count": 0,
+        }
+        with patch("app.vault_api.os.getenv", return_value="sk-test-key"), \
+             patch("shared.settings.get", return_value=1800) as mock_settings_get, \
+             patch("shared.openrouter_client.list_models", return_value=mock_result) as mock_list:
+            resp = client.get("/api/v1/openrouter-models")
+        assert resp.status_code == 200
+        mock_settings_get.assert_called_once_with("cache_ttl.openrouter_models_seconds", 3600)
+        mock_list.assert_called_once_with("sk-test-key", 1800)
 
 
 # ---------------------------------------------------------------------------

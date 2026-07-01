@@ -1,7 +1,7 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.16.0 / knowledge-engine 1.15.0 / idea-pipeline 1.1.2 / web-ui 1.25.0 / shared 0.6.0
-**Обновлён:** 01.07.2026 (BL-157 добавлен)
+**Версии:** pm-bot 1.17.0 / knowledge-engine 1.15.0 / idea-pipeline 1.1.2 / web-ui 1.25.0 / shared 0.7.0
+**Обновлён:** 01.07.2026 (BL-155+BL-156 реализовано)
 
 ---
 
@@ -172,6 +172,7 @@
 | BL-140 | ✅ OpenRouter для enrichment протоколов | knowledge-engine, shared | Унификация LLM-вызовов: call_with_fallback() + call_transcription() → единый call() с настраиваемыми fallback-цепочками. Enrichment протоколов маршрутизируется через те же цепочки, что и транскрибация |
 | BL-141 | ✅ Настраиваемые fallback-цепочки провайдеров | shared, pm-bot, web-ui, knowledge-engine | OpenRouter как альтернатива для capture. 3 группы операций (Capture, Transcription, Analysis) с per-group fallback-цепочкой. Drag-and-drop в Settings UI. Обратная совместимость с legacy prefs. 21 unit-тест |
 | BL-142 | ✅ LLM Playground — страница тестирования моделей | web-ui, pm-bot | playground.html: чат-интерфейс для тестирования LLM. Выбор провайдера (Claude/Ollama/OpenRouter), модели, температуры. API: GET /playground/providers, POST /playground/chat. Sidebar ссылка PLAYGROUND |
+| BL-155, BL-156 | ✅ Множественный выбор моделей OpenRouter + динамический список из API | shared, pm-bot, web-ui | `shared/openrouter_client.py::list_models()` с live-запросом и TTL-кэшем (1ч fallback). Мультимодельные fallback-цепочки: несколько шагов OpenRouter подряд с разными моделями, storage в объектном формате {provider, model}. `shared/llm_client.py::_normalize_step()` для обратной совместимости. `PUT /api/v1/user-prefs` валидирует openrouter-шаги (обязательна непустая model), дедупирует смежные дубли. `GET /api/v1/user-prefs` нормализует в объектный формат для UI. `settings.html`: редактор цепочек с инлайн-селектором модели, пометка fallback-списка (источник live|fallback). Backoff 0.7s между смежными openrouter-шагами после 429. Логирование используемой модели в system-log. Спека: docs/openrouter-model-selection/ |
 
 ### 6.2 Идеи
 
@@ -183,8 +184,6 @@
 | BL-73 | Multi-Agent Shared Vault | pm-bot | Расширить на команду PM-ов, агент находит пересечения и конфликты идей между участниками |
 | BL-154 | Telegram Q&A по базе знаний через Claude CLI | pm-bot, инфраструктура | Новая команда `/ask <вопрос>` в Telegram-боте. pm-bot запускает `claude --print` как subprocess с `cwd=VAULT_PATH`, CLI подхватывает CLAUDE.md + читает wiki/, возвращает ответ в stdout. Авторизация через подписку (claude login). Каждый вопрос = отдельная сессия CLI, память между запросами не нужна. **Требования к реализации (по итогам архитектурного ревью):** (1) Dockerfile: добавить установку Claude CLI при сборке образа. (2) docker-compose.yml: добавить named volume для `~/.claude/` — иначе авторизация теряется при перезапуске контейнера. (3) Безопасность: `shell=False`, аргументы списком `["claude", "--print", "-p", prompt]` — исключает shell injection. Системный промпт явно запрещает запись: "Ты ассистент по базе знаний в режиме read-only. Никакие операции записи недопустимы. Отвечай только на основе файлов в wiki/. Вопрос: {question}". (4) Async: `asyncio.get_running_loop().run_in_executor()` (не deprecated get_event_loop). При таймауте (120с) — явный `proc.kill()`. (5) UX: немедленно отправлять "Думаю... (до 2 минут)" и блокировать повторный `/ask` пока выполняется текущий (флаг `_ask_in_progress`). (6) Логирование: оборачивать subprocess-вызов в `system_log` с теми же полями что и SDK-вызовы. **Открытый вопрос при реализации:** `context_assembler.py` (существует) собирает контекст детерминированно — рассмотреть как альтернативу надежде на то, что CLI сам найдёт нужные файлы в wiki/. |
 | BL-139 | Перенос идеи при смене домена | web-ui, knowledge-engine | При смене домена идеи через Web UI (editable-field domain) — физически перемещать файл из wiki/domains/старый/ideas/ в wiki/domains/новый/ideas/. Обновлять log.md и index.md обоих доменов. Сейчас меняется только frontmatter, файл остаётся в старой папке |
-| BL-155 | Множественный выбор моделей OpenRouter в fallback-цепочках | shared, pm-bot, web-ui | Сейчас provider "openrouter" в fallback-цепочке (BL-141) — это один слот с единственной моделью из `prefs["openrouter_model"]` (`shared/llm_client.py::_call_openrouter`). В OpenRouter доступно несколько моделей (`shared/openrouter_client.py::AVAILABLE_MODELS` — 3 free-модели), но в рамках одной цепочки можно использовать только одну. Нужно расширить схему fallback-цепочки так, чтобы "openrouter" можно было добавлять несколько раз подряд с разными моделями (модель A недоступна/rate-limited → пробуем модель B → потом C, и только затем переходим к другому провайдеру). Затрагивает: формат хранения цепочки в user-prefs (сейчас список строк-имён провайдеров → нужен список объектов вида `{provider, model}` или аналог), `_resolve_chain`/`_call_provider`/`_call_openrouter` в `shared/llm_client.py`, drag-and-drop UI цепочек в `settings.html` (BL-141) — при добавлении элемента "openrouter" в цепочку нужен выбор конкретной модели из `AVAILABLE_MODELS`. Объединено с BL-156 в единую спеку. Спека: docs/openrouter-model-selection/ (DRAFT) |
-| BL-156 | Динамический список моделей OpenRouter из API | shared, pm-bot, web-ui | Список моделей OpenRouter в pm_assistant захардкожен в `shared/openrouter_client.py::AVAILABLE_MODELS` (3 модели) и отдаётся как есть через `GET /api/v1/openrouter-models` (`pm-bot/app/vault_api.py:2845`). Нужно вместо статического списка запрашивать актуальный перечень моделей у самого OpenRouter (`GET {BASE_URL}/models` — тот же эндпоинт, что уже используется в `openrouter_client.test_connection()` для проверки конкретной модели) и отдавать в UI (dropdown в `settings.html`, BL-141) то, что реально доступно по ключу пользователя, а не то, что зашито в код. Вопросы для проработки на этапе дизайна: кэширование ответа `/models` (список большой, обновляется редко — нужен TTL-кэш по аналогии с `cache_ttl` в `settings.yaml`), фильтрация (показывать все модели или только free/дешёвые), деградация при ошибке запроса к OpenRouter (fallback на текущий хардкод-список). Объединено с BL-155 в единую спеку. Спека: docs/openrouter-model-selection/ (DRAFT) |
 
 ---
 
@@ -317,8 +316,8 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 89 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143 |
+| ✅ Реализовано | 91 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156 |
 | ✅ Баги исправлены | 24 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129 |
-| Идея | 35 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-157 |
+| Идея | 33 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **147** | |
+| **Итого** | **149** | |

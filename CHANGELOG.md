@@ -5,6 +5,29 @@
 
 ---
 
+## 01.07.2026 — feat: Множественный выбор моделей OpenRouter + динамический список из API (BL-155, BL-156)
+
+Расширение поддержки OpenRouter: live-запрос актуального списка моделей с TTL-кэшем, мультимодельные fallback-цепочки. Пользователь теперь может добавить несколько шагов OpenRouter подряд с разными моделями в одну цепочку.
+
+### shared 0.7.0
+- **openrouter_client.py**: `list_models(api_key, ttl_seconds)` — live-запрос к OpenRouter API с in-memory кэшем (TTL 1ч), graceful fallback на хардкод-список при ошибке
+- **settings.py**: новый ключ `cache_ttl.openrouter_models_seconds: 3600` (управляет TTL кэша моделей)
+- **llm_client.py**: `_normalize_step()`, `_default_model_for()` — нормализация шага цепочки (legacy-строка ↔ объект {provider, model}); `_resolve_chain()` возвращает список объектов вместо строк; backoff 0.7s между смежными openrouter-шагами после 429 (rate limit); расширение `provider_record` с полями `chain`, `used_model`, `used_step_index`; формат ошибки "openrouter:модель" для шагов openrouter в `errors[]`
+- **tests**: +50 unit-тестов в test_llm_client.py, test_openrouter.py (T-01..T-05: 0 new failures, 5 pre-existing задокументированы)
+
+### pm-bot 1.17.0
+- **app/vault_api.py**: `GET /api/v1/openrouter-models` — отдаёт live-список (schema: {models, source, cached, fetched_at, count}); `PUT /api/v1/user-prefs` — валидирует openrouter-шаги (обязательна непустая model), дедупирует смежные дубли, сохраняет в формате {provider, model}; `GET /api/v1/user-prefs` — нормализует цепочки в объектный формат для UI
+- **web/settings.html**: редактор fallback-цепочек теперь поддерживает несколько openrouter-шагов с инлайн-селектором модели, пометка "резервный список" при fallback-источнике, бейдж "OpenRouter: <имя модели>" на карточке шага, клиентская валидация (нельзя сохранить openrouter-шаг без модели)
+- **web/system-log.html**: при логировании операций видно какая именно модель OpenRouter использовалась на каждом шаге цепочки и какая упала (поле `used_model`, формат ошибки "openrouter:модель")
+- **tests**: +37 unit-тестов в test_openrouter_api.py, test_user_prefs.py (T-06..T-08: 0 new failures)
+
+### Тесты (Phase 4.1 — полный test suite)
+- **pytest shared/ -q**: 121 passed, 5 pre-existing failed (не связаны с фичей)
+- **pytest pm-bot/ -q**: 455 passed, 12 xfailed (новых регрессий нет)
+- **Монорепо (full test suite)**: 1580 passed, 8 pre-existing failed, 0 new failures
+
+---
+
 ## 01.07.2026 — feat(knowledge-engine): llm_wiki Cowork Context (BL-151)
 
 Детерминированная генерация `_cowork-session.md` для Claude Cowork — контекстный файл из 5 секций wiki (дейли, открытые задачи, эпики, решения, активность LOG.md). Без LLM.

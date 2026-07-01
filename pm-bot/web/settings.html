@@ -213,6 +213,19 @@
       color: var(--cyan);
       border-style: solid;
     }
+
+    /* Inline model selector for OpenRouter chain steps */
+    .fallback-item-model-select {
+      font-size: 10px;
+      padding: 3px 6px;
+      max-width: 240px;
+      flex: 0 0 auto;
+    }
+    .fallback-item-fallback-note {
+      font-size: 9px;
+      color: #f44336;
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
@@ -316,6 +329,9 @@
                   {{ m.name }}
                 </option>
               </select>
+              <div v-if="openrouterModelsSource === 'fallback'" class="field-note" style="color: #f44336;">
+                используется резервный список моделей (OpenRouter API недоступен)
+              </div>
             </div>
             <div class="field-group">
               <div class="field-label">API_KEY_STATUS</div>
@@ -358,7 +374,7 @@
                  @dragover.prevent="handleDragOver($event, group.key)"
                  @drop="handleDrop($event, group.key)">
 
-              <div v-for="(provider, idx) in group.chain" :key="provider + '-' + idx"
+              <div v-for="(step, idx) in group.chain" :key="step.provider + ':' + (step.model || '') + '-' + idx"
                    class="fallback-item"
                    :class="{
                      'fallback-item--solo': group.chain.length === 1,
@@ -371,7 +387,17 @@
                 <span class="fallback-item-handle"
                       v-if="group.chain.length > 1">::</span>
                 <span class="fallback-item-index">{{ idx + 1 }}</span>
-                <span class="fallback-item-name">{{ providerDisplayName(provider) }}</span>
+                <span class="fallback-item-name">{{ providerDisplayName(step) }}</span>
+                <select v-if="step.provider === 'openrouter'"
+                        class="field-select fallback-item-model-select"
+                        v-model="step.model"
+                        @change="saveProviderSettings">
+                  <option v-for="m in openrouterModels" :key="m.id" :value="m.id">{{ m.name }}</option>
+                </select>
+                <span v-if="step.provider === 'openrouter' && openrouterModelsSource === 'fallback'"
+                      class="fallback-item-fallback-note">резервный список</span>
+                <span v-if="step.provider === 'openrouter' && !isStepModelValid(step)"
+                      class="fallback-item-fallback-note">Выберите модель для OpenRouter</span>
                 <button class="fallback-item-remove"
                         v-if="group.chain.length > 1"
                         @click="removeFromChain(group.key, idx)"
@@ -551,6 +577,7 @@
       var transcriptionProvider = ref('default');
       var openrouterModel = ref('qwen/qwen3-32b');
       var openrouterModels = ref([]);
+      var openrouterModelsSource = ref('live');
       var openrouterKeyStatus = ref(null);
       var openrouterStatus = ref(null);
       var openrouterTesting = ref(false);
@@ -563,19 +590,19 @@
           key: 'capture',
           name: 'CAPTURE',
           operations: ['idea', 'daily', 'jira_ticket'],
-          chain: ['claude']
+          chain: [{ provider: 'claude', model: null }]
         },
         {
           key: 'transcription',
           name: 'TRANSCRIPTION',
           operations: ['meeting', 'meeting_protocol'],
-          chain: ['claude']
+          chain: [{ provider: 'claude', model: null }]
         },
         {
           key: 'analysis',
           name: 'ANALYSIS',
           operations: ['enrich', 'synthesize', 'report', 'pipeline'],
-          chain: ['claude']
+          chain: [{ provider: 'claude', model: null }]
         }
       ]);
 
@@ -587,11 +614,78 @@
       });
 
       var allProviders = ['claude', 'ollama', 'openrouter'];
+      var DEFAULT_OPENROUTER_MODEL_FALLBACK = 'qwen/qwen3-32b';
+
+      // Normalize a single fallback-chain step to canonical {provider, model} form.
+      // GET /api/v1/user-prefs (T-08) already returns canonical objects for every step
+      // (model is always a non-empty string for provider=="openrouter", always null for
+      // claude/ollama) -- this is a defensive safety net, not a required migration path.
+      function normalizeChainStep(el) {
+        if (typeof el === 'string') {
+          return { provider: el, model: el === 'openrouter' ? (openrouterModel.value || null) : null };
+        }
+        if (el && typeof el === 'object') {
+          return { provider: el.provider, model: el.model != null ? el.model : null };
+        }
+        return { provider: String(el), model: null };
+      }
+
+      // Default model assigned to a freshly-added OpenRouter chain step: first model from
+      // the loaded list (live or fallback), then the global OPENROUTER_MODEL setting, then
+      // a hardcoded last-resort constant. Ensures a step is never added with an empty model
+      // (T-10 will additionally block save if this invariant is ever violated).
+      function defaultOpenRouterModel() {
+        if (openrouterModels.value && openrouterModels.value.length > 0) {
+          return openrouterModels.value[0].id;
+        }
+        return openrouterModel.value || DEFAULT_OPENROUTER_MODEL_FALLBACK;
+      }
+
+      function openRouterModelName(modelId) {
+        if (!modelId) return '';
+        var found = (openrouterModels.value || []).find(function(m) { return m.id === modelId; });
+        return found ? found.name : modelId;
+      }
+
+      // AC-06 client-side guard: a chain step with provider=="openrouter" must always carry
+      // a non-empty model. Non-openrouter steps (claude/ollama) never fail this check --
+      // they don't carry a per-step model at all.
+      function isStepModelValid(step) {
+        if (!step || step.provider !== 'openrouter') return true;
+        return !!(step.model && String(step.model).trim());
+      }
+
+      // Scan every operation group's chain for OpenRouter steps missing a model.
+      // Returns the list of group keys that currently contain at least one invalid step
+      // (used both for the console warning and to decide whether to block the PUT).
+      function findInvalidOpenRouterChainGroups() {
+        return operationGroups.value
+          .filter(function(group) {
+            return group.chain.some(function(step) { return !isStepModelValid(step); });
+          })
+          .map(function(group) { return group.key; });
+      }
+
+      // Single choke point for PUT /api/v1/user-prefs (AC-06). defaultOpenRouterModel()
+      // (T-09) already guarantees a non-empty model when a new OpenRouter step is added, so
+      // this should practically never trigger -- it's defense-in-depth for a corrupted/edge
+      // client state. api.saveUserPrefs() is called from several places (chain edits via
+      // saveProviderSettings, but also setRefreshMode/setTheme/setJiraSyncNotify/
+      // setCaptureMode, which resend the whole payload including the fallback chains), so the
+      // guard lives here rather than only inside saveProviderSettings to cover all of them.
+      function trySaveUserPrefs() {
+        var invalidGroups = findInvalidOpenRouterChainGroups();
+        if (invalidGroups.length > 0) {
+          console.warn('[settings] PUT /api/v1/user-prefs blocked: OpenRouter step(s) without a model in group(s):', invalidGroups.join(', '));
+          return Promise.reject(new Error('Выберите модель для OpenRouter'));
+        }
+        return api.saveUserPrefs(buildPrefsPayload());
+      }
 
       function buildPrefsPayload() {
-        var captureChain = (findGroup('capture') || {}).chain || ['claude'];
-        var transcriptionChain = (findGroup('transcription') || {}).chain || ['claude'];
-        var analysisChain = (findGroup('analysis') || {}).chain || ['claude'];
+        var captureChain = (findGroup('capture') || {}).chain || [{ provider: 'claude', model: null }];
+        var transcriptionChain = (findGroup('transcription') || {}).chain || [{ provider: 'claude', model: null }];
+        var analysisChain = (findGroup('analysis') || {}).chain || [{ provider: 'claude', model: null }];
 
         return {
           refresh_mode: refreshMode.value,
@@ -650,7 +744,7 @@
         console.log('[settings] setRefreshMode:', mode);
         refreshSaving.value = true;
         refreshMode.value = mode;
-        api.saveUserPrefs(buildPrefsPayload()).then(function(res) {
+        trySaveUserPrefs().then(function(res) {
           console.log('[settings] refresh mode saved:', res.refresh_mode);
           refreshSaving.value = false;
         }).catch(function(err) {
@@ -663,7 +757,7 @@
         console.log('[settings] setTheme:', theme);
         currentTheme.value = theme;
         applyPageTheme(theme);
-        api.saveUserPrefs(buildPrefsPayload()).then(function(res) {
+        trySaveUserPrefs().then(function(res) {
           console.log('[settings] theme saved:', res.theme);
         }).catch(function(err) {
           console.error('[settings] saveUserPrefs (theme) error:', err.message);
@@ -738,7 +832,7 @@
       function setJiraSyncNotify(value) {
         console.log('[settings] setJiraSyncNotify:', value);
         jiraSyncNotify.value = value;
-        api.saveUserPrefs(buildPrefsPayload()).then(function(res) {
+        trySaveUserPrefs().then(function(res) {
           console.log('[settings] jira_sync_notify saved:', res.jira_sync_notify);
         }).catch(function(err) {
           console.error('[settings] saveUserPrefs (jira_sync_notify) error:', err.message);
@@ -749,17 +843,27 @@
       function setCaptureMode(mode) {
         console.log('[settings] setCaptureMode:', mode);
         captureMode.value = mode;
-        api.saveUserPrefs(buildPrefsPayload());
+        trySaveUserPrefs().catch(function(err) {
+          console.error('[settings] saveUserPrefs (capture_mode) error:', err.message);
+        });
         try { localStorage.setItem('pm_capture_mode', mode); } catch(e) {}
       }
 
-      function providerDisplayName(provider) {
+      // Accepts either a plain provider string (used by the "add provider" buttons,
+      // which iterate over availableProviders() -- plain strings) or a chain-step
+      // object {provider, model} (used when rendering an existing chain item).
+      function providerDisplayName(step) {
+        var provider = typeof step === 'string' ? step : (step && step.provider);
         var names = {
           'claude': 'Claude API',
           'ollama': 'Ollama',
           'openrouter': 'OpenRouter'
         };
-        return names[provider] || provider;
+        var label = names[provider] || provider;
+        if (provider === 'openrouter' && step && typeof step === 'object' && step.model) {
+          label += ': ' + openRouterModelName(step.model);
+        }
+        return label;
       }
 
       function findGroup(key) {
@@ -846,24 +950,32 @@
       function addToChain(groupKey, provider) {
         var group = findGroup(groupKey);
         if (!group) return;
-        if (group.chain.indexOf(provider) !== -1) return;
-        group.chain.push(provider);
-        console.log('[settings] added', provider, 'to', groupKey);
+        // claude/ollama remain one-shot per chain; openrouter can be added repeatedly
+        // with a different model each time (this is the whole point of BL-155).
+        if (provider !== 'openrouter') {
+          var alreadyPresent = group.chain.some(function(s) { return s.provider === provider; });
+          if (alreadyPresent) return;
+        }
+        var step = { provider: provider, model: provider === 'openrouter' ? defaultOpenRouterModel() : null };
+        group.chain.push(step);
+        console.log('[settings] added', provider, 'to', groupKey, step.model || '');
         saveProviderSettings();
       }
 
       function availableProviders(groupKey) {
         var group = findGroup(groupKey);
         if (!group) return [];
+        var usedProviders = group.chain.map(function(s) { return s.provider; });
         return allProviders.filter(function(p) {
-          return group.chain.indexOf(p) === -1;
+          if (p === 'openrouter') return true; // never excluded -- can add more than once
+          return usedProviders.indexOf(p) === -1;
         });
       }
 
       function saveProviderSettings() {
         console.log('[settings] saveProviderSettings');
         llmSaving.value = true;
-        api.saveUserPrefs(buildPrefsPayload()).then(function() {
+        trySaveUserPrefs().then(function() {
           console.log('[settings] provider settings saved');
           llmSaving.value = false;
         }).catch(function(err) {
@@ -913,7 +1025,8 @@
         console.log('[settings] loadOpenRouterModels');
         api.openrouterModels().then(function(data) {
           openrouterModels.value = data.models || [];
-          console.log('[settings] loaded', openrouterModels.value.length, 'OpenRouter models');
+          openrouterModelsSource.value = data.source || 'live';
+          console.log('[settings] loaded', openrouterModels.value.length, 'OpenRouter models, source:', openrouterModelsSource.value);
         }).catch(function(err) {
           console.error('[settings] loadOpenRouterModels error:', err.message);
         });
@@ -965,15 +1078,17 @@
           try { localStorage.setItem('pm_capture_mode', captureMode.value); } catch(e) {}
           transcriptionProvider.value = prefs.transcription_provider || 'default';
           openrouterModel.value = prefs.openrouter_model || 'qwen/qwen3-32b';
-          // Load fallback chains
+          // Load fallback chains. GET /api/v1/user-prefs (T-08) always returns canonical
+          // {provider, model} objects, but normalizeChainStep() is kept as a defensive
+          // safety net (also tolerates legacy string steps if ever encountered).
           if (prefs.capture_fallback && Array.isArray(prefs.capture_fallback)) {
-            findGroup('capture').chain = prefs.capture_fallback;
+            findGroup('capture').chain = prefs.capture_fallback.map(normalizeChainStep);
           }
           if (prefs.transcription_fallback && Array.isArray(prefs.transcription_fallback)) {
-            findGroup('transcription').chain = prefs.transcription_fallback;
+            findGroup('transcription').chain = prefs.transcription_fallback.map(normalizeChainStep);
           }
           if (prefs.analysis_fallback && Array.isArray(prefs.analysis_fallback)) {
-            findGroup('analysis').chain = prefs.analysis_fallback;
+            findGroup('analysis').chain = prefs.analysis_fallback.map(normalizeChainStep);
           }
 
           console.log('[settings] prefs loaded: refresh=%s theme=%s llm=%s capture=%s transcription=%s', refreshMode.value, currentTheme.value, llmProvider.value, captureMode.value, transcriptionProvider.value);
@@ -1031,6 +1146,13 @@
         transcriptionProvider: transcriptionProvider,
         openrouterModel: openrouterModel,
         openrouterModels: openrouterModels,
+        openrouterModelsSource: openrouterModelsSource,
+        openRouterModelName: openRouterModelName,
+        defaultOpenRouterModel: defaultOpenRouterModel,
+        normalizeChainStep: normalizeChainStep,
+        isStepModelValid: isStepModelValid,
+        findInvalidOpenRouterChainGroups: findInvalidOpenRouterChainGroups,
+        trySaveUserPrefs: trySaveUserPrefs,
         openrouterKeyStatus: openrouterKeyStatus,
         openrouterStatus: openrouterStatus,
         openrouterTesting: openrouterTesting,

@@ -189,7 +189,7 @@ Jira-статусы не нормализуются — Jira является и
 
 ## Компоненты
 
-### pm-bot (v1.15.0)
+### pm-bot (v1.17.0)
 
 Telegram-бот + Vault API + Web UI сервер. Точка входа для всех взаимодействий.
 
@@ -256,13 +256,13 @@ Cron-контейнер для периодических задач:
 - Lint: ежедневно 03:00
 - Vault health: ежедневно 04:00
 
-### shared (v0.4.0)
+### shared (v0.7.0)
 
 Общий модуль, единый источник для pm-bot, knowledge-engine и idea-pipeline.
 
-- llm_client: фабрика LLM-клиентов, маршрутизация по операциям, call (fallback chain), call_detailed (отдаёт provider_record — BL-145), call_transcription
+- llm_client: фабрика LLM-клиентов, маршрутизация по операциям, call (fallback chain), call_detailed (отдаёт provider_record — BL-145), мультимодельные fallback-цепочки с нормализацией шага (BL-155), backoff 429 между openrouter-шагами, call_transcription
 - meeting_queue: enqueue-ядро файловой очереди (Unit, make_unit_id, build_meta, enqueue, path-хелперы) — общее для KE-fetcher и pm-bot-watcher (BL-145)
-- openrouter_client: HTTP-клиент для OpenRouter API (6 моделей)
+- openrouter_client: HTTP-клиент для OpenRouter API, list_models с live-запросом и TTL-кэшем (BL-156)
 - file_writer: file_lock, atomic_write, locked_append
 - vault_paths: 25 функций для путей vault
 - domain_config: загрузка/сохранение domain-config.yaml

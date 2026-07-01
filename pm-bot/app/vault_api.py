@@ -2607,9 +2607,15 @@ class UserPrefs(BaseModel):
     transcription_provider: str = "default"
     openrouter_model: str = "qwen/qwen3-32b"
     capture_mode: str = "simple"
-    capture_fallback: list[str] = ["claude"]
-    transcription_fallback: list[str] = ["claude"]
-    analysis_fallback: list[str] = ["claude"]
+    # NOTE: intentionally `list[Any]`, not `list[str]` -- elements can be either
+    # legacy provider-name strings ("openrouter") or new-format step objects
+    # ({"provider": "openrouter", "model": "..."}), see design.md §2.1/§3.4
+    # (T-07). Full validation of element shape happens in put_user_prefs(),
+    # not at the pydantic-field level, so both formats reach our code intact
+    # instead of being rejected/mangled by automatic str coercion.
+    capture_fallback: list[Any] = ["claude"]
+    transcription_fallback: list[Any] = ["claude"]
+    analysis_fallback: list[Any] = ["claude"]
 
 
 def _read_user_prefs() -> dict:
@@ -2643,6 +2649,59 @@ def _write_user_prefs(prefs: dict) -> None:
     logger.info("_write_user_prefs: success")
 
 
+def _normalize_fallback_step_for_read(el, default_openrouter_model: str) -> dict:
+    """Normalize one fallback-chain element into the canonical object form
+    {provider, model} for GET /api/v1/user-prefs (design.md §2.1/§3.2).
+
+    - legacy string "openrouter"      -> {"provider": "openrouter", "model": default_openrouter_model}
+    - legacy string "claude"/"ollama" -> {"provider": <that>, "model": None}
+    - object {"provider":..,"model":..} for openrouter -> model kept if it's a
+      non-empty string, otherwise falls back to default_openrouter_model
+    - object {"provider":..} for claude/ollama -> {"provider": <that>, "model": None}
+      (any "model" field present on the stored object is ignored, same as PUT
+      validation/dedup logic in put_user_prefs()).
+
+    This is read-only / in-memory normalization -- it never rewrites
+    .pm-user-prefs.json (design.md §3.2, lazy migration; the file is only
+    rewritten when the user explicitly saves via PUT).
+
+    NOTE: intentionally NOT importing the private `_normalize_step`/
+    `_default_model_for` helpers from shared/llm_client.py -- same
+    architectural decision as T-07's local validation logic in
+    put_user_prefs() (see its note above `default_openrouter_model`):
+    keeping this module's own small, explicit normalization avoids leaking a
+    private cross-module abstraction and avoids coupling GET's "always show a
+    default" read semantics to llm_client's execution-resolution semantics,
+    which may evolve independently.
+    """
+    if isinstance(el, str):
+        provider = el
+        model = default_openrouter_model if provider == "openrouter" else None
+        return {"provider": provider, "model": model}
+    if isinstance(el, dict):
+        provider = el.get("provider")
+        if provider == "openrouter":
+            raw_model = el.get("model")
+            model = raw_model if isinstance(raw_model, str) and raw_model.strip() else default_openrouter_model
+        else:
+            model = None
+        return {"provider": provider, "model": model}
+    # Unknown/invalid shape -- caller filters these out before normalizing
+    # (provider extraction below returns None, which is never a valid provider).
+    return {"provider": None, "model": None}
+
+
+def _fallback_step_provider(el):
+    """Extract the provider name from a fallback-chain element regardless of
+    whether it's a legacy string or a new-format {"provider": ...} object.
+    Used only for the GET-side validity filter (see get_user_prefs())."""
+    if isinstance(el, str):
+        return el
+    if isinstance(el, dict):
+        return el.get("provider")
+    return None
+
+
 @app.get("/api/v1/user-prefs")
 def get_user_prefs():
     logger.info("GET /api/v1/user-prefs — start")
@@ -2672,18 +2731,32 @@ def get_user_prefs():
         prefs["transcription_fallback"] = ["claude"]
     if "analysis_fallback" not in prefs:
         prefs["analysis_fallback"] = ["claude"]
+    from shared.openrouter_client import DEFAULT_MODEL as _OR_DEFAULT_MODEL
+    default_openrouter_model = prefs.get("openrouter_model") or _OR_DEFAULT_MODEL
     for key in ("capture_fallback", "transcription_fallback", "analysis_fallback"):
         val = prefs[key]
         if not isinstance(val, list) or len(val) == 0:
             logger.info("GET /api/v1/user-prefs — %s invalid (not list or empty), resetting to default", key)
-            prefs[key] = ["claude"]
+            prefs[key] = [{"provider": "claude", "model": None}]
         else:
-            filtered = [p for p in val if p in _VALID_FALLBACK_PROVIDERS]
+            # T-08: filter must recognize BOTH legacy string elements AND
+            # new-format {"provider": ..., "model": ...} step objects (T-07
+            # bug -- the old `p in _VALID_FALLBACK_PROVIDERS` check compared a
+            # dict against a frozenset of strings, which is always False, so
+            # every object-format step was silently dropped here).
+            filtered = [el for el in val if _fallback_step_provider(el) in _VALID_FALLBACK_PROVIDERS]
             if not filtered:
                 logger.info("GET /api/v1/user-prefs — %s has no valid providers, resetting to default", key)
-                prefs[key] = ["claude"]
+                prefs[key] = [{"provider": "claude", "model": None}]
             else:
-                prefs[key] = filtered
+                # Normalize every valid element to the canonical object form
+                # {provider, model} so the UI always receives the same shape,
+                # regardless of how the step is actually stored on disk
+                # (design.md §2.1/§3.2). Read-only -- does not rewrite the file.
+                prefs[key] = [
+                    _normalize_fallback_step_for_read(el, default_openrouter_model)
+                    for el in filtered
+                ]
     logger.info("GET /api/v1/user-prefs — returning refresh_mode=%s theme=%s llm_provider=%s", prefs["refresh_mode"], prefs["theme"], prefs["llm_provider"])
     return prefs
 
@@ -2721,6 +2794,16 @@ def put_user_prefs(body: UserPrefs):
             status_code=422,
             detail=f"capture_mode must be one of: {', '.join(sorted(_VALID_CAPTURE_MODES))}"
         )
+    # Fallback-chain element can be a legacy provider-name string ("openrouter")
+    # or a new-format step object ({"provider": "openrouter", "model": "..."}).
+    # The old "no duplicate providers" check is intentionally REMOVED here --
+    # it directly blocked BL-155's goal of multiple openrouter steps with
+    # different models in one chain (design.md §3.4). Uniqueness is now
+    # considered per (provider, model) pair, and only ADJACENT identical
+    # pairs are collapsed (see dedup below) rather than rejected outright.
+    from shared.openrouter_client import DEFAULT_MODEL as _OR_DEFAULT_MODEL
+    default_openrouter_model = body.openrouter_model or _OR_DEFAULT_MODEL
+
     for key in ("capture_fallback", "transcription_fallback", "analysis_fallback"):
         chain = getattr(body, key)
         if not isinstance(chain, list) or len(chain) == 0:
@@ -2729,20 +2812,61 @@ def put_user_prefs(body: UserPrefs):
                 status_code=422,
                 detail=f"{key} must be a non-empty list of providers: {', '.join(sorted(_VALID_FALLBACK_PROVIDERS))}"
             )
-        invalid = [p for p in chain if p not in _VALID_FALLBACK_PROVIDERS]
+
+        providers: list = []
+        pairs: list = []  # (provider, effective_model) per element, used only to detect adjacent dups
+        for el in chain:
+            if isinstance(el, str):
+                provider, model, is_object = el, None, False
+            elif isinstance(el, dict):
+                provider, model, is_object = el.get("provider"), el.get("model"), True
+            else:
+                provider, model, is_object = None, None, True
+            providers.append(provider)
+
+            if provider == "openrouter" and is_object and (not isinstance(model, str) or not model.strip()):
+                logger.warning(
+                    "PUT /api/v1/user-prefs — %s has an openrouter step without a valid model: %r",
+                    key, el,
+                )
+                raise HTTPException(
+                    status_code=422,
+                    detail="OpenRouter step requires a non-empty model",
+                )
+
+            if provider == "openrouter":
+                effective_model = model if is_object else default_openrouter_model
+            else:
+                # claude/ollama are single-model providers -- any "model" field
+                # on the step object is ignored for validation/dedup purposes
+                # (design.md §2.1).
+                effective_model = None
+            pairs.append((provider, effective_model))
+
+        invalid = [p for p in providers if p not in _VALID_FALLBACK_PROVIDERS]
         if invalid:
             logger.warning("PUT /api/v1/user-prefs — %s contains invalid providers: %s", key, invalid)
             raise HTTPException(
                 status_code=422,
-                detail=f"{key} contains invalid providers: {', '.join(invalid)}. Valid: {', '.join(sorted(_VALID_FALLBACK_PROVIDERS))}"
+                detail=f"{key} contains invalid providers: {', '.join(str(p) for p in invalid)}. Valid: {', '.join(sorted(_VALID_FALLBACK_PROVIDERS))}"
             )
-        if len(chain) != len(set(chain)):
-            logger.warning("PUT /api/v1/user-prefs — %s contains duplicate providers: %s", key, chain)
-            raise HTTPException(
-                status_code=422,
-                detail=f"{key} must not contain duplicate providers"
-            )
-        logger.info("PUT /api/v1/user-prefs — %s validated: %s", key, chain)
+
+        # Collapse ADJACENT identical steps (design.md §3.4) -- e.g. two
+        # consecutive openrouter steps with the exact same model, or two
+        # consecutive legacy "openrouter" strings (which resolve to the same
+        # default model), add no value and would just repeat the same failed
+        # network call twice. Non-adjacent identical steps are left as-is.
+        deduped_chain: list = []
+        prev_pair = None
+        for el, pair in zip(chain, pairs):
+            if pair == prev_pair:
+                logger.info("PUT /api/v1/user-prefs — %s: collapsing adjacent duplicate step %r", key, el)
+                continue
+            deduped_chain.append(el)
+            prev_pair = pair
+
+        setattr(body, key, deduped_chain)
+        logger.info("PUT /api/v1/user-prefs — %s validated: %s", key, deduped_chain)
     prefs = body.model_dump()
     try:
         _write_user_prefs(prefs)
@@ -2845,9 +2969,17 @@ def test_openrouter(body: TestOpenRouterRequest):
 @app.get("/api/v1/openrouter-models")
 def openrouter_models():
     logger.info("GET /api/v1/openrouter-models — start")
-    from shared.openrouter_client import AVAILABLE_MODELS
-    logger.info("GET /api/v1/openrouter-models — returning %d models", len(AVAILABLE_MODELS))
-    return {"models": AVAILABLE_MODELS}
+    from shared import settings as app_settings
+    from shared.openrouter_client import list_models
+
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    ttl = app_settings.get("cache_ttl.openrouter_models_seconds", 3600)
+    result = list_models(api_key, ttl)
+    logger.info(
+        "GET /api/v1/openrouter-models — source=%s count=%d cached=%s",
+        result.get("source"), result.get("count"), result.get("cached"),
+    )
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -3799,10 +3931,13 @@ def playground_chat(body: PlaygroundChatRequest):
     timeout = _PLAYGROUND_TIMEOUTS.get(body.provider, 60)
 
     # Call provider
+    # T-04: _call_provider now takes a normalized step {provider, model} instead
+    # of a bare provider string, so the resolved playground model (including a
+    # user-picked OpenRouter model) is threaded through to _call_openrouter.
     start = _t.time()
     try:
         content = _call_provider(
-            provider=body.provider,
+            step={"provider": body.provider, "model": model},
             prefs=call_prefs,
             messages=body.messages,
             max_tokens=body.max_tokens,

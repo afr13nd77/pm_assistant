@@ -231,9 +231,17 @@
                 <span class="syslog-detail-label">{{ key.toUpperCase() }}</span>
                 <span class="syslog-detail-value">{{ formatDetailValue(val) }}</span>
               </div>
-              <div v-if="e.details && e.details.fallback_errors && e.details.fallback_errors.length" class="syslog-detail-row" style="opacity: 0.6;">
-                <span class="syslog-detail-label">FALLBACK</span>
-                <span class="syslog-detail-value">{{ e.details.fallback_errors.map(function(f) { return f.provider + ': ' + f.error; }).join('; ') }}</span>
+              <div v-if="e.details && chainDisplay(e.details)" class="syslog-detail-row">
+                <span class="syslog-detail-label">CHAIN</span>
+                <span class="syslog-detail-value">{{ chainDisplay(e.details) }}</span>
+              </div>
+              <div v-if="e.details && usedDisplay(e.details)" class="syslog-detail-row">
+                <span class="syslog-detail-label">USED</span>
+                <span class="syslog-detail-value">{{ usedDisplay(e.details) }}</span>
+              </div>
+              <div v-if="e.details && fallbackList(e.details).length" class="syslog-detail-row" style="opacity: 0.6;">
+                <span class="syslog-detail-label">{{ e.details.fallback_errors ? 'FALLBACK' : 'ERRORS' }}</span>
+                <span class="syslog-detail-value">{{ fallbackList(e.details).map(function(f) { return f.provider + ': ' + f.error; }).join('; ') }}</span>
               </div>
             </div>
           </div>
@@ -426,11 +434,19 @@
           return (ms / 1000).toFixed(1) + 's';
         }
 
+        // T-11: keys rendered via dedicated CHAIN/USED/FALLBACK|ERRORS rows below
+        // (see chainDisplay/usedDisplay/fallbackList) are excluded from the
+        // generic key/value listing so they are not shown twice.
+        var DETAIL_KEYS_WITH_CUSTOM_RENDER = [
+          'duration_ms', 'fallback_errors', 'errors',
+          'chain_steps', 'provider_chain', 'used_provider', 'used_model'
+        ];
+
         function filteredDetails(details) {
           if (!details) return {};
           var result = {};
           Object.keys(details).forEach(function(key) {
-            if (key !== 'duration_ms' && key !== 'fallback_errors') result[key] = details[key];
+            if (DETAIL_KEYS_WITH_CUSTOM_RENDER.indexOf(key) === -1) result[key] = details[key];
           });
           return result;
         }
@@ -439,6 +455,51 @@
           if (val === null || val === undefined) return '—';
           if (typeof val === 'object') return JSON.stringify(val);
           return String(val);
+        }
+
+        // T-11: render the full provider/model chain for an llm-call event.
+        // Prefers the new `chain_steps` field ([{provider, model}], added T-05) so
+        // that multiple OpenRouter steps with different models are distinguishable
+        // (e.g. "openrouter:modelA -> openrouter:modelB -> claude"). Falls back to
+        // the legacy `provider_chain` (list of bare provider names) for log entries
+        // written before T-05, which never had `chain_steps`.
+        function chainDisplay(details) {
+          if (!details) return '';
+          if (details.chain_steps && details.chain_steps.length) {
+            return details.chain_steps.map(function(step) {
+              if (!step) return '?';
+              if (step.provider === 'openrouter' && step.model) {
+                return step.provider + ':' + step.model;
+              }
+              return step.provider;
+            }).join(' → ');
+          }
+          if (details.provider_chain && details.provider_chain.length) {
+            return details.provider_chain.join(' → ');
+          }
+          return '';
+        }
+
+        // T-11: "Использован: openrouter (modelB)" instead of just "openrouter".
+        // `used_model` is a new (T-05) field and may be absent on old log entries
+        // or null for claude/ollama (single-model providers) -- both are handled
+        // safely (no model suffix shown).
+        function usedDisplay(details) {
+          if (!details || !details.used_provider) return '';
+          if (details.used_model) {
+            return details.used_provider + ' (' + details.used_model + ')';
+          }
+          return details.used_provider;
+        }
+
+        // T-11: unify the two shapes fallback errors can be logged under --
+        // `fallback_errors` (already-occurred errors before the winning step, on
+        // success) or `errors` (final list, when all providers/steps failed).
+        // Each entry's `provider` field may already be in the new "provider:model"
+        // form (T-05) for OpenRouter steps -- rendered as-is, no further parsing.
+        function fallbackList(details) {
+          if (!details) return [];
+          return details.fallback_errors || details.errors || [];
         }
 
         onMounted(function() {
@@ -465,7 +526,8 @@
           hasMore: hasMore, groupedEntries: groupedEntries,
           loadLog: loadLog, loadMore: loadMore, resetFilters: resetFilters,
           toggleExpand: toggleExpand, fmtTime: fmtTime, fmtDuration: fmtDuration,
-          filteredDetails: filteredDetails, formatDetailValue: formatDetailValue
+          filteredDetails: filteredDetails, formatDetailValue: formatDetailValue,
+          chainDisplay: chainDisplay, usedDisplay: usedDisplay, fallbackList: fallbackList
         };
       }
     });
