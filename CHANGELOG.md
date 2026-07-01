@@ -5,6 +5,13 @@
 
 ---
 
+## 01.07.2026 — fix(system-log): fallback errors отображение
+
+- **shared/llm_client.py**: переименован ключ `errors` → `fallback_errors` в details success-записей system_log. Error-path без изменений.
+- **web-ui/system-log.html**: fallback_errors рендерятся отдельно — метка "FALLBACK", opacity 0.6. Не смешиваются с реальными ошибками.
+
+---
+
 ## 01.07.2026 — Context Compaction Phase 2: Автоматизация (BL-147)
 
 Автоматическая генерация дайджестов при изменении wiki/ + waterfall context assembly для LLM-вызовов. Kill switch через env переменные (DIGEST_ENABLED, DIGEST_CONTEXT_SOURCE) — по default ничего не меняется.
