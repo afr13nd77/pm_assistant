@@ -1,7 +1,7 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.16.0 / knowledge-engine 1.14.0 / idea-pipeline 1.1.2 / web-ui 1.25.0 / shared 0.5.1
-**Обновлён:** 01.07.2026 (BL-154 добавлен)
+**Версии:** pm-bot 1.16.0 / knowledge-engine 1.15.0 / idea-pipeline 1.1.2 / web-ui 1.25.0 / shared 0.6.0
+**Обновлён:** 01.07.2026 (BL-151 реализовано)
 
 ---
 
@@ -51,6 +51,7 @@
 | BL-24 | ✅ Decision Journal | pm-bot | Единый реестр решений из протоколов встреч: API endpoint GET /api/v1/decisions + Web UI страница decisions.html + виджет на overview. Полнотекстовый поиск, фильтрация по домену/дате, expand карточки с контекстом |
 | BL-145 | ✅ Meeting Processing Queue | knowledge-engine, pm-bot | Трёхфазная файловая очередь обработки протоколов (`raw/meeting-queue/{pending,processing,done,failed}/`): Fetch (IMAP + transcript_watcher → enqueue в pending/ без LLM), Process-воркер (watchdog PollingObserver near-realtime + cron-страховка /10мин, по одному юниту, LLM через fallback chain max_attempts=5, validate_protocol до записи в wiki), Queue (атомарный claim через rename, reclaim_stuck, status_counts). shared/meeting_queue (enqueue-ядро) + call_detailed (provider_history). CLI process-queue/queue-watch/queue-status, API GET /meeting-queue/status + POST /process-queue. ADR-005. E2E verified на Docker 30.06.2026 |
 | BL-147 | ✅ Слой 1' Context Compaction (Phase 1+2) | knowledge-engine, pm-bot | Phase 1: offline-генерация LLM-дайджестов wiki/ → llm_wiki/ (3 уровня, body_hash, decay). Phase 2: DigestHandler в watcher (auto-digest при DIGEST_ENABLED=1), context_assembler (waterfall сборка: one-liners→core→extended, kill switch DIGEST_CONTEXT_SOURCE), 3 API endpoints (digest/generate, bulk, status), digest context injection в process_idea и weekly report, enrich_creative_recall. 80 unit-тестов, 11 API тестов |
+| BL-151 | ✅ llm_wiki как контекст для Claude Cowork | knowledge-engine | Расширение BL-147: cowork_context.py — детерминированная генерация _cowork-session.md (5 секций: дейли, задачи, эпики, решения, активность). CLI cowork-context, API POST /api/v1/cowork-context, cron 01:00 ежедневно. system_log: process type "cowork-context" |
 
 ### 2.2 Идеи
 
@@ -183,6 +184,8 @@
 | BL-73 | Multi-Agent Shared Vault | pm-bot | Расширить на команду PM-ов, агент находит пересечения и конфликты идей между участниками |
 | BL-154 | Telegram Q&A по базе знаний через Claude CLI | pm-bot, инфраструктура | Новая команда `/ask <вопрос>` в Telegram-боте. pm-bot запускает `claude --print` как subprocess с `cwd=VAULT_PATH`, CLI подхватывает CLAUDE.md + читает wiki/, возвращает ответ в stdout. Авторизация через подписку (claude login). Каждый вопрос = отдельная сессия CLI, память между запросами не нужна. **Требования к реализации (по итогам архитектурного ревью):** (1) Dockerfile: добавить установку Claude CLI при сборке образа. (2) docker-compose.yml: добавить named volume для `~/.claude/` — иначе авторизация теряется при перезапуске контейнера. (3) Безопасность: `shell=False`, аргументы списком `["claude", "--print", "-p", prompt]` — исключает shell injection. Системный промпт явно запрещает запись: "Ты ассистент по базе знаний в режиме read-only. Никакие операции записи недопустимы. Отвечай только на основе файлов в wiki/. Вопрос: {question}". (4) Async: `asyncio.get_running_loop().run_in_executor()` (не deprecated get_event_loop). При таймауте (120с) — явный `proc.kill()`. (5) UX: немедленно отправлять "Думаю... (до 2 минут)" и блокировать повторный `/ask` пока выполняется текущий (флаг `_ask_in_progress`). (6) Логирование: оборачивать subprocess-вызов в `system_log` с теми же полями что и SDK-вызовы. **Открытый вопрос при реализации:** `context_assembler.py` (существует) собирает контекст детерминированно — рассмотреть как альтернативу надежде на то, что CLI сам найдёт нужные файлы в wiki/. |
 | BL-139 | Перенос идеи при смене домена | web-ui, knowledge-engine | При смене домена идеи через Web UI (editable-field domain) — физически перемещать файл из wiki/domains/старый/ideas/ в wiki/domains/новый/ideas/. Обновлять log.md и index.md обоих доменов. Сейчас меняется только frontmatter, файл остаётся в старой папке |
+| BL-155 | Множественный выбор моделей OpenRouter в fallback-цепочках | shared, pm-bot, web-ui | Сейчас provider "openrouter" в fallback-цепочке (BL-141) — это один слот с единственной моделью из `prefs["openrouter_model"]` (`shared/llm_client.py::_call_openrouter`). В OpenRouter доступно несколько моделей (`shared/openrouter_client.py::AVAILABLE_MODELS` — 3 free-модели), но в рамках одной цепочки можно использовать только одну. Нужно расширить схему fallback-цепочки так, чтобы "openrouter" можно было добавлять несколько раз подряд с разными моделями (модель A недоступна/rate-limited → пробуем модель B → потом C, и только затем переходим к другому провайдеру). Затрагивает: формат хранения цепочки в user-prefs (сейчас список строк-имён провайдеров → нужен список объектов вида `{provider, model}` или аналог), `_resolve_chain`/`_call_provider`/`_call_openrouter` в `shared/llm_client.py`, drag-and-drop UI цепочек в `settings.html` (BL-141) — при добавлении элемента "openrouter" в цепочку нужен выбор конкретной модели из `AVAILABLE_MODELS`. Объединено с BL-156 в единую спеку. Спека: docs/openrouter-model-selection/ (DRAFT) |
+| BL-156 | Динамический список моделей OpenRouter из API | shared, pm-bot, web-ui | Список моделей OpenRouter в pm_assistant захардкожен в `shared/openrouter_client.py::AVAILABLE_MODELS` (3 модели) и отдаётся как есть через `GET /api/v1/openrouter-models` (`pm-bot/app/vault_api.py:2845`). Нужно вместо статического списка запрашивать актуальный перечень моделей у самого OpenRouter (`GET {BASE_URL}/models` — тот же эндпоинт, что уже используется в `openrouter_client.test_connection()` для проверки конкретной модели) и отдавать в UI (dropdown в `settings.html`, BL-141) то, что реально доступно по ключу пользователя, а не то, что зашито в код. Вопросы для проработки на этапе дизайна: кэширование ответа `/models` (список большой, обновляется редко — нужен TTL-кэш по аналогии с `cache_ttl` в `settings.yaml`), фильтрация (показывать все модели или только free/дешёвые), деградация при ошибке запроса к OpenRouter (fallback на текущий хардкод-список). Объединено с BL-155 в единую спеку. Спека: docs/openrouter-model-selection/ (DRAFT) |
 
 ---
 
@@ -242,6 +245,7 @@
 | # | Название | Компонент | Описание |
 |---|:---|:---|:---|
 | BL-149 | Dead ends: исключить IDEA и учитывать index/log | knowledge-engine | Текущая проверка dead_ends ложно срабатывает на IDEA-файлах (новая идея без входящих ссылок — нормальное состояние). Исправления: (1) исключить `wiki/domains/*/ideas/` из проверки dead_ends, (2) учитывать входящие ссылки из служебных файлов домена (`index.md`, `log.md`) при подсчёте |
+| BL-151 | ~~Удалено в 2.1 Реализовано~~ | | |
 
 ---
 
@@ -316,6 +320,6 @@
 |:---|:---|:---|
 | ✅ Реализовано | 89 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143 |
 | ✅ Баги исправлены | 24 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129 |
-| Идея | 32 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154 |
+| Идея | 34 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-156 |
 | ❌ Удалено | 1 | BL-121 |
 | **Итого** | **146** | |

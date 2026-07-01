@@ -5,6 +5,30 @@
 
 ---
 
+## 01.07.2026 — feat(knowledge-engine): llm_wiki Cowork Context (BL-151)
+
+Детерминированная генерация `_cowork-session.md` для Claude Cowork — контекстный файл из 5 секций wiki (дейли, открытые задачи, эпики, решения, активность LOG.md). Без LLM.
+
+### knowledge-engine
+- **cowork_context.py** (NEW): `generate_cowork_session()` — 5 коллекторов, frontmatter + vault_stats, atomic_write, truncation при >200 задач
+- **cli.py**: CLI-команда `cowork-context` (LoggedProcess + regenerate_index + generate_cowork_session)
+- **api.py**: `POST /api/v1/cowork-context` — endpoint #29
+
+### shared
+- **system_log.py**: новый process type `cowork-context` в VALID_PROCESS_TYPES (13 типов)
+- **vault_paths.py**: `llm_wiki_cowork_session()` — путь к `_cowork-session.md`
+
+### pm-bot
+- **system-log.html**: option `cowork-context` в dropdown фильтра
+
+### инфраструктура
+- **docker-compose.yml**: ke-cron — cron job `0 1 * * *` (cowork-context, ежедневно 01:00)
+
+### тесты
+- **test_cowork_context.py** (NEW): 15 unit-тестов (empty vault, sorting, filtering, limits, broken frontmatter, schema)
+
+---
+
 ## 01.07.2026 — fix(system-log): fallback errors отображение
 
 - **shared/llm_client.py**: переименован ключ `errors` → `fallback_errors` в details success-записей system_log. Error-path без изменений.

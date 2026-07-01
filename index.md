@@ -23,11 +23,11 @@ pm_assistant/
 │   ├── llm_client.py               # _load_llm_prefs, get_client, call (unified fallback chain), call_detailed (отдаёт provider_record, BL-145), deprecated: call_with_fallback, call_transcription
 │   ├── meeting_queue.py            # enqueue-ядро файловой очереди: Unit, make_unit_id, build_meta, enqueue, path-хелперы (BL-145)
 │   ├── openrouter_client.py        # HTTP client for OpenRouter API (6 models, call, test_connection)
-│   ├── vault_paths.py              # superset путей vault (25 функций)
+│   ├── vault_paths.py              # superset путей vault (26 функций, +llm_wiki_cowork_session)
 │   ├── domain_config.py            # загрузка/сохранение domain-config.yaml (13 функций)
 │   ├── frontmatter_utils.py        # read_frontmatter, update_frontmatter
 │   ├── settings.py                 # загрузка settings.yaml, dot-notation доступ, singleton
-│   ├── system_log.py               # Централизованный журнал системных операций (SQLite, 12 process types вкл. llm-call)
+│   ├── system_log.py               # Централизованный журнал системных операций (SQLite, 13 process types вкл. cowork-context)
 │   └── tests/                      # unit-тесты для shared/
 │       ├── test_settings.py        # 14 тестов
 │       ├── test_openrouter.py      # 9 тестов (call, test_connection, models)
@@ -118,8 +118,8 @@ pm_assistant/
 │   └── app/                        # исходный код
 │       ├── __init__.py
 │       ├── __main__.py             # точка входа: python -m app
-│       ├── cli.py                  # CLI: jira-sync, jira-import, jira-create, jira-projects, jira-epics, jira-issue-types, enrich, synthesize, watch, index, lint, status, digest, digest-bulk, digest-index, digest-audit, digest-status
-│       ├── api.py                  # FastAPI HTTP API (28 эндпоинтов, порт 8001) — +digest/generate, digest/bulk, digest/status (BL-147)
+│       ├── cli.py                  # CLI: jira-sync, jira-import, jira-create, jira-projects, jira-epics, jira-issue-types, enrich, synthesize, watch, index, lint, status, digest, digest-bulk, digest-index, digest-audit, digest-status, cowork-context
+│       ├── api.py                  # FastAPI HTTP API (29 эндпоинтов, порт 8001) — +digest/generate, digest/bulk, digest/status (BL-147), +cowork-context (BL-151)
 │       ├── enricher.py             # обогащение идеи связями из vault
 │       ├── synthesizer.py          # синтез: кластеризация + сводка
 │       ├── vault_index.py          # сканирование vault, in-memory индекс
@@ -154,6 +154,7 @@ pm_assistant/
 │       │   ├── templates.py        # detect_type, get_template, ARTIFACT_TYPE_MAP
 │       │   ├── token_counter.py    # count_tokens, count_sections (tiktoken cl100k_base)
 │       │   └── validator.py        # validate: token budgets, required fields, key-value format
+│       ├── cowork_context.py       # генерация _cowork-session.md для Cowork (BL-151): 5 коллекторов, детерминированная сборка
 │       └── prompts/                # 16 промптов (enrich, synthesize, meeting_protocol, digest + 12 type-specific)
 │
 └── idea-pipeline/                  # сервис проработки идей (orchestrator)
@@ -187,11 +188,11 @@ pm_assistant/
 | Компонент | Версия | Последнее изменение | Описание |
 |---|---|---|---|
 | **pm-bot** | 1.16.0 | 2026-07-01 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py, 22 функции). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. context_assembler: waterfall сборка контекста из llm_wiki/ (kill switch DIGEST_CONTEXT_SOURCE), enrich_creative_recall (BL-147 Phase 2). Digest context injection в process_idea и weekly report. |
-| **knowledge-engine** | 1.14.0 | 2026-07-01 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (28 эндпоинтов). DigestHandler в watcher.py (DIGEST_ENABLED env, debounce 5s, body_hash check). 3 API endpoints: digest/generate, digest/bulk, digest/status (BL-147 Phase 2). |
+| **knowledge-engine** | 1.15.0 | 2026-07-01 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (29 эндпоинтов). DigestHandler в watcher.py (DIGEST_ENABLED env, debounce 5s, body_hash check). 3 API endpoints: digest/generate, digest/bulk, digest/status (BL-147 Phase 2). cowork_context: _cowork-session.md для Cowork (BL-151). |
 | **idea-pipeline** | 1.1.2 | 2026-06-14 | Orchestrator: Analyst → PM → Decomposer. Импорты vault_paths и file_writer из shared/. |
 | **web-ui** | 1.25.0 | 2026-06-30 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141), LLM Playground (BL-142). Decision Journal (BL-24): decisions.html + meeting.html + overview виджет RECENT DECISIONS. Process Catalog (processes.html, process.html). |
 | **инфраструктура** | 1.1.0 | 2026-06-30 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120). KE-контейнер: процесс queue-watch (watchdog на pending/); ke-cron: process-queue каждые 10 мин — страховка/reclaim (BL-145). |
-| **shared** | 0.5.1 | 2026-07-01 | Общий модуль: llm_client (call с настраиваемыми fallback-цепочками, Ollama timeout ×5, call_transcription, call_detailed — additive, отдаёт provider_record + автоматический LLM trace в system_log), meeting_queue (enqueue-ядро файловой очереди: Unit, make_unit_id, build_meta, enqueue, path-хелперы — BL-145), openrouter_client, system_log (12 process types, LoggedProcess, per-unit details), file_writer, vault_paths, domain_config, frontmatter_utils, settings. Единый источник для всех компонентов. |
+| **shared** | 0.6.0 | 2026-07-01 | Общий модуль: llm_client (call с настраиваемыми fallback-цепочками, Ollama timeout ×5, call_transcription, call_detailed — additive, отдаёт provider_record + автоматический LLM trace в system_log), meeting_queue (enqueue-ядро файловой очереди: Unit, make_unit_id, build_meta, enqueue, path-хелперы — BL-145), openrouter_client, system_log (13 process types, LoggedProcess, per-unit details), file_writer, vault_paths (26 функций, +llm_wiki_cowork_session), domain_config, frontmatter_utils, settings. Единый источник для всех компонентов. |
 
 Схема: semver `MAJOR.MINOR.PATCH`. MAJOR — ломающие изменения API/контрактов. MINOR — новый функционал. PATCH — багофиксы.
 
@@ -235,7 +236,7 @@ pm_assistant/
 | pm-bot | Telegram polling + capture + vault API (8000) + web UI (8080) | python -m http.server 8080 --directory /web & python -m app.main |
 | knowledge-engine | HTTP API (:8001) + Watchdog на Inbox/ | sh -c "python -m knowledge_engine serve & python -m knowledge_engine watch" |
 | idea-pipeline | Orchestrator: Analyst → PM → Decomposer | python -m idea_pipeline serve |
-| ke-cron | Синтез (09:00) + Jira sync (каждые 3ч) | crond |
+| ke-cron | Синтез (09:00) + Cowork-context (01:00) + Jira sync (каждые 3ч) | crond |
 
 ## Web UI
 
