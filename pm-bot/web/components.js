@@ -2274,4 +2274,99 @@ function registerComponents(app) {
         </template>
       </div>`
   });
+
+  /* ========================================
+     searchable-model-select -- searchable dropdown for OpenRouter models (BL-158)
+     Props:
+       models     (array): [{id, name}, ...]
+       modelValue (string): selected model id (v-model)
+       source     (string): 'live' or 'fallback'
+       compact    (boolean): smaller variant for inline use
+     Emits: update:modelValue
+     ======================================== */
+  app.component('searchable-model-select', {
+    props: {
+      models: { type: Array, default: function() { return []; } },
+      modelValue: { type: String, default: '' },
+      source: { type: String, default: 'live' },
+      compact: { type: Boolean, default: false }
+    },
+    emits: ['update:modelValue'],
+    data: function() {
+      return {
+        open: false,
+        filter: ''
+      };
+    },
+    computed: {
+      filteredModels: function() {
+        if (!this.filter) return this.models;
+        var q = this.filter.toLowerCase();
+        return this.models.filter(function(m) {
+          return (m.name && m.name.toLowerCase().indexOf(q) !== -1) ||
+                 (m.id && m.id.toLowerCase().indexOf(q) !== -1);
+        });
+      },
+      selectedName: function() {
+        var self = this;
+        if (!this.modelValue) return 'Выберите модель...';
+        var found = this.models.find(function(m) { return m.id === self.modelValue; });
+        return found ? found.name : this.modelValue;
+      }
+    },
+    methods: {
+      toggle: function() {
+        this.open = !this.open;
+        if (this.open) {
+          this.filter = '';
+          var self = this;
+          this.$nextTick(function() {
+            var input = self.$refs.filterInput;
+            if (input) input.focus();
+          });
+        }
+      },
+      select: function(model) {
+        console.log('[settings] model selected:', model.id);
+        this.$emit('update:modelValue', model.id);
+        this.open = false;
+        this.filter = '';
+      },
+      onOutsideClick: function(e) {
+        if (this.$el && !this.$el.contains(e.target)) {
+          this.open = false;
+          this.filter = '';
+        }
+      }
+    },
+    mounted: function() {
+      this._outsideClickHandler = this.onOutsideClick.bind(this);
+      document.addEventListener('click', this._outsideClickHandler, true);
+    },
+    beforeUnmount: function() {
+      document.removeEventListener('click', this._outsideClickHandler, true);
+    },
+    template: '\
+      <div :class="[\'model-search-wrap\', compact ? \'model-search-wrap--compact\' : \'\']">\
+        <button type="button"\
+                :class="[\'model-search-trigger\', open ? \'model-search-trigger--open\' : \'\']"\
+                @click.stop="toggle">\
+          {{ selectedName }}\
+        </button>\
+        <div v-if="open" class="model-search-dropdown" @click.stop>\
+          <input ref="filterInput"\
+                 class="model-search-input"\
+                 v-model="filter"\
+                 placeholder="Поиск модели...">\
+          <div v-if="filteredModels.length === 0" class="model-search-empty">Нет результатов</div>\
+          <div v-for="m in filteredModels"\
+               :key="m.id"\
+               :class="[\'model-search-option\', m.id === modelValue ? \'model-search-option--active\' : \'\']"\
+               @click="select(m)">\
+            {{ m.name }}\
+          </div>\
+        </div>\
+      </div>\
+    '
+  });
 }

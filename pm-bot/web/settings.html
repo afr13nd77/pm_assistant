@@ -226,6 +226,98 @@
       color: #f44336;
       white-space: nowrap;
     }
+
+    /* Searchable model selector (BL-158) */
+    .model-search-wrap {
+      position: relative;
+      display: inline-block;
+      width: 300px;
+    }
+    .model-search-wrap--compact {
+      width: 240px;
+      flex: 0 0 auto;
+    }
+    .model-search-trigger {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text-body);
+      font-family: var(--font);
+      font-size: 11px;
+      padding: 6px 8px;
+      cursor: pointer;
+      width: 100%;
+      text-align: left;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      outline: none;
+    }
+    .model-search-wrap--compact .model-search-trigger {
+      font-size: 10px;
+      padding: 3px 6px;
+    }
+    .model-search-trigger:hover {
+      border-color: var(--border-hover);
+    }
+    .model-search-trigger--open {
+      border-color: var(--cyan);
+    }
+    .model-search-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      width: 350px;
+      max-height: 260px;
+      overflow-y: auto;
+      background: var(--surface);
+      border: 1px solid var(--cyan);
+      border-top: none;
+      z-index: 100;
+    }
+    .model-search-wrap--compact .model-search-dropdown {
+      width: 320px;
+    }
+    .model-search-input {
+      width: 100%;
+      background: var(--bg);
+      border: none;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-body);
+      font-family: var(--font);
+      font-size: 11px;
+      padding: 6px 8px;
+      outline: none;
+      box-sizing: border-box;
+    }
+    .model-search-input::placeholder {
+      color: var(--text-muted);
+      font-style: italic;
+    }
+    .model-search-option {
+      padding: 5px 8px;
+      font-size: 10px;
+      color: var(--text-body);
+      cursor: pointer;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .model-search-option:hover {
+      background: var(--cyan-bg);
+      color: var(--cyan);
+    }
+    .model-search-option--active {
+      color: var(--cyan);
+      font-weight: 500;
+    }
+    .model-search-empty {
+      padding: 8px;
+      font-size: 10px;
+      color: var(--text-muted);
+      font-style: italic;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -323,12 +415,12 @@
             <div class="provider-config-header">OPENROUTER</div>
             <div class="field-group">
               <div class="field-label">OPENROUTER_MODEL</div>
-              <select class="field-select" v-model="openrouterModel"
-                      @change="saveProviderSettings" style="width: 300px;">
-                <option v-for="m in openrouterModels" :key="m.id" :value="m.id">
-                  {{ m.name }}
-                </option>
-              </select>
+              <searchable-model-select
+                  :models="openrouterModels"
+                  v-model="openrouterModel"
+                  :source="openrouterModelsSource"
+                  @update:model-value="saveProviderSettings">
+              </searchable-model-select>
               <div v-if="openrouterModelsSource === 'fallback'" class="field-note" style="color: #f44336;">
                 используется резервный список моделей (OpenRouter API недоступен)
               </div>
@@ -388,12 +480,14 @@
                       v-if="group.chain.length > 1">::</span>
                 <span class="fallback-item-index">{{ idx + 1 }}</span>
                 <span class="fallback-item-name">{{ providerDisplayName(step) }}</span>
-                <select v-if="step.provider === 'openrouter'"
-                        class="field-select fallback-item-model-select"
-                        v-model="step.model"
-                        @change="saveProviderSettings">
-                  <option v-for="m in openrouterModels" :key="m.id" :value="m.id">{{ m.name }}</option>
-                </select>
+                <searchable-model-select
+                    v-if="step.provider === 'openrouter'"
+                    :models="openrouterModels"
+                    v-model="step.model"
+                    :source="openrouterModelsSource"
+                    compact
+                    @update:model-value="saveProviderSettings">
+                </searchable-model-select>
                 <span v-if="step.provider === 'openrouter' && openrouterModelsSource === 'fallback'"
                       class="fallback-item-fallback-note">резервный список</span>
                 <span v-if="step.provider === 'openrouter' && !isStepModelValid(step)"

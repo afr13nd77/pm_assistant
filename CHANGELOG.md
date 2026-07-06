@@ -5,6 +5,18 @@
 
 ---
 
+## 06.07.2026 — feat(web-ui): Фильтрация моделей OpenRouter в Settings (BL-158)
+
+Searchable dropdown для выбора моделей OpenRouter вместо обычного `<select>`. Текстовый фильтр по вхождению подстроки в имя или id модели (case-insensitive). Решает проблему навигации по большому списку моделей OpenRouter API (сотни позиций).
+
+### web-ui 1.26.0
+- **components.js**: новый компонент `searchable-model-select` — кастомный dropdown с текстовым фильтром, autofocus при открытии, закрытие по клику вне, compact-режим для inline в fallback-цепочке
+- **settings.html**: замена глобального `<select>` OPENROUTER_MODEL и inline `<select>` в fallback-шагах на `<searchable-model-select>`. CSS-стили с поддержкой обеих тем (matrix/light) через CSS-переменные
+
+### Спека: docs/openrouter-model-filter/ (requirements, design, tasks — 4 задачи)
+
+---
+
 ## 01.07.2026 — feat: Множественный выбор моделей OpenRouter + динамический список из API (BL-155, BL-156)
 
 Расширение поддержки OpenRouter: live-запрос актуального списка моделей с TTL-кэшем, мультимодельные fallback-цепочки. Пользователь теперь может добавить несколько шагов OpenRouter подряд с разными моделями в одну цепочку.

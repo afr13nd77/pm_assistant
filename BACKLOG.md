@@ -1,7 +1,7 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.17.0 / knowledge-engine 1.15.0 / idea-pipeline 1.1.2 / web-ui 1.25.0 / shared 0.7.0
-**Обновлён:** 01.07.2026 (BL-155+BL-156 реализовано)
+**Версии:** pm-bot 1.17.0 / knowledge-engine 1.15.0 / idea-pipeline 1.1.2 / web-ui 1.26.0 / shared 0.7.0
+**Обновлён:** 06.07.2026 (BL-158 реализовано)
 
 ---
 
@@ -143,6 +143,7 @@
 | BL-135 | ✅ Forgotten Gems Popup | web-ui | Popup деталей артефакта на decay.html: метаданные + rendered Markdown body через marked.js |
 | BL-136 | ✅ Vault Health на dashboard | web-ui | Health-карточка на dashboard.html: score, грейд, тренд. Popup с детализацией по категориям штрафов (broken links, orphans, dead ends) |
 | BL-137 | ✅ Редизайн CAPTURE_TERMINAL | web-ui | Редизайн capture drawer (chat-style терминал на board.html, ideas.html). В Settings переключатель «Тип терминала»: простой / расширенный |
+| BL-158 | ✅ Фильтрация моделей OpenRouter в Settings | web-ui | Searchable dropdown вместо `<select>` для выбора моделей OpenRouter: текстовый фильтр по вхождению в name/id (case-insensitive), autofocus, outside-click close, compact-режим для inline в fallback-цепочке. Компонент `searchable-model-select` в components.js. Два места: глобальный OPENROUTER_MODEL + per-step в fallback chain. Связано с BL-155, BL-156 |
 
 ### 5.2 Идеи
 
@@ -316,8 +317,8 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 91 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156 |
+| ✅ Реализовано | 92 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158 |
 | ✅ Баги исправлены | 24 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129 |
 | Идея | 33 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **149** | |
+| **Итого** | **150** | |

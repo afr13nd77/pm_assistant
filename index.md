@@ -15,7 +15,7 @@ pm_assistant/
 ├── docker-compose.yml              # оркестрация: pm-bot + knowledge-engine (:8001 API) + ke-cron + idea-pipeline
 ├── settings.yaml                   # централизованная runtime-конфигурация (timeouts, cooldowns, rate_limits)
 ├── CHANGELOG.md                    # журнал изменений по всем компонентам (от новых к старым)
-├── BACKLOG.md                      # бэклог: реализованные фичи (91, +BL-155/156), баги (24), идеи (25), итого (143)
+├── BACKLOG.md                      # бэклог: реализованные фичи (92, +BL-158), баги (24), идеи (33), итого (150)
 │
 ├── shared/                         # общий модуль — единый источник для pm-bot, KE, idea-pipeline
 │   ├── __init__.py                 # __version__ = "0.1.0"
@@ -56,6 +56,7 @@ pm_assistant/
 │   ├── meeting-protocol-enrich/     # BL-133+BL-134 DONE: requirements.md, design.md, tasks.md (4 задачи)
 │   ├── openrouter-transcription/    # BL-138 DONE: requirements.md, design.md, tasks.md (10 задач)
 │   ├── openrouter-model-selection/  # BL-155+BL-156 DONE: requirements.md, design.md, tasks.md (13 задач)
+│   ├── openrouter-model-filter/    # BL-158 DONE: requirements.md, design.md, tasks.md (4 задачи)
 │   └── architecture/adr/           # 5 ADR (решения по архитектуре)
 │
 ├── pm-bot/                         # Telegram-бот (capture)
@@ -191,7 +192,7 @@ pm_assistant/
 | **pm-bot** | 1.17.0 | 2026-07-01 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py, 22 функции). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. context_assembler: waterfall сборка контекста из llm_wiki/ (kill switch DIGEST_CONTEXT_SOURCE), enrich_creative_recall (BL-147 Phase 2). Digest context injection в process_idea и weekly report. Мультимодельные OpenRouter fallback-цепочки с inline model selector + GET /openrouter-models (BL-155, BL-156). |
 | **knowledge-engine** | 1.15.0 | 2026-07-01 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (29 эндпоинтов). DigestHandler в watcher.py (DIGEST_ENABLED env, debounce 5s, body_hash check). 3 API endpoints: digest/generate, digest/bulk, digest/status (BL-147 Phase 2). cowork_context: _cowork-session.md для Cowork (BL-151). |
 | **idea-pipeline** | 1.1.2 | 2026-06-14 | Orchestrator: Analyst → PM → Decomposer. Импорты vault_paths и file_writer из shared/. |
-| **web-ui** | 1.25.0 | 2026-06-30 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141), LLM Playground (BL-142). Decision Journal (BL-24): decisions.html + meeting.html + overview виджет RECENT DECISIONS. Process Catalog (processes.html, process.html). |
+| **web-ui** | 1.26.0 | 2026-07-06 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141), LLM Playground (BL-142). Decision Journal (BL-24): decisions.html + meeting.html + overview виджет RECENT DECISIONS. Process Catalog (processes.html, process.html). Searchable dropdown для моделей OpenRouter (BL-158). |
 | **инфраструктура** | 1.1.0 | 2026-06-30 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120). KE-контейнер: процесс queue-watch (watchdog на pending/); ke-cron: process-queue каждые 10 мин — страховка/reclaim (BL-145). |
 | **shared** | 0.7.0 | 2026-07-01 | Общий модуль: llm_client (call с настраиваемыми fallback-цепочками, _normalize_step для мультимодельных цепочек {provider, model}, backoff 0.7s при 429, Ollama timeout ×5, call_transcription, call_detailed — additive, отдаёт provider_record + chain/used_model/used_step_index + автоматический LLM trace в system_log — BL-155), meeting_queue (enqueue-ядро файловой очереди: Unit, make_unit_id, build_meta, enqueue, path-хелперы — BL-145), openrouter_client (list_models с live API + TTL-кэш 1ч + fallback — BL-156), system_log (13 process types, LoggedProcess, per-unit details), file_writer, vault_paths (26 функций, +llm_wiki_cowork_session), domain_config, frontmatter_utils, settings. Единый источник для всех компонентов. |
 
