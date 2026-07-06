@@ -5,13 +5,24 @@
 
 ---
 
-## 06.07.2026 — feat(web-ui): Фильтрация моделей OpenRouter в Settings (BL-158)
+## 06.07.2026 — feat: Фильтрация моделей OpenRouter в Settings и Playground (BL-158) + BUG-020
 
 Searchable dropdown для выбора моделей OpenRouter вместо обычного `<select>`. Текстовый фильтр по вхождению подстроки в имя или id модели (case-insensitive). Решает проблему навигации по большому списку моделей OpenRouter API (сотни позиций).
 
 ### web-ui 1.26.0
 - **components.js**: новый компонент `searchable-model-select` — кастомный dropdown с текстовым фильтром, autofocus при открытии, закрытие по клику вне, compact-режим для inline в fallback-цепочке
-- **settings.html**: замена глобального `<select>` OPENROUTER_MODEL и inline `<select>` в fallback-шагах на `<searchable-model-select>`. CSS-стили с поддержкой обеих тем (matrix/light) через CSS-переменные
+- **settings.html**: замена глобального `<select>` OPENROUTER_MODEL и inline `<select>` в fallback-шагах на `<searchable-model-select>`
+- **playground.html**: условный рендеринг — `searchable-model-select` при провайдере OpenRouter, стандартный `<select>` для Claude/Ollama
+- **style.css**: CSS model-search-* вынесен из inline `<style>` settings.html и playground.html в общий файл (устранено дублирование)
+
+### pm-bot 1.17.1
+- **vault_api.py**: `GET /api/v1/playground/providers` — OpenRouter теперь отдаёт live-список моделей через `list_models()` (TTL-кэш 1ч) вместо хардкода из 3 моделей
+
+### shared 0.7.1
+- **openrouter_client.py**: детальное логирование raw-ответа при ошибке парсинга (BUG-020) — `raw_body[:2000]`, model name, response keys. Catch `TypeError` для нестандартных структур. Отдельный catch для невалидного JSON
+
+### BUG-020: OpenRouter Nemotron 3 Ultra parse error
+- Nemotron иногда возвращает HTTP 200 без ключа `choices` (нестабильность free-tier). Парсер бросает KeyError, fallback-цепочка переходит к следующей модели. Не баг в коде — нестабильность upstream. Логирование добавлено для диагностики. Статус: OPEN
 
 ### Спека: docs/openrouter-model-filter/ (requirements, design, tasks — 4 задачи)
 

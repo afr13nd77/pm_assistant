@@ -1,6 +1,6 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.17.0 / knowledge-engine 1.15.0 / idea-pipeline 1.1.2 / web-ui 1.26.0 / shared 0.7.0
+**Версии:** pm-bot 1.17.1 / knowledge-engine 1.15.0 / idea-pipeline 1.1.2 / web-ui 1.26.0 / shared 0.7.1
 **Обновлён:** 06.07.2026 (BL-158 реализовано)
 
 ---
@@ -143,7 +143,7 @@
 | BL-135 | ✅ Forgotten Gems Popup | web-ui | Popup деталей артефакта на decay.html: метаданные + rendered Markdown body через marked.js |
 | BL-136 | ✅ Vault Health на dashboard | web-ui | Health-карточка на dashboard.html: score, грейд, тренд. Popup с детализацией по категориям штрафов (broken links, orphans, dead ends) |
 | BL-137 | ✅ Редизайн CAPTURE_TERMINAL | web-ui | Редизайн capture drawer (chat-style терминал на board.html, ideas.html). В Settings переключатель «Тип терминала»: простой / расширенный |
-| BL-158 | ✅ Фильтрация моделей OpenRouter в Settings | web-ui | Searchable dropdown вместо `<select>` для выбора моделей OpenRouter: текстовый фильтр по вхождению в name/id (case-insensitive), autofocus, outside-click close, compact-режим для inline в fallback-цепочке. Компонент `searchable-model-select` в components.js. Два места: глобальный OPENROUTER_MODEL + per-step в fallback chain. Связано с BL-155, BL-156 |
+| BL-158 | ✅ Фильтрация моделей OpenRouter в Settings и Playground | web-ui, pm-bot, shared | Searchable dropdown (`searchable-model-select` в components.js) вместо `<select>` для выбора моделей OpenRouter: текстовый фильтр по name/id (case-insensitive), autofocus, outside-click close, compact-режим для inline fallback-цепочки. 3 места: settings.html (глобальный OPENROUTER_MODEL + per-step в fallback chain), playground.html (при провайдере openrouter). CSS в общем style.css. Бэкенд: `GET /playground/providers` теперь отдаёт live-список моделей через `list_models()` (TTL-кэш 1ч) вместо хардкода. Попутно: BUG-020 (Nemotron parse error) — детальное логирование raw-ответа в openrouter_client.py. Связано с BL-155, BL-156 |
 
 ### 5.2 Идеи
 
