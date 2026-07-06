@@ -3786,7 +3786,7 @@ def playground_providers():
     logger.info("GET /api/v1/playground/providers — start")
 
     from shared.llm_client import _is_provider_available, _load_llm_prefs
-    from shared.openrouter_client import AVAILABLE_MODELS as OR_MODELS
+    from shared.openrouter_client import list_models as or_list_models
 
     prefs = _load_llm_prefs()
     result = []
@@ -3822,11 +3822,14 @@ def playground_providers():
     # OpenRouter
     or_available = _is_provider_available("openrouter", prefs)
     or_model = prefs.get("openrouter_model", "qwen/qwen3-32b")
+    or_api_key = os.getenv("OPENROUTER_API_KEY")
+    or_data = or_list_models(or_api_key)
+    or_models = or_data.get("models", [])
     result.append({
         "id": "openrouter",
         "name": "OpenRouter",
         "available": or_available,
-        "models": [{"id": m["id"], "name": m["name"]} for m in OR_MODELS],
+        "models": or_models,
         "default_model": or_model,
         **({"reason": "OPENROUTER_API_KEY not set"} if not or_available else {}),
     })
