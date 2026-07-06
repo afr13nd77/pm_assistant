@@ -41,7 +41,13 @@
             {{ p.name }}
           </button>
         </div>
-        <select class="field-select pg-model-select"
+        <searchable-model-select
+            v-if="selectedProvider === 'openrouter'"
+            :models="currentModels"
+            v-model="selectedModel">
+        </searchable-model-select>
+        <select v-else
+                class="field-select pg-model-select"
                 v-model="selectedModel"
                 :disabled="!currentProviderData || !currentProviderData.available || loading">
           <option v-for="m in currentModels" :key="m.id" :value="m.id">
