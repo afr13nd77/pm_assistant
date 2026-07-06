@@ -95,14 +95,24 @@ def call(
     )
     response.raise_for_status()
 
-    data = response.json()
+    raw_body = response.text
+    try:
+        data = response.json()
+    except Exception as json_exc:
+        logger.error(
+            "openrouter_client.call: response is not valid JSON, model=%s, status=%d, body=%s",
+            model, response.status_code, raw_body[:2000],
+        )
+        raise RuntimeError(
+            f"OpenRouter: response is not valid JSON: {json_exc}"
+        ) from json_exc
 
     try:
         text = data["choices"][0]["message"]["content"]
-    except (KeyError, IndexError) as exc:
+    except (KeyError, IndexError, TypeError) as exc:
         logger.error(
-            "openrouter_client.call: unexpected response structure: %s",
-            data,
+            "openrouter_client.call: unexpected response structure, model=%s, keys=%s, body=%s",
+            model, list(data.keys()) if isinstance(data, dict) else type(data).__name__, raw_body[:2000],
         )
         raise RuntimeError(
             f"OpenRouter: unexpected response format: {exc}"
