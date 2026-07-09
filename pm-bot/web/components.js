@@ -1667,9 +1667,11 @@ function registerComponents(app) {
       },
       filteredTickets: function() {
         var self = this;
+        var keyFilter = self.directKey.trim().toUpperCase();
         return this.tickets.filter(function(t) {
           if (self.typeFilter && t.type !== self.typeFilter) return false;
           if (self.statusFilter && t.status !== self.statusFilter) return false;
+          if (keyFilter && t.key.toUpperCase().indexOf(keyFilter) === -1) return false;
           return true;
         });
       },
@@ -1680,7 +1682,7 @@ function registerComponents(app) {
         return this.extText.trim().length > 0 && !this.extSaving;
       },
       canImport: function() {
-        return this.selectedTicketIds.length > 0 && !this.importing;
+        return (this.selectedTicketIds.length > 0 || this.directKey.trim().length > 0) && !this.importing;
       },
       recentProjects: function() {
         var keys = this.recentProjectKeys;
@@ -1822,6 +1824,12 @@ function registerComponents(app) {
         var self = this;
         self.importing = true;
         var keys = self.selectedTicketIds.slice();
+        if (self.directKey.trim()) {
+          var raw = self.directKey.trim();
+          var m = raw.match(/([A-Z][A-Z0-9_]+-\d+)/i);
+          var dk = m ? m[1].toUpperCase() : raw;
+          if (keys.indexOf(dk) === -1) keys.push(dk);
+        }
         var ok = [];
         var fail = [];
         var chain = Promise.resolve();
@@ -1837,6 +1845,7 @@ function registerComponents(app) {
         chain.then(function() {
           self.importing = false;
           self.selectedTicketIds = [];
+          self.directKey = '';
           if (fail.length === 0) {
             self.importResult = { ok: true, text: 'Импортировано: ' + ok.length };
             self.showToast('success', 'Импортировано тикетов: ' + ok.length);
@@ -2254,7 +2263,7 @@ function registerComponents(app) {
               </div>
 
               <div class="ct-footer">
-                <span class="ct-hint" v-if="!selectedProject">Сначала выбери проект</span>
+                <span class="ct-hint" v-if="!selectedProject && !directKey.trim()">Выбери проект или введи ID</span>
                 <span class="ct-hint" v-else>Ctrl+Enter — импортировать</span>
                 <div class="ct-footer-actions">
                   <button class="ct-btn-ghost" @click="$emit('close')">Отмена</button>

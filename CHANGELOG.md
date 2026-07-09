@@ -5,6 +5,19 @@
 
 ---
 
+## 09.07.2026 — fix: Jira Import direct key в extended capture terminal (BUG-021, BUG-022)
+
+Исправлена работа поля прямого ввода ключа Jira в расширенном режиме capture terminal на ideas.html.
+
+### web-ui 1.26.1
+- **components.js** (capture-terminal):
+  - BUG-021: `canImport` теперь учитывает `directKey` — кнопка IMPORT активна при вводе ключа без выбора из списка
+  - BUG-021: `importSelected()` парсит `directKey` (поддержка голого ключа SUP-1234 и полного URL), добавляет в очередь импорта, очищает поле после завершения
+  - BUG-022: `filteredTickets` фильтрует список задач по введённому ключу (substring match, case-insensitive)
+  - Обновлена подсказка footer: "Выбери проект или введи ID"
+
+---
+
 ## 06.07.2026 — feat: Фильтрация моделей OpenRouter в Settings и Playground (BL-158) + BUG-020
 
 Searchable dropdown для выбора моделей OpenRouter вместо обычного `<select>`. Текстовый фильтр по вхождению подстроки в имя или id модели (case-insensitive). Решает проблему навигации по большому списку моделей OpenRouter API (сотни позиций).
