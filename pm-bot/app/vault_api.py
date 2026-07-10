@@ -31,7 +31,7 @@ import requests
 import yaml
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from shared import domain_config
@@ -1700,6 +1700,59 @@ def get_report_by_filename(filename: str):
             filename, exc,
         )
         raise HTTPException(status_code=500, detail="Failed to read report")
+
+
+@app.post("/api/v1/reports/{filename}/pdf")
+def export_report_pdf(filename: str):
+    """Export a report as PDF.
+
+    Reads the markdown report, renders it to PDF via WeasyPrint,
+    and returns the PDF file as a downloadable attachment.
+    """
+    logger.info("POST /api/v1/reports/%s/pdf — start", filename)
+
+    if not filename.endswith(".md"):
+        raise HTTPException(status_code=400, detail="Filename must end with .md")
+    if "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Filename must not contain path separators")
+
+    folder = wiki_reports()
+    filepath = folder / filename
+
+    if not filepath.exists():
+        logger.error("POST /api/v1/reports/%s/pdf — file not found", filename)
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    try:
+        from shared.system_log import LoggedProcess
+
+        content = filepath.read_text(encoding="utf-8")
+
+        with LoggedProcess(process_type="pdf-export", source="pm-bot") as lp:
+            from app.pdf_exporter import render_pdf
+            from pathlib import Path as _Path
+
+            pdf_bytes = render_pdf(content, _Path("/web/pdf-export.css"))
+            lp.summary = f"PDF exported: {filename}"
+            lp.details = {"filename": filename, "size_bytes": len(pdf_bytes)}
+
+        pdf_name = filename.rsplit(".", 1)[0] + ".pdf"
+        logger.info("POST /api/v1/reports/%s/pdf — done, size=%d", filename, len(pdf_bytes))
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{pdf_name}"'},
+        )
+    except ImportError as exc:
+        logger.error("POST /api/v1/reports/%s/pdf — WeasyPrint not installed: %s", filename, exc)
+        raise HTTPException(status_code=500, detail="PDF export unavailable: WeasyPrint not installed")
+    except ValueError as exc:
+        logger.error("POST /api/v1/reports/%s/pdf — validation error: %s", filename, exc)
+        raise HTTPException(status_code=413, detail=str(exc))
+    except Exception as exc:
+        logger.error("POST /api/v1/reports/%s/pdf — error: %s", filename, exc)
+        raise HTTPException(status_code=500, detail="PDF export failed")
 
 
 @app.post("/api/v1/capture", response_model=CaptureResponse)

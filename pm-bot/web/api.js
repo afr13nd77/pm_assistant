@@ -189,6 +189,23 @@ var api = {
     return apiFetch('/report/regenerate', { method: 'POST' });
   },
 
+  /** POST /api/v1/reports/:filename/pdf -- export report as PDF (binary blob download) */
+  exportPdf: async function(filename) {
+    var res = await fetch(API + '/reports/' + encodeURIComponent(filename) + '/pdf', {
+      method: 'POST'
+    });
+    if (!res.ok) throw new Error('PDF export failed: ' + res.status);
+    var blob = await res.blob();
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename.replace(/\.md$/, '.pdf');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+
   /** GET /api/v1/pipeline -- list pipeline runs */
   pipeline: function() {
     return apiFetch('/pipeline');

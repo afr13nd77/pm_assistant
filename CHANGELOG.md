@@ -5,6 +5,21 @@
 
 ---
 
+## 11.07.2026 — feat: Экспорт markdown-отчётов в PDF (BL-159)
+
+Экспорт wiki-отчётов в PDF с полной стилизацией. Серверный рендеринг через WeasyPrint + markdown-it-py. Шрифт Inter (кириллица + латиница), монохромные emoji (Noto Emoji), таблицы с рамками, цветные заголовки.
+
+### pm-bot 1.18.0
+- **pdf_exporter.py** (новый): модуль конвертации markdown → HTML → PDF. Поддержка: frontmatter stripping, wikilinks, GFM-таблицы, blockquotes, code-блоки. Защита от внешних URL (url_fetcher), лимит 1MB
+- **vault_api.py**: endpoint `POST /api/v1/reports/{filename}/pdf` — валидация, LoggedProcess, Content-Disposition attachment
+- **api.js**: функция `exportPdf()` — fetch + blob download (первый бинарный download в проекте)
+- **report.html**: кнопка EXPORT_PDF (yellow, loading/disabled состояния)
+- **pdf-export.css** (новый): стили PDF — Inter, Fira Code для code, таблицы с рамками, цветные заголовки h1-h3
+- **Dockerfile**: системные зависимости WeasyPrint (libpango, libcairo, fontconfig), шрифты Inter/Fira Code/Noto Emoji в /usr/share/fonts/custom/
+- **requirements.txt**: weasyprint>=62.0, markdown-it-py>=3.0.0, mdit-py-plugins>=0.4.0
+
+---
+
 ## 09.07.2026 — fix: Jira Import direct key в extended capture terminal (BUG-021, BUG-022)
 
 Исправлена работа поля прямого ввода ключа Jira в расширенном режиме capture terminal на ideas.html.

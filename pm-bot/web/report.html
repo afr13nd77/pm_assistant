@@ -262,6 +262,7 @@
           <cmd-button label="REGENERATE" color="magenta" :loading="regenerating" @click="regenerate"></cmd-button>
           <cmd-button label="COPY_MARKDOWN" color="cyan" @click="copyMarkdown"></cmd-button>
           <span v-if="copySuccess" class="tag-sm text-green">COPIED</span>
+          <cmd-button label="EXPORT_PDF" color="yellow" :loading="exporting" :disabled="!selectedFilename" @click="exportPdf"></cmd-button>
         </div>
       </div>
 
@@ -357,6 +358,7 @@
         var loading = Vue.ref(false);
         var loadingContent = Vue.ref(false);
         var regenerating = Vue.ref(false);
+        var exporting = Vue.ref(false);
         var error = Vue.ref(null);
         var copySuccess = Vue.ref(false);
         var searchOpen = Vue.ref(false);
@@ -487,6 +489,26 @@
         }
 
         /**
+         * Export the currently selected report as PDF.
+         * Uses api.exportPdf which handles blob download.
+         */
+        function exportPdf() {
+          if (!selectedFilename.value) {
+            console.log('[report] no report selected for PDF export');
+            return;
+          }
+          console.log('[report] exporting PDF:', selectedFilename.value);
+          exporting.value = true;
+          api.exportPdf(selectedFilename.value).then(function() {
+            console.log('[report] PDF export complete:', selectedFilename.value);
+            exporting.value = false;
+          }).catch(function(err) {
+            console.error('[report] PDF export error:', err.message || err);
+            exporting.value = false;
+          });
+        }
+
+        /**
          * Render markdown content to HTML (stripping frontmatter first).
          * Uses marked.js for full GFM support.
          * @param {string} md
@@ -516,12 +538,14 @@
           loading: loading,
           loadingContent: loadingContent,
           regenerating: regenerating,
+          exporting: exporting,
           error: error,
           copySuccess: copySuccess,
           loadReports: loadReports,
           selectReport: selectReport,
           regenerate: regenerate,
           copyMarkdown: copyMarkdown,
+          exportPdf: exportPdf,
           renderMarkdown: renderMarkdown,
           formatDate: formatDate
         };

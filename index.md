@@ -70,6 +70,7 @@ pm_assistant/
 │       ├── handlers.py             # Telegram: /start, /idea, /jira, /daily, /synthesize, /jira_sync, /jira_import, /jira_create, /pipeline, /domain, /lint, /status, /test_enrichment, текст, голос
 │       ├── claude_client.py        # Claude/Ollama: process_idea (→dict/JSON + digest context injection), process_meeting, process_jira_ticket, process_daily (через llm_client)
 │       ├── obsidian_writer.py      # запись .md: write_idea (template-based), write_meeting, write_jira_draft, write_daily, write_report
+│       ├── pdf_exporter.py         # конвертация markdown → HTML → PDF (WeasyPrint, markdown-it-py)
 │       ├── pipeline_client.py      # HTTP-клиент к idea-pipeline API
 │       ├── reporter.py             # генерация еженедельных отчётов через Claude
 │       ├── scheduler.py            # APScheduler: weekly_report (Mon 09:00), enrichment_reminder (daily, configurable), daily_alert (пн-пт 18:00)
@@ -217,6 +218,8 @@ pm_assistant/
 | Vue.js | 3.x (CDN) | pm-bot (web) |
 | faster-whisper | >=1.0.0 | pm-bot |
 | apscheduler | >=3.10.4 | pm-bot |
+| weasyprint | >=62.0 | pm-bot |
+| markdown-it-py | >=3.0.0 | pm-bot |
 | Docker Compose | v3.9 | инфраструктура |
 
 ## Потоки данных
