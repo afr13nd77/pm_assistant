@@ -268,7 +268,7 @@ class TestDigestHandler:
         with patch("app.digest.generator.generate_digest", return_value={"status": "ok"}) as mock_gen:
             handler = DigestHandler(str(tmp_path))
             handler._do_generate(tmp_path / "test.md")
-            mock_gen.assert_called_once_with(str(tmp_path / "test.md"), str(tmp_path), force=False)
+            mock_gen.assert_called_once_with(tmp_path / "test.md", str(tmp_path), force=False)
 
     @patch("app.watcher.DigestHandler._should_process", return_value=True)
     def test_do_generate_handles_exception(self, mock_should, tmp_path):

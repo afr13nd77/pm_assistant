@@ -436,8 +436,8 @@ def assemble_context(
 
         for focus_id in focus_list:
             # Find entry in index
-            entry = next((e for e in all_entries if e.get("id") == focus_id), None)
-            if entry is None:
+            entry = next((e for e in all_entries if e.get("id") == focus_id), {})
+            if not entry:
                 logger.debug(f"assemble_context: focus artifact {focus_id} not found in index")
                 continue
 

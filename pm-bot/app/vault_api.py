@@ -1209,7 +1209,7 @@ def _normalize_participants(raw) -> str:
 def _decision_matches_query(text: str, context: str, q: str) -> bool:
     """Check if decision text or context matches search query (case-insensitive)."""
     lower_q = q.lower()
-    return lower_q in text.lower() or (context and lower_q in context.lower())
+    return lower_q in text.lower() or (bool(context) and lower_q in context.lower())
 
 
 # ---------------------------------------------------------------------------
@@ -2733,13 +2733,13 @@ def _normalize_fallback_step_for_read(el, default_openrouter_model: str) -> dict
         model = default_openrouter_model if provider == "openrouter" else None
         return {"provider": provider, "model": model}
     if isinstance(el, dict):
-        provider = el.get("provider")
-        if provider == "openrouter":
+        provider_val: str | None = el.get("provider")
+        if provider_val == "openrouter":
             raw_model = el.get("model")
             model = raw_model if isinstance(raw_model, str) and raw_model.strip() else default_openrouter_model
         else:
             model = None
-        return {"provider": provider, "model": model}
+        return {"provider": provider_val, "model": model}
     # Unknown/invalid shape -- caller filters these out before normalizing
     # (provider extraction below returns None, which is never a valid provider).
     return {"provider": None, "model": None}
@@ -2870,6 +2870,9 @@ def put_user_prefs(body: UserPrefs):
         providers: list = []
         pairs: list = []  # (provider, effective_model) per element, used only to detect adjacent dups
         for el in chain:
+            provider: str | None
+            model: str | None
+            is_object: bool
             if isinstance(el, str):
                 provider, model, is_object = el, None, False
             elif isinstance(el, dict):

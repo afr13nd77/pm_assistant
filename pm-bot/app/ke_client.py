@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Optional
+from typing import Any, Optional
 
 import requests
 
@@ -31,7 +31,7 @@ def _post(path: str, timeout: int, json: dict | None = None) -> dict:
     return result
 
 
-def _get(path: str, timeout: int, params: dict | None = None) -> dict:
+def _get(path: str, timeout: int, params: dict | None = None) -> Any:
     """GET request to KE API."""
     url = f"{KE_API_URL}{path}"
     logger.info("ke_client GET %s", url)
