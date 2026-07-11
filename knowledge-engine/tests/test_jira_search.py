@@ -72,7 +72,7 @@ class TestJiraSearchValidProject:
 
         mock_search.assert_called_once()
         call_jql = mock_search.call_args[0][0]
-        assert "project = SUP" in call_jql
+        assert 'project = "SUP"' in call_jql
         assert "ORDER BY updated DESC" in call_jql
 
 
@@ -91,7 +91,7 @@ class TestJiraSearchWithTypeFilter:
         assert resp.status_code == 200
         call_jql = mock_search.call_args[0][0]
         assert 'issuetype = "Bug"' in call_jql
-        assert "project = SUP" in call_jql
+        assert 'project = "SUP"' in call_jql
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +109,7 @@ class TestJiraSearchWithStatusFilter:
         assert resp.status_code == 200
         call_jql = mock_search.call_args[0][0]
         assert 'status = "Done"' in call_jql
-        assert "project = SUP" in call_jql
+        assert 'project = "SUP"' in call_jql
 
 
 # ---------------------------------------------------------------------------
