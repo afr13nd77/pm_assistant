@@ -1,9 +1,8 @@
 """Tests for synthesizer module with domain-based vault structure."""
-import os
 import importlib
-import pytest
+import os
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 
 def _setup_vault(tmp_path):

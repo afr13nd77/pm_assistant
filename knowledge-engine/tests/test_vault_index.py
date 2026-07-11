@@ -1,7 +1,6 @@
 """Tests for vault_index module with domain-based vault structure."""
-import os
 import importlib
-import pytest
+import os
 from pathlib import Path
 from unittest.mock import patch
 

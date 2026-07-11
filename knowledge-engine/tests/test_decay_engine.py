@@ -1,6 +1,5 @@
 import math
-import os
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 

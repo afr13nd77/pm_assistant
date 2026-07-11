@@ -1,9 +1,10 @@
 """Tests for watcher module with domain-based vault structure."""
-import os
 import importlib
-import pytest
+import os
 from pathlib import Path
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Force import of the watcher module so patch targets resolve
 import app.watcher  # noqa: F401
@@ -199,6 +200,7 @@ class TestDigestHandler:
     def test_schedule_digest_triggers_after_debounce(self, mock_generate, tmp_path):
         _setup_vault(tmp_path)
         import time as real_time
+
         from app.watcher import DigestHandler
 
         handler = DigestHandler(str(tmp_path))

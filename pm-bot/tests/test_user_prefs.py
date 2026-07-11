@@ -4,10 +4,9 @@ Tests theme field support alongside the existing refresh_mode field.
 """
 
 import json
-import os
-import pytest
-from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 
 @pytest.fixture
@@ -30,6 +29,7 @@ def client(vault_dir):
     with patch("app.vault_api.VAULT_PATH", vault_dir), \
          patch("shared.vault_paths.VAULT_PATH", vault_dir):
         from fastapi.testclient import TestClient
+
         from app.vault_api import app
         yield TestClient(app)
 

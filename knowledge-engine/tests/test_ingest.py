@@ -14,7 +14,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -328,7 +327,6 @@ class TestIngestOne:
         # For this test, we need to monkeypatch read_frontmatter to raise.
         filepath.write_text("Just plain text, no frontmatter", encoding="utf-8")
 
-        from shared.frontmatter_utils import read_frontmatter as real_rf
 
         def _raise_on_read(fp):
             raise ValueError("no frontmatter detected")
@@ -446,7 +444,7 @@ class TestIngestBatch:
             )
 
         # Pre-ingest the first one so it's already processed
-        source_rel = f"raw/inbound/clippings/batch-article-1.md"
+        source_rel = "raw/inbound/clippings/batch-article-1.md"
         _make_wiki_knowledge_file(
             vault, "static-metadata", "K-STATIC-METADATA-0001", source_rel,
         )

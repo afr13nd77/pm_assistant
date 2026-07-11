@@ -1,14 +1,13 @@
 """Unit tests for the updated domain-based vault_writer module."""
 
-import json
 import os
 import sys
 from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 import frontmatter
+import pytest
 
 # Make the app/ directory importable as 'idea_pipeline'
 _root = Path(__file__).resolve().parent.parent

@@ -2,11 +2,11 @@
 get_open_tasks, build_context, and generate_weekly_report.
 """
 
-import pytest
 from datetime import date
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # _parse_frontmatter
@@ -401,7 +401,7 @@ class TestBuildContext:
         # The body preview in the context should be at most 200 chars
         # Find the body preview line
         lines = result.split("\n")
-        body_line = [l for l in lines if l.startswith("  A")]
+        body_line = [line for line in lines if line.startswith("  A")]
         assert len(body_line) == 1
         assert len(body_line[0].strip()) == 200
 

@@ -3,8 +3,6 @@
 import logging
 from pathlib import Path
 
-from shared import vault_paths
-
 logger = logging.getLogger(__name__)
 
 

@@ -3,8 +3,6 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 import frontmatter
 
 
@@ -12,6 +10,7 @@ def _import_module(vault_path_str="/test/vault"):
     """Import status_migrator with a custom VAULT_PATH."""
     with patch.dict(os.environ, {"VAULT_PATH": vault_path_str}):
         import importlib
+
         from shared import vault_paths
         importlib.reload(vault_paths)
         from app import status_migrator
@@ -197,7 +196,7 @@ class TestMigrateStatuses:
 
     def test_service_files_skipped(self, tmp_path):
         mod = _import_module(str(tmp_path))
-        ideas_dir = self._setup_vault(tmp_path, "hotels", {
+        self._setup_vault(tmp_path, "hotels", {
             "index.md": "inbox",
             "log.md": "processed",
             "real-idea.md": "Новая",

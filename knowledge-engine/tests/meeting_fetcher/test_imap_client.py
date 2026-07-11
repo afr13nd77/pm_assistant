@@ -14,18 +14,18 @@ Tests cover:
 import email
 import imaplib
 import socket
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.meeting_fetcher.imap_client import (
+    MSK,
     EmailAttachment,
     IMAPError,
-    MSK,
     _extract_txt_attachments,
     _parse_date,
     decode_str,
@@ -33,7 +33,6 @@ from app.meeting_fetcher.imap_client import (
     imap_utf7_encode,
     select_folder,
 )
-
 
 # ---------------------------------------------------------------------------
 # imap_utf7_encode
@@ -545,7 +544,7 @@ class TestFetchEmails:
     @patch("app.meeting_fetcher.imap_client.imaplib.IMAP4_SSL")
     def test_custom_folder_and_host(self, mock_ssl_class):
         """Custom folder, host and port parameters are passed correctly."""
-        mock_conn = self._setup_mock_imap(mock_ssl_class)
+        self._setup_mock_imap(mock_ssl_class)
 
         fetch_emails(
             "user@yandex.ru", "pass",

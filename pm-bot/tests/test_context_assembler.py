@@ -10,9 +10,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.context_assembler import (
-    ONE_LINER_BUDGET,
-    CORE_DIGEST_BUDGET,
-    EXTENDED_DIGEST_BUDGET,
     AssembledContext,
     _count_tokens,
     _infer_type_from_filepath,
@@ -22,7 +19,6 @@ from app.context_assembler import (
     assemble_context,
     enrich_creative_recall,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -331,7 +327,7 @@ class TestAssembleContextWaterfall:
             "DIGEST_CONTEXT_SOURCE": "llm_wiki",
             "VAULT_PATH": str(populated_vault),
         }):
-            result = assemble_context("travel ideas", domain="travel")
+            assemble_context("travel ideas", domain="travel")
 
         # touch should be called for core/extended digest entries
         if mock_ke.touch.call_count > 0:

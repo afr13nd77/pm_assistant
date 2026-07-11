@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # _build_html (simplified — relies on fontconfig, no @font-face embedding)
 # ---------------------------------------------------------------------------
@@ -49,8 +48,9 @@ class TestBuildHtml:
 
     def test_build_html_signature_unchanged(self):
         """Verify _build_html still accepts (body_html, css_path) signature."""
-        from app.pdf_exporter import _build_html
         import inspect
+
+        from app.pdf_exporter import _build_html
 
         sig = inspect.signature(_build_html)
         params = list(sig.parameters.keys())

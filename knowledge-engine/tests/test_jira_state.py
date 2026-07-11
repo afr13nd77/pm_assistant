@@ -1,10 +1,8 @@
 """Unit tests for jira_fetcher.state module."""
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
-
-import pytest
 
 from app.jira_fetcher.state import (
     STATE_FILENAME,
@@ -14,7 +12,6 @@ from app.jira_fetcher.state import (
     save,
     update_entry,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

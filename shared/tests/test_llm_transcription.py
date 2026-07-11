@@ -1,7 +1,8 @@
 """Tests for shared/llm_client.call_transcription()"""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 import shared.llm_client as llm_client
 

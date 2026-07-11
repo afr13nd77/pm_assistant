@@ -1,15 +1,16 @@
 """Тесты для shared/system_log.py."""
-import json
 import sqlite3
 
 import pytest
-from pathlib import Path
 
 from shared.system_log import (
-    init_db, log_event, query_log, get_stats, cleanup_old,
-    LoggedProcess, VALID_PROCESS_TYPES, VALID_STATUSES,
+    LoggedProcess,
+    cleanup_old,
+    get_stats,
+    init_db,
+    log_event,
+    query_log,
 )
-
 
 # ---------------------------------------------------------------------------
 # init_db
@@ -231,7 +232,7 @@ class TestCleanupOld:
         log_event("linter", "success", "fresh record", source="test", db_path=db_path)
 
         # Проверяем что обе записи на месте
-        result = query_log(period="30d", db_path=db_path)
+        query_log(period="30d", db_path=db_path)
         # Свежая запись попадёт в 30d, старая — нет (100 дней назад > 30 дней)
 
         # Удаляем записи старше 90 дней

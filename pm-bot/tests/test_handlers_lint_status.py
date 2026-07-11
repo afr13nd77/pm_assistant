@@ -1,10 +1,10 @@
 """Tests for /lint and /status Telegram command handlers."""
 
-import json
+
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import requests
-from unittest.mock import AsyncMock, MagicMock, patch
 
 
 def _make_update_context(chat_id=12345, args=None):
@@ -415,8 +415,9 @@ class TestHandleStatusAccessControl:
 class TestHandlerRegistration:
 
     def test_lint_handler_registered(self):
-        from app.handlers import get_handlers
         from telegram.ext import CommandHandler
+
+        from app.handlers import get_handlers
 
         handlers = get_handlers()
         command_names = set()
@@ -427,8 +428,9 @@ class TestHandlerRegistration:
         assert "lint" in command_names, "lint command not registered in get_handlers()"
 
     def test_status_handler_registered(self):
-        from app.handlers import get_handlers
         from telegram.ext import CommandHandler
+
+        from app.handlers import get_handlers
 
         handlers = get_handlers()
         command_names = set()

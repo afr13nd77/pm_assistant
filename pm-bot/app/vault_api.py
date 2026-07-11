@@ -1729,8 +1729,9 @@ def export_report_pdf(filename: str):
         content = filepath.read_text(encoding="utf-8")
 
         with LoggedProcess(process_type="pdf-export", source="pm-bot") as lp:
-            from app.pdf_exporter import render_pdf
             from pathlib import Path as _Path
+
+            from app.pdf_exporter import render_pdf
 
             pdf_bytes = render_pdf(content, _Path("/web/pdf-export.css"))
             lp.summary = f"PDF exported: {filename}"
@@ -3927,7 +3928,7 @@ def playground_chat(body: PlaygroundChatRequest):
         )
 
     # Check availability
-    from shared.llm_client import _is_provider_available, _call_provider, _load_llm_prefs
+    from shared.llm_client import _call_provider, _is_provider_available, _load_llm_prefs
     prefs = _load_llm_prefs()
 
     if not _is_provider_available(body.provider, prefs):

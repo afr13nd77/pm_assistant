@@ -89,7 +89,7 @@ def call(
 
     response = requests.post(
         f"{BASE_URL}/chat/completions",
-        json=payload,
+        json=payload,  # type: ignore[arg-type]
         headers=headers,
         timeout=timeout,
     )
@@ -245,7 +245,7 @@ def list_models(api_key: str | None, ttl_seconds: int = 3600) -> dict:
         cache_hit, ttl_seconds,
     )
 
-    if cache_hit:
+    if cache_hit and _models_cache is not None:
         result = dict(_models_cache)
         result["cached"] = True
         logger.info(
@@ -305,4 +305,4 @@ def list_models(api_key: str | None, ttl_seconds: int = 3600) -> dict:
 
 # Prevent pytest from collecting test_connection() as a test case
 # (it is a utility function, not a unit test)
-test_connection.__test__ = False
+test_connection.__test__ = False  # type: ignore[attr-defined]

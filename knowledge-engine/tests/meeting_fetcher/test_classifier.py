@@ -1,23 +1,21 @@
 """Unit tests for meeting_fetcher.classifier module."""
 
 import logging
-import pytest
-from datetime import datetime, date, timezone, timedelta
+from datetime import date, datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+
+import pytest
 
 from app.meeting_fetcher.classifier import (
+    DEFAULT_FOLDER,
+    TYPE_FOLDER_MAP,
     classify_type,
     extract_type,
-    route_protocol,
-    make_filename,
     make_daily_filename,
+    make_filename,
+    route_protocol,
     sanitize_filename,
-    MSK,
-    TYPE_FOLDER_MAP,
-    DEFAULT_FOLDER,
 )
-
 
 # ---------------------------------------------------------------------------
 # extract_type

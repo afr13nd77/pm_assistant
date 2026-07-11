@@ -6,7 +6,6 @@ Covers:
 - jira_key_sync public API surface
 """
 
-import pytest
 
 from app.jira_key_sync import (
     patch_daily_links,
@@ -15,7 +14,6 @@ from app.jira_key_sync import (
     sync_jira_keys,
 )
 from app.meeting_fetcher.fetcher import _inject_source_file
-
 
 # ---------------------------------------------------------------------------
 # TestInjectSourceFile

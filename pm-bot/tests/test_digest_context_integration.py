@@ -5,13 +5,9 @@ Tests T-23 (BL-147): context_assembler integration into LLM context points.
 
 from __future__ import annotations
 
-import os
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.context_assembler import AssembledContext
-
 
 # ---------------------------------------------------------------------------
 # _get_digest_context (claude_client.py)

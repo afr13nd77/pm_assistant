@@ -1,34 +1,32 @@
 """Tests for app.digest.* modules (paths, token_counter, templates, validator, generator)."""
 
-import os
-import importlib
 from pathlib import Path
 from unittest.mock import patch
 
 import frontmatter as fm_lib
 import pytest
 
-from app.digest.paths import (
-    wiki_to_llm_wiki,
-    llm_wiki_to_wiki,
-    llm_wiki_index,
-    ensure_llm_wiki_structure,
+from app.digest.generator import (
+    _compute_body_hash,
+    generate_bulk,
+    generate_digest,
+    regenerate_index,
 )
-from app.digest.token_counter import count_tokens, count_sections
+from app.digest.paths import (
+    ensure_llm_wiki_structure,
+    llm_wiki_index,
+    llm_wiki_to_wiki,
+    wiki_to_llm_wiki,
+)
 from app.digest.templates import (
+    ALL_TYPES,
+    ARTIFACT_TYPE_MAP,
     detect_type,
     get_required_fields,
     get_template,
-    ARTIFACT_TYPE_MAP,
-    ALL_TYPES,
 )
-from app.digest.validator import validate, ValidationResult
-from app.digest.generator import (
-    generate_digest,
-    generate_bulk,
-    regenerate_index,
-    _compute_body_hash,
-)
+from app.digest.token_counter import count_sections, count_tokens
+from app.digest.validator import ValidationResult, validate
 
 
 def _create_md_file(path: Path, metadata: dict, body: str = "Content here"):
@@ -434,7 +432,7 @@ class TestGenerateDigest:
     def test_generate_digest_skip_on_matching_hash(self, tmp_path):
         source_path = self._make_source(tmp_path)
         # Read the body that was actually written to compute matching hash.
-        meta, body = fm_lib.load(str(source_path)).metadata, fm_lib.load(str(source_path)).content
+        _meta, body = fm_lib.load(str(source_path)).metadata, fm_lib.load(str(source_path)).content
         existing_hash = _compute_body_hash(body)
 
         digest_path = tmp_path / "llm_wiki" / "domains" / "test" / "ideas" / "test-idea.md"
@@ -458,7 +456,7 @@ class TestGenerateDigest:
 
     def test_generate_digest_force_regenerates_despite_matching_hash(self, tmp_path):
         source_path = self._make_source(tmp_path)
-        meta, body = fm_lib.load(str(source_path)).metadata, fm_lib.load(str(source_path)).content
+        _meta, body = fm_lib.load(str(source_path)).metadata, fm_lib.load(str(source_path)).content
         existing_hash = _compute_body_hash(body)
 
         digest_path = tmp_path / "llm_wiki" / "domains" / "test" / "ideas" / "test-idea.md"

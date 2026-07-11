@@ -8,7 +8,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -274,7 +273,7 @@ class TestUpdateDomainIndex:
         assert "| File | Title | Status | Created |" in content
         assert "|------|-------|--------|---------|" in content
         # No data rows beyond header
-        lines = [l for l in content.splitlines() if l.startswith("| [[")]
+        lines = [line for line in content.splitlines() if line.startswith("| [[")]
         assert len(lines) == 0
 
     def test_update_domain_index_with_files(self, tmp_path):
@@ -463,7 +462,7 @@ class TestAppendDomainLog:
         dm.append_domain_log(
             "search-engine", "bugs", "CREATE", "bug-01.md", "filed"
         )
-        first_content = (
+        _first_content = (
             tmp_path / "wiki" / "domains" / "search-engine" / "bugs" / "log.md"
         ).read_text(encoding="utf-8")
 

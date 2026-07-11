@@ -126,7 +126,7 @@ def log_event(
             row_id = cursor.lastrowid
 
         logger.info("log_event: inserted id=%d for process_type=%s", row_id, process_type)
-        return row_id
+        return row_id if row_id is not None else -1
     except Exception as e:
         logger.error("log_event: failed to insert event: %s", e)
         return -1
@@ -330,8 +330,9 @@ class LoggedProcess:
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: object,
-    ) -> bool:
-        duration_ms = (time.monotonic_ns() - self._start) // 1_000_000
+    ) -> None:
+        start = self._start if self._start is not None else time.monotonic_ns()
+        duration_ms = (time.monotonic_ns() - start) // 1_000_000
         if exc_type is not None:
             self.status = "error"
             self.summary = str(exc_val)[:500]
@@ -351,4 +352,3 @@ class LoggedProcess:
             "LoggedProcess: finished process_type=%s status=%s duration_ms=%d",
             self.process_type, self.status, duration_ms,
         )
-        return False

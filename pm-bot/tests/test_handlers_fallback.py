@@ -13,7 +13,6 @@ import pytest
 
 from app.handlers import _fallback_idea_data, _fallback_jira_content
 
-
 # ---------------------------------------------------------------------------
 # Helper content format tests
 # ---------------------------------------------------------------------------

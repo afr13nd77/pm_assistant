@@ -11,12 +11,10 @@ Covers:
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from starlette.testclient import TestClient
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -28,9 +26,9 @@ def client(tmp_path):
     inbox = tmp_path / "Inbox"
     inbox.mkdir()
     # Import first so the module exists, then patch VAULT_PATH on it
-    from app.vault_api import app
     import app.vault_api as vault_api_module
     import shared.vault_paths as vault_paths_module
+    from app.vault_api import app
     with patch.object(vault_api_module, "VAULT_PATH", tmp_path), \
          patch.object(vault_paths_module, "VAULT_PATH", tmp_path):
         yield TestClient(app)

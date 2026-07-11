@@ -1,9 +1,6 @@
 """Unit tests for app.jira_fetcher.mapper."""
 
-import importlib
 import json
-
-import pytest
 
 import app.jira_fetcher.mapper as mapper_module
 from app.jira_fetcher.mapper import (
@@ -12,9 +9,7 @@ from app.jira_fetcher.mapper import (
     normalize_status,
     to_markdown,
     update_frontmatter,
-    LABEL_TO_DOMAIN,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helper

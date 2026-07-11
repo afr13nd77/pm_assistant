@@ -1,7 +1,6 @@
 """Digest generation pipeline for Layer 1' (llm_wiki/)."""
 
 import hashlib
-import json
 import logging
 import os
 import time
@@ -16,7 +15,7 @@ from shared.frontmatter_utils import read_frontmatter, update_frontmatter
 from shared.llm_client import call as llm_call
 
 from . import paths as digest_paths
-from .templates import detect_type, get_template, ARTIFACT_TYPE_MAP, CROSS_DOMAIN_TYPE_MAP
+from .templates import ARTIFACT_TYPE_MAP, detect_type, get_template
 from .token_counter import count_sections
 from .validator import validate
 
@@ -200,7 +199,7 @@ def generate_digest(
                 "; ".join(last_validation.errors),
             )
             feedback = (
-                f"Предыдущая попытка не прошла валидацию. Ошибки:\n"
+                "Предыдущая попытка не прошла валидацию. Ошибки:\n"
                 + "\n".join(f"- {e}" for e in last_validation.errors)
                 + "\n\nИсправь и сгенерируй заново."
             )
@@ -433,7 +432,7 @@ def regenerate_index(vault_path: str = "") -> dict:
         })
 
     tier_order = {"core": 0, "active": 1, "warm": 2, "cold": 3, "archive": 4}
-    entries.sort(key=lambda e: (tier_order.get(e["tier"], 5), -(e.get("relevance", 0))))
+    entries.sort(key=lambda ent: (tier_order.get(ent["tier"], 5), -(ent.get("relevance", 0))))
 
     now = datetime.now().isoformat(timespec="seconds")
     header = (
@@ -445,12 +444,12 @@ def regenerate_index(vault_path: str = "") -> dict:
         f"|---|---|---|---|---|---|---|\n"
     )
     rows = []
-    for e in entries:
-        rel = e.get("relevance", 1.0)
+    for entry in entries:
+        rel = entry.get("relevance", 1.0)
         rel_str = f"{rel:.2f}" if isinstance(rel, float) else str(rel)
         rows.append(
-            f"| {e['id']} | {e['type']} | {e['domain']} | {e['tier']} "
-            f"| {rel_str} | {e['updated']} | {e['one_liner']} |"
+            f"| {entry['id']} | {entry['type']} | {entry['domain']} | {entry['tier']} "
+            f"| {rel_str} | {entry['updated']} | {entry['one_liner']} |"
         )
 
     content = header + "\n".join(rows) + "\n"

@@ -5,9 +5,10 @@ Uses TestClient and a temporary vault directory, plus temporary prompts director
 """
 
 import os
-import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 @pytest.fixture
@@ -44,6 +45,7 @@ def client(vault_dir, prompts_dir):
     with patch("app.vault_api.VAULT_PATH", vault_dir), \
          patch("app.vault_api.Path.__fspath__", return_value=str(prompts_dir)):
         from fastapi.testclient import TestClient
+
         from app.vault_api import app
         yield TestClient(app)
 
@@ -55,6 +57,7 @@ def client_with_prompts(vault_dir, prompts_dir):
     # The simplest approach: patch the prompts_dir used inside get_settings/save_settings.
     with patch("app.vault_api.VAULT_PATH", vault_dir):
         from fastapi.testclient import TestClient
+
         from app.vault_api import app
         # We'll patch Path(__file__).parent to return prompts_dir.parent
         # But it's cleaner to just use the real endpoints and patch at a lower level.
@@ -75,6 +78,7 @@ class TestGetSettings:
                  "TRANSCRIPTS_INBOX": "/my/transcripts"
              }):
             from fastapi.testclient import TestClient
+
             from app.vault_api import app
             client = TestClient(app)
 
@@ -88,6 +92,7 @@ class TestGetSettings:
         """Should return default report_time and report_day."""
         with patch("app.vault_api.VAULT_PATH", vault_dir):
             from fastapi.testclient import TestClient
+
             from app.vault_api import app
             client = TestClient(app)
 
@@ -102,6 +107,7 @@ class TestGetSettings:
         """Should return empty roadmap labels by default."""
         with patch("app.vault_api.VAULT_PATH", vault_dir):
             from fastapi.testclient import TestClient
+
             from app.vault_api import app
             client = TestClient(app)
 
@@ -115,7 +121,7 @@ class TestGetSettings:
     def test_loads_prompt_files(self, vault_dir, prompts_dir):
         """Should load all .txt files from prompts directory."""
         with patch("app.vault_api.VAULT_PATH", vault_dir), \
-             patch("app.vault_api.Path") as MockPath:
+             patch("app.vault_api.Path"):
             # Instead of complex mocking, use the real endpoint and check
             # that prompts are returned. We need to ensure the prompts dir
             # resolves correctly.
@@ -123,9 +129,9 @@ class TestGetSettings:
 
         # Simpler approach: directly test with the real prompts dir
         import app.vault_api as vault_api_module
-        original_file = vault_api_module.__file__
         with patch("app.vault_api.VAULT_PATH", vault_dir):
             from fastapi.testclient import TestClient
+
             from app.vault_api import app
 
             # Temporarily make the prompts dir accessible
@@ -148,6 +154,7 @@ class TestGetSettings:
         """Should return all expected keys in the response."""
         with patch("app.vault_api.VAULT_PATH", vault_dir):
             from fastapi.testclient import TestClient
+
             from app.vault_api import app
             client = TestClient(app)
 
@@ -185,6 +192,7 @@ class TestSaveSettings:
 
         with patch("app.vault_api.VAULT_PATH", vault_dir):
             from fastapi.testclient import TestClient
+
             from app.vault_api import app
             client = TestClient(app)
 
@@ -218,6 +226,7 @@ class TestSaveSettings:
         """Should skip prompt files that don't exist."""
         with patch("app.vault_api.VAULT_PATH", vault_dir):
             from fastapi.testclient import TestClient
+
             from app.vault_api import app
             client = TestClient(app)
 
@@ -237,6 +246,7 @@ class TestSaveSettings:
         """Should reject prompt names containing '..'."""
         with patch("app.vault_api.VAULT_PATH", vault_dir):
             from fastapi.testclient import TestClient
+
             from app.vault_api import app
             client = TestClient(app)
 
@@ -255,6 +265,7 @@ class TestSaveSettings:
         """Should reject prompt names containing forward slashes."""
         with patch("app.vault_api.VAULT_PATH", vault_dir):
             from fastapi.testclient import TestClient
+
             from app.vault_api import app
             client = TestClient(app)
 
@@ -273,6 +284,7 @@ class TestSaveSettings:
         """Should reject prompt names containing backslashes."""
         with patch("app.vault_api.VAULT_PATH", vault_dir):
             from fastapi.testclient import TestClient
+
             from app.vault_api import app
             client = TestClient(app)
 
@@ -291,6 +303,7 @@ class TestSaveSettings:
         """Should return 0 saved when prompts dict is empty."""
         with patch("app.vault_api.VAULT_PATH", vault_dir):
             from fastapi.testclient import TestClient
+
             from app.vault_api import app
             client = TestClient(app)
 
@@ -308,6 +321,7 @@ class TestSaveSettings:
         """Should return correct response format with status and saved_prompts."""
         with patch("app.vault_api.VAULT_PATH", vault_dir):
             from fastapi.testclient import TestClient
+
             from app.vault_api import app
             client = TestClient(app)
 
@@ -348,6 +362,7 @@ class TestRegenerateReport:
              patch("app.reporter.generate_weekly_report", return_value=mock_report_md), \
              patch("app.obsidian_writer.write_report", return_value=mock_filepath):
             from fastapi.testclient import TestClient
+
             from app.vault_api import app
             client = TestClient(app)
 
@@ -366,6 +381,7 @@ class TestRegenerateReport:
                  side_effect=RuntimeError("Claude API unavailable"),
              ):
             from fastapi.testclient import TestClient
+
             from app.vault_api import app
             client = TestClient(app)
 

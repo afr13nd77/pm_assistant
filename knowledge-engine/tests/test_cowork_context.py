@@ -11,20 +11,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
 
 import frontmatter as fm_lib
-import pytest
 
 from app.cowork_context import (
-    _collect_activity_log,
     _collect_active_epics,
+    _collect_activity_log,
     _collect_daily_logs,
     _collect_open_tasks,
     _collect_recent_decisions,
     generate_cowork_session,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helper

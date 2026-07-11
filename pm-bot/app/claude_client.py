@@ -150,7 +150,7 @@ def _get_digest_context(raw_text: str) -> str:
     Returns empty string if DIGEST_CONTEXT_SOURCE=wiki (kill switch, default).
     """
     try:
-        from app.context_assembler import assemble_context, AssembledContext
+        from app.context_assembler import assemble_context
 
         ctx = assemble_context(query=raw_text, domain="")
 

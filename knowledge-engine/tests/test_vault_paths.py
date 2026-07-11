@@ -1,9 +1,9 @@
 """Tests for vault_paths module."""
 import os
 from datetime import date
-import pytest
-from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 
 def _import_vault_paths(vault_path_str="/test/vault"):
@@ -11,6 +11,7 @@ def _import_vault_paths(vault_path_str="/test/vault"):
     with patch.dict(os.environ, {"VAULT_PATH": vault_path_str}):
         # Reload module to pick up new env var
         import importlib
+
         from shared import vault_paths
         importlib.reload(vault_paths)
         return vault_paths
@@ -195,7 +196,6 @@ class TestNextDailyFilename:
     def test_three_digit_padding(self, tmp_path):
         """Sequence number is zero-padded to 3 digits."""
         vp = _import_vault_paths(str(tmp_path))
-        today_str = date.today().strftime("%Y.%m.%d")
         result = vp.next_daily_filename(tmp_path)
         # First file: 001
         assert "-001-" in result

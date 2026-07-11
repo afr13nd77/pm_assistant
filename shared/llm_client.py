@@ -241,15 +241,16 @@ def _resolve_chain(group: str, prefs: dict) -> list[dict]:
         logger.warning("_resolve_chain: invalid chain for %s, using default", group)
         chain = ["claude"]
 
-    steps = [_normalize_step(el, prefs) for el in chain]
-    steps = [s for s in steps if s is not None and s["provider"] in ("claude", "ollama", "openrouter")]
+    raw_steps = [_normalize_step(el, prefs) for el in chain]
+    steps: list[dict] = [s for s in raw_steps if s is not None and s["provider"] in ("claude", "ollama", "openrouter")]
 
     if not steps:
         logger.warning(
             "_resolve_chain: no valid providers in chain for %s, falling back to claude",
             group,
         )
-        steps = [_normalize_step("claude", prefs)]
+        fallback = _normalize_step("claude", prefs)
+        steps = [fallback] if fallback is not None else [{"provider": "claude", "model": ""}]
 
     logger.info(
         "_resolve_chain: group=%s, chain=%s",

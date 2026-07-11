@@ -177,8 +177,8 @@ class DigestHandler(FileSystemEventHandler):
             logger.debug(f"DigestHandler: draft status, skipping: {path.name}")
             return False
 
-        from .digest.paths import wiki_to_llm_wiki
         from .digest.generator import _compute_body_hash
+        from .digest.paths import wiki_to_llm_wiki
 
         vault_root = Path(self.vault_path)
         try:
@@ -206,7 +206,7 @@ class DigestHandler(FileSystemEventHandler):
             return
         try:
             from .digest.generator import generate_digest
-            result = generate_digest(str(path), self.vault_path, force=False)
+            result = generate_digest(path, self.vault_path, force=False)
             logger.info(f"DigestHandler: digest generated for {path.name}, status={result.get('status')}")
         except Exception as e:
             logger.warning(f"DigestHandler: generation failed for {path.name}: {e}")

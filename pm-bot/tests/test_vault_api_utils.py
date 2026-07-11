@@ -2,10 +2,8 @@
 _extract_section, _parse_tags, _safe_int, _scan_domain_folders, _domain_from_path.
 """
 
-import pytest
 from pathlib import Path
 from unittest.mock import patch
-
 
 # ---------------------------------------------------------------------------
 # parse_note

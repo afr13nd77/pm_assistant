@@ -14,9 +14,8 @@ Safety: ONLY modifies body text (after YAML frontmatter). Never touches frontmat
 """
 
 import re
-import os
-from pathlib import Path
 from collections import defaultdict
+from pathlib import Path
 
 VAULT = Path(r"i:/Work/Sutochno_ru/08 project hotels claude")
 WIKI = VAULT / "wiki"
@@ -102,7 +101,7 @@ def resolve_link(target, display, source_file, meeting_stems, meeting_date_prefi
                  wiki_stems, ideas_index, stats):
     """Resolve a single broken wikilink. Returns the replacement string or None if no change."""
 
-    original_full = f'[[{target}|{display}]]' if display else f'[[{target}]]'
+    _original_full = f'[[{target}|{display}]]' if display else f'[[{target}]]'
 
     # Category 1: raw/inbound/meeting-notes/SLUG
     if target.startswith('raw/inbound/meeting-notes/'):
@@ -326,7 +325,7 @@ def main():
     ideas_index = build_ideas_stem_index()
     print(f"  Ideas: {len(ideas_index)} files")
 
-    print(f"\nScanning wiki files (excluding raw/)...")
+    print("\nScanning wiki files (excluding raw/)...")
 
     stats = defaultdict(int)
     files_scanned = 0

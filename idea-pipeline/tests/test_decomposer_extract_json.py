@@ -5,9 +5,8 @@ import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from idea_pipeline.config import AgentConfig
 from idea_pipeline.agents.decomposer import DecomposerAgent
+from idea_pipeline.config import AgentConfig
 
 
 @pytest.fixture

@@ -1,7 +1,6 @@
 """Token counting via tiktoken cl100k_base tokenizer."""
 
 import logging
-import re
 
 import tiktoken
 

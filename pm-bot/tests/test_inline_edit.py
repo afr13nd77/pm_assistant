@@ -1,10 +1,8 @@
 """Unit tests for inline editing: _find_artifact_file, PATCH /artifact/{filename}/field, PATCH /artifact/{filename}/body."""
 
-import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-import json
+from unittest.mock import patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # _find_artifact_file
@@ -85,7 +83,7 @@ class TestUpdateField:
     @pytest.fixture
     def field_client(self, tmp_path):
         """TestClient with a mock artifact file."""
-        from app.vault_api import app, _cache
+        from app.vault_api import _cache, app
 
         idea_dir = tmp_path / "wiki" / "domains" / "general" / "ideas"
         idea_dir.mkdir(parents=True)
@@ -160,7 +158,7 @@ class TestUpdateBody:
     @pytest.fixture
     def body_client(self, tmp_path):
         """TestClient with a mock artifact file."""
-        from app.vault_api import app, _cache
+        from app.vault_api import _cache, app
 
         idea_dir = tmp_path / "wiki" / "domains" / "general" / "ideas"
         idea_dir.mkdir(parents=True)

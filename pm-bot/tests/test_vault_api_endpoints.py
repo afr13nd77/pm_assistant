@@ -10,10 +10,11 @@ Tests the domain-based vault structure:
 """
 
 import os
-import pytest
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
+
+import pytest
 
 
 def _make_domain_dir(vault_dir: Path, domain: str, artifact_type: str) -> Path:
@@ -51,7 +52,8 @@ def client(vault_dir):
          patch("app.vault_api.all_domains", return_value=["content", "payments"]), \
          patch("app.vault_api.wiki_domain_dir", side_effect=lambda domain, at: vault_dir / "wiki" / "domains" / domain / at):
         from fastapi.testclient import TestClient
-        from app.vault_api import app, _cache
+
+        from app.vault_api import _cache, app
         _cache.invalidate()
         yield TestClient(app)
 
@@ -71,7 +73,8 @@ class TestDomainsEndpoint:
              patch("app.vault_api.all_domains", return_value=[]), \
              patch("app.vault_api.wiki_domain_dir", side_effect=lambda domain, at: vault_dir / "wiki" / "domains" / domain / at):
             from fastapi.testclient import TestClient
-            from app.vault_api import app, _cache
+
+            from app.vault_api import _cache, app
             _cache.invalidate()
             tc = TestClient(app)
             resp = tc.get("/api/v1/domains")
@@ -119,7 +122,6 @@ class TestDomainsEndpoint:
 
     def test_domains_last_updated_is_correct(self, client, vault_dir):
         """last_updated should reflect the most recently modified file."""
-        import time
 
         ideas = vault_dir / "wiki" / "domains" / "content" / "ideas"
         older = ideas / "2026-04-20-old.md"
@@ -675,11 +677,10 @@ class TestGetReportByFilenameEndpoint:
 
     def test_filename_with_path_separator_slash(self, client, vault_dir):
         """Should return 400 when filename contains forward slash."""
-        resp = client.get("/api/v1/reports/..%2F..%2Fetc%2Fpasswd.md")
+        client.get("/api/v1/reports/..%2F..%2Fetc%2Fpasswd.md")
         # URL-encoded slash — FastAPI may or may not decode it depending on version,
         # but a direct slash in the path would be routed differently.
         # Test the direct validation logic via a filename that contains backslash.
-        pass
 
     def test_filename_with_backslash(self, client, vault_dir):
         """Should return 400 when filename contains backslash (path traversal attempt)."""

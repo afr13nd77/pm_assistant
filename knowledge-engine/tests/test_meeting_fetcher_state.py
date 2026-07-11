@@ -1,15 +1,11 @@
 """Unit tests for meeting_fetcher.state module."""
 
 import json
-import os
-import tempfile
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from app.meeting_fetcher.state import State, STATE_FILENAME, _empty_state
-
+from app.meeting_fetcher.state import STATE_FILENAME, State, _empty_state
 
 # ---------------------------------------------------------------------------
 # Fixtures

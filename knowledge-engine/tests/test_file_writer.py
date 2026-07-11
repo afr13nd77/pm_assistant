@@ -2,16 +2,15 @@
 import multiprocessing
 import os
 import sys
+
 import pytest
-from pathlib import Path
-from unittest.mock import patch
 
 from shared.file_writer import (
-    atomic_write,
+    FileLockTimeout,
     append_section,
+    atomic_write,
     file_lock,
     locked_append,
-    FileLockTimeout,
 )
 
 

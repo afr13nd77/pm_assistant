@@ -70,8 +70,8 @@ def validate(
         errors.append("changelog section is empty")
 
     if core_digest.strip():
-        lines = [l for l in core_digest.strip().split("\n") if l.strip()]
-        kv_lines = sum(1 for l in lines if l.strip().startswith("- "))
+        lines = [ln for ln in core_digest.strip().split("\n") if ln.strip()]
+        kv_lines = sum(1 for ln in lines if ln.strip().startswith("- "))
         if lines and kv_lines / len(lines) < 0.7:
             errors.append(
                 f"core_digest not in key-value format: "

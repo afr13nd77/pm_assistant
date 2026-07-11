@@ -9,18 +9,18 @@ These tests verify the new contract: enqueue + dedup gate + fast LLM-free return
 tested directly since they remain in the module for reuse by the Process worker.
 """
 
-from datetime import datetime, timezone, timedelta
-from unittest.mock import patch, MagicMock
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.meeting_fetcher.fetcher import (
-    fetch_new_meetings,
-    save_raw_fallback,
-    _unique_filepath,
-    _notify,
     _error_result,
     _is_daily,
+    _notify,
+    _unique_filepath,
+    fetch_new_meetings,
+    save_raw_fallback,
 )
 from app.meeting_fetcher.imap_client import EmailAttachment, IMAPError
 from app.meeting_fetcher.state import State

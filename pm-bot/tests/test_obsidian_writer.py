@@ -3,12 +3,10 @@ write_meeting, write_jira_draft, write_report,
 _load_idea_template, _format_tag_yaml, _fill_frontmatter, _fill_title, _fill_block1.
 """
 
-import pytest
 import re
+from contextlib import contextmanager
 from datetime import date
-from pathlib import Path
 from unittest.mock import patch
-
 
 # ---------------------------------------------------------------------------
 # _parse_domain
@@ -679,7 +677,7 @@ class TestLoadIdeaTemplate:
         assert "# {title}" in result
 
     def test_falls_back_when_file_missing(self, tmp_path):
-        from app.obsidian_writer import _load_idea_template, _FALLBACK_TEMPLATE
+        from app.obsidian_writer import _FALLBACK_TEMPLATE, _load_idea_template
 
         with _multi_patch_vault(tmp_path):
             result = _load_idea_template()
@@ -834,8 +832,6 @@ class TestFillBlock1:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-from contextlib import contextmanager
 
 @contextmanager
 def _multi_patch_vault(tmp_path):

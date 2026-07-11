@@ -1,13 +1,11 @@
 """Tests for app.enrichment_reminder module."""
 
-import pytest
 
 from app.enrichment_reminder import (
-    _pluralize_field,
-    _get_empty_sections,
     _build_reminder_message,
+    _get_empty_sections,
+    _pluralize_field,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers for building realistic markdown bodies

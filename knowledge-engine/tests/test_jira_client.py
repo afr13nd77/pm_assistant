@@ -1,7 +1,6 @@
 """Unit tests for app.jira_fetcher.client."""
 
-import time
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
@@ -13,7 +12,6 @@ from app.jira_fetcher.client import (
     get_project_issue_types,
     search,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

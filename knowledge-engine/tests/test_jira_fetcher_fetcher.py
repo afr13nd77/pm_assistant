@@ -1,14 +1,11 @@
 """Unit tests for app.jira_fetcher.fetcher (sync orchestrator)."""
 
-import os
-from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import patch
 
 import pytest
 
 from app.jira_fetcher.client import JiraClientError
-from app.jira_fetcher.fetcher import DEFAULT_JQL, _error_result, import_single_issue, sync
-
+from app.jira_fetcher.fetcher import _error_result, import_single_issue, sync
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
@@ -696,7 +693,7 @@ class TestSyncArtifactTypeRouting:
             patch("app.jira_fetcher.fetcher.search") as mock_search,
             patch("app.jira_fetcher.fetcher.sync_state") as mock_sync_state,
             patch("app.jira_fetcher.fetcher.vault_paths") as mock_vault_paths,
-            patch("app.jira_fetcher.fetcher.atomic_write") as mock_atomic_write,
+            patch("app.jira_fetcher.fetcher.atomic_write"),
             patch("app.jira_fetcher.fetcher.update_domain_index"),
             patch("app.jira_fetcher.fetcher.append_domain_log"),
             patch("app.jira_fetcher.fetcher.send_telegram"),

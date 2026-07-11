@@ -1,10 +1,9 @@
 """Unit tests for claude_client (knowledge-engine + pm-bot)."""
 
 import logging
-import os
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 

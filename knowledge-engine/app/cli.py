@@ -256,8 +256,9 @@ def main():
         sys.exit(0 if result["status"] == "ok" else (2 if result["status"] == "skip" else 1))
 
     elif args.command == "synthesize":
-        from .synthesizer import synthesize
         from shared.system_log import LoggedProcess
+
+        from .synthesizer import synthesize
         with LoggedProcess("synthesis", source="ke-cron") as lp:
             result = synthesize(vault_path, notify=args.notify, min_ideas=args.min_ideas, dry_run=args.dry_run)
             status_val = result.get("status", "unknown")
@@ -281,8 +282,9 @@ def main():
             _print_table(index)
 
     elif args.command == "fetch-meetings":
-        from .meeting_fetcher.fetcher import fetch_new_meetings
         from shared.system_log import LoggedProcess
+
+        from .meeting_fetcher.fetcher import fetch_new_meetings
         with LoggedProcess("fetch-meetings", source="ke-cron") as lp:
             result = fetch_new_meetings(vault_path, notify=args.notify, dry_run=args.dry_run)
             lp.summary = f"Fetch meetings: status={result.get('status', 'unknown')}"
@@ -943,9 +945,10 @@ def main():
     elif args.command == "cowork-context":
         from shared import vault_paths as _vp
         _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
+        from shared.system_log import LoggedProcess
+
         from .cowork_context import generate_cowork_session
         from .digest.generator import regenerate_index
-        from shared.system_log import LoggedProcess
         logger.info(f"cowork-context: starting, vault={vault_path}")
         with LoggedProcess("cowork-context", source="ke-cron") as lp:
             # Step 1: update _index.md

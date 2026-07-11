@@ -2,10 +2,10 @@
 _extract_search_keywords, _SearchIndex.query, and GET /api/v1/search endpoint.
 """
 
-import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # _extract_search_keywords
@@ -63,7 +63,7 @@ def _make_index(entries_data):
 
     entries_data is a list of dicts with keys matching _SearchEntry fields.
     """
-    from app.vault_api import _SearchIndex, _SearchEntry
+    from app.vault_api import _SearchEntry, _SearchIndex
 
     idx = _SearchIndex()
     for data in entries_data:
@@ -242,7 +242,7 @@ class TestSearchEndpoint:
     @pytest.fixture
     def search_client(self):
         """TestClient with a pre-built search index."""
-        from app.vault_api import _SearchIndex, _SearchEntry, app, _cache
+        from app.vault_api import _cache, _SearchEntry, _SearchIndex, app
 
         idx = _SearchIndex()
         idx.entries.append(_SearchEntry(

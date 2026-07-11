@@ -1,10 +1,11 @@
 """Tests for shared/openrouter_client.py"""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 import shared.openrouter_client as openrouter_client
-from shared.openrouter_client import call, test_connection, list_models, AVAILABLE_MODELS
+from shared.openrouter_client import AVAILABLE_MODELS, call, list_models, test_connection
 
 
 class TestCall:
@@ -180,6 +181,7 @@ class TestListModels:
         """AC-02: a warning with error detail is written to the log when the
         live fetch fails and the fallback list is returned."""
         import logging
+
         import requests as req
 
         with caplog.at_level(logging.WARNING, logger="shared.openrouter_client"):

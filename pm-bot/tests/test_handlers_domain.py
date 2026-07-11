@@ -1,9 +1,8 @@
 """Tests for /domain and /rebuild_index Telegram command handlers."""
 
-import pytest
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 import requests
 
 
@@ -229,8 +228,9 @@ class TestAccessControl:
 class TestHandlersRegistered:
 
     def test_handlers_registered(self):
-        from app.handlers import get_handlers
         from telegram.ext import CommandHandler
+
+        from app.handlers import get_handlers
 
         handlers = get_handlers()
         command_names = set()

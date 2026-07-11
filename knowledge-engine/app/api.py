@@ -1045,10 +1045,10 @@ def cowork_context():
     """Обновить оба llm_wiki файла: _index.md и _cowork-session.md."""
     logger.info("API cowork-context: starting")
     try:
+        from shared.system_log import LoggedProcess
+
         from .cowork_context import generate_cowork_session
         from .digest.generator import regenerate_index
-
-        from shared.system_log import LoggedProcess
 
         with LoggedProcess("cowork-context", source="ke-api") as lp:
             index_result = regenerate_index(vault_path=_vault_path_str())

@@ -1,10 +1,10 @@
 """Tests for /jira_sync Telegram command handler."""
 
-import json
+
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import requests
-from unittest.mock import AsyncMock, MagicMock, patch
 
 
 def _make_update_context(chat_id=12345, args=None):
@@ -134,8 +134,9 @@ class TestJiraSyncAccessControl:
 class TestJiraSyncRegistered:
 
     def test_jira_sync_handler_registered(self):
-        from app.handlers import get_handlers
         from telegram.ext import CommandHandler
+
+        from app.handlers import get_handlers
 
         handlers = get_handlers()
         command_names = set()

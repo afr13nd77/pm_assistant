@@ -146,6 +146,7 @@ class TestQueueStatus:
     def test_queue_status_lists_pending_unit(self, tmp_path):
         """A pending unit (via enqueue) shows up in queue-status json output."""
         import datetime
+
         from shared.meeting_queue import enqueue
         enqueue(str(tmp_path), raw_text="тест", source="local",
                 subject="t", date=datetime.datetime.now(), source_filename="a.txt")

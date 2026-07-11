@@ -1,13 +1,10 @@
 """Tests for artifact_extractor module."""
 
 import importlib
-import json
 import os
 import textwrap
 from pathlib import Path
 from unittest.mock import patch
-
-import pytest
 
 # We need to reload vault_paths with a temp VAULT_PATH before importing
 # artifact_extractor, since vault_paths.VAULT_PATH is set at import time.
