@@ -276,13 +276,26 @@ def sync(
             wiki_dir = vault_paths.wiki_domain_dir(domain, art_type)
             wiki_path = wiki_dir / f"{key}.md"
 
-            existing_content = ""
             if wiki_path.exists():
                 existing_content = wiki_path.read_text(encoding="utf-8")
-
-            new_content = update_frontmatter(existing_content, issue, jira_url)
-            atomic_write(wiki_path, new_content)
-            logger.info("sync: updated wiki file %s", wiki_path)
+                new_content = update_frontmatter(existing_content, issue, jira_url)
+                atomic_write(wiki_path, new_content)
+                logger.info("sync: updated wiki file %s", wiki_path)
+            else:
+                found = _find_vault_file_by_jira_key(domain, key, {art_type, "tasks", "epics"})
+                if found is not None:
+                    synced_now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+                    frontmatter_utils.update_frontmatter(found, {
+                        "status": normalize_status(issue["fields"]["status"]["name"]),
+                        "synced_at": synced_now,
+                        "updated_at": issue["fields"].get("updated", ""),
+                    })
+                    wiki_path = found
+                    logger.info("sync: updated custom-named file via fallback: %s", found)
+                else:
+                    new_content = update_frontmatter("", issue, jira_url)
+                    atomic_write(wiki_path, new_content)
+                    logger.info("sync: created new wiki file %s (no fallback match)", wiki_path)
 
             # Do NOT touch raw/ (raw is immutable first snapshot)
 
@@ -393,6 +406,12 @@ def sync(
             for try_art in {art_type, "tasks", "epics"}:
                 wiki_dir = vault_paths.wiki_domain_dir(domain, try_art)
                 wiki_path = wiki_dir / f"{key}.md"
+
+                if not wiki_path.exists():
+                    found = _find_vault_file_by_jira_key(domain, key, (try_art,))
+                    if found:
+                        wiki_path = found
+
                 if wiki_path.exists():
                     existing = wiki_path.read_text(encoding="utf-8")
                     updated_content = re.sub(
@@ -538,11 +557,28 @@ def import_single_issue(key: str, vault_path: str) -> dict:
     wiki_dir = vault_paths.wiki_domain_dir(domain, art_type)
     wiki_path = wiki_dir / f"{key}.md"
     is_update = wiki_path.exists()
+
+    if not is_update:
+        found = _find_vault_file_by_jira_key(domain, key, {art_type, "tasks", "epics"})
+        if found:
+            wiki_path = found
+            is_update = True
+            logger.info("import_single_issue: found custom-named file via fallback: %s", found)
+
     action = "UPDATE" if is_update else "CREATE"
 
     if is_update:
-        existing_content = wiki_path.read_text(encoding="utf-8")
-        md_content = update_frontmatter(existing_content, issue, jira_url)
+        if wiki_path.name == f"{key}.md":
+            existing_content = wiki_path.read_text(encoding="utf-8")
+            md_content = update_frontmatter(existing_content, issue, jira_url)
+        else:
+            synced_now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            frontmatter_utils.update_frontmatter(wiki_path, {
+                "status": status_str,
+                "synced_at": synced_now,
+            })
+            md_content = wiki_path.read_text(encoding="utf-8")
+            logger.info("import_single_issue: updated custom-named file via fallback: %s", wiki_path)
 
     # Write to raw/ (only for new issues)
     if not is_update:
@@ -550,9 +586,11 @@ def import_single_issue(key: str, vault_path: str) -> dict:
         atomic_write(raw_path, md_content)
         logger.info("import_single_issue: wrote raw file %s", raw_path)
 
-    # Write to wiki/
-    atomic_write(wiki_path, md_content)
-    logger.info("import_single_issue: wrote wiki file %s", wiki_path)
+    # Write to wiki/ (skip for custom-named files — already updated via frontmatter_utils)
+    is_custom_named = is_update and wiki_path.name != f"{key}.md"
+    if not is_custom_named:
+        atomic_write(wiki_path, md_content)
+        logger.info("import_single_issue: wrote wiki file %s", wiki_path)
 
     # Update domain index and log
     try:
@@ -625,6 +663,67 @@ def _find_vault_file(vault_path: str, filename: str) -> Path | None:
             return found
 
     logger.info("_find_vault_file: file not found filename=%s vault_path=%s", filename, vault_path)
+    return None
+
+
+def _find_vault_file_by_jira_key(
+    domain: str,
+    jira_key: str,
+    artifact_types: "set[str] | tuple[str, ...] | list[str]",
+) -> "Path | None":
+    """Search for a vault file that has a matching ``jira_key`` in its YAML frontmatter.
+
+    Iterates over ``*.md`` files in each artifact-type directory for the given
+    *domain* and returns the first file whose frontmatter ``jira_key`` field
+    equals *jira_key*.
+
+    Args:
+        domain:         Domain name (e.g. ``"hotels"``).
+        jira_key:       Jira issue key to match (e.g. ``"TMPL-16260"``).
+        artifact_types: Set/tuple/list of artifact types to scan (e.g.
+                        ``{"epics", "tasks"}``).
+
+    Returns:
+        :class:`~pathlib.Path` to the matching file, or ``None`` if no match
+        is found.
+    """
+    logger.info(
+        "_find_vault_file_by_jira_key: searching jira_key=%s domain=%s artifact_types=%s",
+        jira_key, domain, list(artifact_types),
+    )
+    for art_type in artifact_types:
+        try:
+            wiki_dir = vault_paths.wiki_domain_dir(domain, art_type)
+        except ValueError:
+            logger.warning(
+                "_find_vault_file_by_jira_key: invalid artifact_type=%s, skipping", art_type,
+            )
+            continue
+        if not wiki_dir.exists():
+            continue
+        md_files = list(wiki_dir.glob("*.md"))
+        logger.debug(
+            "_find_vault_file_by_jira_key: scanning %d files in %s", len(md_files), wiki_dir,
+        )
+        for md_file in md_files:
+            try:
+                fm, _ = frontmatter_utils.read_frontmatter(md_file)
+                if fm.get("jira_key") == jira_key:
+                    logger.info(
+                        "_find_vault_file_by_jira_key: found %s for jira_key=%s",
+                        md_file, jira_key,
+                    )
+                    return md_file
+            except Exception as exc:
+                logger.warning(
+                    "_find_vault_file_by_jira_key: failed to read frontmatter from %s: %s",
+                    md_file, exc,
+                )
+                continue
+
+    logger.info(
+        "_find_vault_file_by_jira_key: not found jira_key=%s domain=%s", jira_key, domain,
+    )
     return None
 
 

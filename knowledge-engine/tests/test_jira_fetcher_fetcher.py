@@ -905,7 +905,7 @@ class TestImportSingleIssueRouting:
         result = import_single_issue("GO-EPC-1", str(tmp_path))
 
         assert result["status"] == "ok"
-        mock_vault_paths.wiki_domain_dir.assert_called_with("general", "epics")
+        mock_vault_paths.wiki_domain_dir.assert_any_call("general", "epics")
 
     @patch("app.jira_fetcher.fetcher.send_telegram", create=True)
     @patch("app.jira_fetcher.fetcher.sync_state")
@@ -943,7 +943,7 @@ class TestImportSingleIssueRouting:
         result = import_single_issue("GO-BUG-1", str(tmp_path))
 
         assert result["status"] == "ok"
-        mock_vault_paths.wiki_domain_dir.assert_called_with("general", "bugs")
+        mock_vault_paths.wiki_domain_dir.assert_any_call("general", "bugs")
 
     @patch("app.jira_fetcher.fetcher.send_telegram", create=True)
     @patch("app.jira_fetcher.fetcher.sync_state")
@@ -981,7 +981,7 @@ class TestImportSingleIssueRouting:
         result = import_single_issue("GO-UST-1", str(tmp_path))
 
         assert result["status"] == "ok"
-        mock_vault_paths.wiki_domain_dir.assert_called_with("general", "userstories")
+        mock_vault_paths.wiki_domain_dir.assert_any_call("general", "userstories")
 
     @patch("app.jira_fetcher.fetcher.send_telegram", create=True)
     @patch("app.jira_fetcher.fetcher.sync_state")
@@ -1019,4 +1019,4 @@ class TestImportSingleIssueRouting:
         result = import_single_issue("GO-TSK-1", str(tmp_path))
 
         assert result["status"] == "ok"
-        mock_vault_paths.wiki_domain_dir.assert_called_with("general", "tasks")
+        mock_vault_paths.wiki_domain_dir.assert_any_call("general", "tasks")

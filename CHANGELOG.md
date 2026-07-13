@@ -5,6 +5,19 @@
 
 ---
 
+## 13.07.2026 — fix: Jira sync не обновляет кастомные vault-файлы (BUG-023, BL-160)
+
+Jira sync не обновлял статус vault-файлов с кастомными именами (E-15-*.md, E-18-*.md), созданных через PM Assistant. Sync искал файлы только по имени `{JIRA_KEY}.md`, игнорируя файлы с `jira_key` в frontmatter.
+
+### knowledge-engine 1.15.1
+- **fetcher.py**: новая функция `_find_vault_file_by_jira_key(domain, jira_key, artifact_types)` — fallback-поиск vault-файла по полю `jira_key` в YAML frontmatter
+- **fetcher.py** (секция 6 — UPDATED): если `{KEY}.md` не существует → fallback поиск → точечное обновление через `frontmatter_utils.update_frontmatter` (status, synced_at, updated_at) без полного rewrite
+- **fetcher.py** (секция 7 — CLOSED): аналогичный fallback перед regex-заменой status
+- **fetcher.py** (`import_single_issue`): fallback предотвращает создание дубликатов при повторном импорте
+- **tests/test_jira_sync_custom_files.py** (новый): 11 unit-тестов (find, updated fallback, closed fallback, import fallback, regression)
+
+---
+
 ## 11.07.2026 — feat: Экспорт markdown-отчётов в PDF (BL-159)
 
 Экспорт wiki-отчётов в PDF с полной стилизацией. Серверный рендеринг через WeasyPrint + markdown-it-py. Шрифт Inter (кириллица + латиница), монохромные emoji (Noto Emoji), таблицы с рамками, цветные заголовки.

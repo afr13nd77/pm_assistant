@@ -1,7 +1,7 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.18.0 / knowledge-engine 1.15.0 / idea-pipeline 1.1.2 / web-ui 1.26.1 / shared 0.7.1
-**Обновлён:** 11.07.2026 (BL-159 реализован)
+**Версии:** pm-bot 1.18.0 / knowledge-engine 1.15.1 / idea-pipeline 1.1.2 / web-ui 1.26.1 / shared 0.7.1
+**Обновлён:** 13.07.2026 (BL-160 реализован)
 
 ---
 
@@ -277,6 +277,7 @@
 | BL-106 | ✅ Board: done/cancelled в PROCESSING | web-ui | Задачи в статусе done/cancelled отображались в колонке PROCESSING вместо DONE |
 | BL-128 | ✅ BUG-016 (health popup light theme) | web-ui | Health breakdown popup не стилизован для light-темы: невидимые границы, хардкод matrix-цветов в JS. Fix: CSS-overrides + theme-aware _healthColor()/_sparklineColor() |
 | BL-129 | ✅ BUG-017 (health false positives) | knowledge-engine | Health scorer считал false positive broken links (вложения, @mentions, шаблоны) и dead ends (Jira-импорт). Fix: _is_ignorable_link() + исключение jira_key из dead_ends. Результат: -57 broken, -388 dead ends |
+| BL-160 | ✅ BUG-023 (jira-sync custom-named files) | knowledge-engine | Jira sync не обновлял статус vault-файлов с кастомными именами (E-*.md). Fix: fallback-поиск по jira_key в frontmatter в секциях UPDATED, CLOSED и import_single_issue. Partial update через frontmatter_utils вместо полного rewrite |
 
 ---
 
@@ -319,7 +320,7 @@
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
 | ✅ Реализовано | 93 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159 |
-| ✅ Баги исправлены | 24 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129 |
+| ✅ Баги исправлены | 25 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160 |
 | Идея | 33 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **151** | |
+| **Итого** | **152** | |
