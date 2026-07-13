@@ -1594,6 +1594,27 @@ def _extract_report_title(text: str) -> str | None:
     return None
 
 
+def _extract_report_type(text: str) -> str:
+    """Extract ``type`` from YAML frontmatter, defaulting to ``other``."""
+    stripped = text.lstrip()
+    if not stripped.startswith("---"):
+        return "other"
+
+    end = stripped.find("---", 3)
+    if end == -1:
+        return "other"
+
+    frontmatter = stripped[3:end]
+    for line in frontmatter.splitlines():
+        if line.strip().startswith("type:"):
+            value = line.split(":", 1)[1].strip().strip("'\"")
+            if value:
+                logger.debug(f"_extract_report_type — found type: {value}")
+                return value
+
+    return "other"
+
+
 @app.get("/api/v1/reports")
 def list_reports():
     """Return a list of all available reports from wiki/reports/.
@@ -1630,12 +1651,12 @@ def list_reports():
             text = f.read_text(encoding="utf-8")
             date = f.stem[:10] if len(f.stem) >= 10 else f.stem
             title = _extract_report_title(text) or f.stem
+            report_type = _extract_report_type(text)
             results.append(
-                {"filename": f.name, "date": date, "title": title}
+                {"filename": f.name, "date": date, "title": title, "type": report_type}
             )
             logger.info(
-                "GET /api/v1/reports — parsed %s (date=%s, title=%s)",
-                f.name, date, title,
+                f"GET /api/v1/reports — parsed {f.name} (date={date}, title={title}, type={report_type})"
             )
         except Exception as exc:
             logger.error(

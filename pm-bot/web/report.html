@@ -21,7 +21,7 @@
     .report-layout {
       display: flex;
       gap: 16px;
-      height: calc(100vh - 120px);
+      height: calc(100vh - 150px);
       min-height: 400px;
     }
 
@@ -246,6 +246,80 @@
     .report-content input[type="checkbox"] {
       margin-right: 6px;
     }
+
+    /* Search bar */
+    .report-search {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .report-search-wrapper {
+      position: relative;
+    }
+    .report-search input {
+      width: 100%;
+      background: var(--bg, transparent);
+      border: 1px solid var(--border);
+      color: var(--text-body);
+      padding: 6px 28px 6px 8px;
+      font-size: 11px;
+      font-family: inherit;
+      outline: none;
+      box-sizing: border-box;
+    }
+    .report-search input::placeholder {
+      color: var(--text-muted);
+    }
+    .report-search input:focus {
+      border-color: var(--cyan);
+    }
+    .report-search-clear {
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 0 2px;
+      line-height: 1;
+    }
+    .report-search-clear:hover {
+      color: var(--text-body);
+    }
+
+    /* Type filter chips */
+    .report-type-chips {
+      display: flex;
+      gap: 4px;
+      padding: 0;
+      margin-bottom: 12px;
+      overflow-x: auto;
+      flex-wrap: wrap;
+    }
+    .report-type-chip {
+      white-space: nowrap;
+      padding: 2px 8px;
+      font-size: 9px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      background: transparent;
+      flex-shrink: 0;
+    }
+    .report-type-chip:hover {
+      border-color: var(--cyan);
+      color: var(--text-body);
+    }
+    .report-type-chip.active {
+      border-color: var(--cyan);
+      color: var(--cyan);
+      background: rgba(0, 255, 255, 0.08);
+    }
   </style>
 </head>
 <body>
@@ -269,18 +343,46 @@
       <!-- Error state -->
       <div v-if="error" class="empty-state">{{ error }}</div>
 
+      <!-- Type filter chips -->
+      <div class="report-type-chips" v-if="typeChips.length > 1">
+        <span
+          v-for="chip in typeChips"
+          :key="chip.type"
+          class="report-type-chip"
+          :class="{ active: selectedType === chip.type }"
+          @click="selectType(chip.type)"
+        >{{ chip.type === 'all' ? 'ALL' : chip.type }} ({{ chip.count }})</span>
+      </div>
+
       <!-- Two-column layout -->
       <div v-if="!error" class="report-layout">
 
         <!-- Left column: report list -->
         <div class="report-list-panel">
-          <div class="report-list-header">REPORTS</div>
+          <!-- Search bar -->
+          <div class="report-search">
+            <div class="report-search-wrapper">
+              <input
+                type="text"
+                v-model="searchQuery"
+                placeholder="Поиск отчёта..."
+              >
+              <button
+                v-if="searchQuery"
+                class="report-search-clear"
+                @click="clearSearch"
+              >&times;</button>
+            </div>
+          </div>
+          <!-- Header with counter -->
+          <div class="report-list-header">REPORTS<span v-if="filteredReports.length !== reports.length" style="float:right; letter-spacing:0">{{ filteredReports.length }} из {{ reports.length }}</span></div>
           <div class="report-list-scroll">
             <div v-if="loading" class="report-list-empty">LOADING...</div>
             <div v-else-if="reports.length === 0" class="report-list-empty">No reports available</div>
+            <div v-else-if="filteredReports.length === 0" class="report-list-empty">Ничего не найдено</div>
             <div
               v-else
-              v-for="r in reports"
+              v-for="r in filteredReports"
               :key="r.filename"
               class="report-list-item"
               :class="{ active: selectedFilename === r.filename }"
@@ -362,6 +464,45 @@
         var error = Vue.ref(null);
         var copySuccess = Vue.ref(false);
         var searchOpen = Vue.ref(false);
+        var searchQuery = Vue.ref('');
+        var selectedType = Vue.ref('all');
+
+        var filteredReports = Vue.computed(function() {
+          var list = reports.value;
+          if (selectedType.value && selectedType.value !== 'all') {
+            list = list.filter(function(r) { return r.type === selectedType.value; });
+          }
+          var q = searchQuery.value.toLowerCase().trim();
+          if (q) {
+            list = list.filter(function(r) {
+              return (r.title || '').toLowerCase().includes(q)
+                  || (r.filename || '').toLowerCase().includes(q);
+            });
+          }
+          return list;
+        });
+
+        var typeChips = Vue.computed(function() {
+          var counts = {};
+          reports.value.forEach(function(r) {
+            var t = r.type || 'other';
+            counts[t] = (counts[t] || 0) + 1;
+          });
+          var chips = Object.keys(counts).map(function(t) {
+            return { type: t, count: counts[t] };
+          });
+          chips.sort(function(a, b) { return b.count - a.count; });
+          chips.unshift({ type: 'all', count: reports.value.length });
+          return chips;
+        });
+
+        function clearSearch() {
+          searchQuery.value = '';
+        }
+
+        function selectType(type) {
+          selectedType.value = type;
+        }
 
         /**
          * Format a date string for display.
@@ -519,6 +660,16 @@
           return marked.parse(stripped);
         }
 
+        Vue.watch(filteredReports, function(newList) {
+          if (newList.length === 0) {
+            return;
+          }
+          var found = newList.some(function(r) { return r.filename === selectedFilename.value; });
+          if (!found) {
+            selectReport(newList[0].filename);
+          }
+        });
+
         Vue.onMounted(function() {
           console.log('[report] component mounted, loading reports');
           loadReports();
@@ -541,6 +692,12 @@
           exporting: exporting,
           error: error,
           copySuccess: copySuccess,
+          searchQuery: searchQuery,
+          selectedType: selectedType,
+          filteredReports: filteredReports,
+          typeChips: typeChips,
+          clearSearch: clearSearch,
+          selectType: selectType,
           loadReports: loadReports,
           selectReport: selectReport,
           regenerate: regenerate,

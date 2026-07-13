@@ -5,6 +5,18 @@
 
 ---
 
+## 13.07.2026 — feat: Поиск и фильтрация отчётов (BL-161)
+
+Добавлены поиск по имени/заголовку и фильтрация по типу отчёта на страницу report.html.
+
+### pm-bot 1.18.1
+- **vault_api.py**: новая функция `_extract_report_type(text)` — лёгкий парсинг YAML frontmatter для извлечения `type:`, fallback `"other"`. Поле `type` добавлено в ответ `GET /api/v1/reports`
+- **report.html**: поисковая строка (v-model, case-insensitive по title/filename) + фильтр-чипы по типу (динамические из уникальных type, с каунтерами, single-select). Computed `filteredReports`/`typeChips`. Watcher автовыбора при фильтрации. Пустое состояние "Ничего не найдено"
+- **style-light.css**: override `.report-type-chip.active` (var(--cyan-bg)) и `.report-search input` (var(--bg)) для light-темы
+- **tests/test_report_type_extraction.py** (новый): 20 unit-тестов (все типы, кавычки, пустые значения, без frontmatter)
+
+---
+
 ## 13.07.2026 — fix: Jira sync не обновляет кастомные vault-файлы (BUG-023, BL-160)
 
 Jira sync не обновлял статус vault-файлов с кастомными именами (E-15-*.md, E-18-*.md), созданных через PM Assistant. Sync искал файлы только по имени `{JIRA_KEY}.md`, игнорируя файлы с `jira_key` в frontmatter.

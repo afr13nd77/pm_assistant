@@ -1,7 +1,7 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.18.0 / knowledge-engine 1.15.1 / idea-pipeline 1.1.2 / web-ui 1.26.1 / shared 0.7.1
-**Обновлён:** 13.07.2026 (BL-160 реализован)
+**Версии:** pm-bot 1.18.1 / knowledge-engine 1.15.1 / idea-pipeline 1.1.2 / web-ui 1.26.2 / shared 0.7.1
+**Обновлён:** 13.07.2026 (BL-161 реализован)
 
 ---
 
@@ -145,6 +145,7 @@
 | BL-137 | ✅ Редизайн CAPTURE_TERMINAL | web-ui | Редизайн capture drawer (chat-style терминал на board.html, ideas.html). В Settings переключатель «Тип терминала»: простой / расширенный |
 | BL-158 | ✅ Фильтрация моделей OpenRouter в Settings и Playground | web-ui, pm-bot, shared | Searchable dropdown (`searchable-model-select` в components.js) вместо `<select>` для выбора моделей OpenRouter: текстовый фильтр по name/id (case-insensitive), autofocus, outside-click close, compact-режим для inline fallback-цепочки. 3 места: settings.html (глобальный OPENROUTER_MODEL + per-step в fallback chain), playground.html (при провайдере openrouter). CSS в общем style.css. Бэкенд: `GET /playground/providers` теперь отдаёт live-список моделей через `list_models()` (TTL-кэш 1ч) вместо хардкода. Попутно: BUG-020 (Nemotron parse error) — детальное логирование raw-ответа в openrouter_client.py. Связано с BL-155, BL-156 |
 | BL-159 | ✅ Экспорт markdown-отчётов в PDF | web-ui, pm-bot | Кнопка EXPORT_PDF на report.html. Endpoint POST /api/v1/reports/{filename}/pdf. WeasyPrint + markdown-it-py рендеринг, шрифт Inter, монохромные emoji (Noto Emoji), кастомный CSS (pdf-export.css) |
+| BL-161 | ✅ Поиск и фильтрация отчётов | web-ui, pm-bot | report.html: поиск по имени/заголовку (input, case-insensitive) + фильтрация по типу отчёта (12 типов из frontmatter `type:`). Фильтр-чипы с каунтерами, dynamic computed, watcher авто-выбора. Бэкенд: `_extract_report_type()` + поле `type` в ответе `/api/v1/reports`. 20 unit-тестов. Спека: docs/report-search-filter/ |
 
 ### 5.2 Идеи
 
@@ -323,4 +324,4 @@
 | ✅ Баги исправлены | 25 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160 |
 | Идея | 33 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **152** | |
+| **Итого** | **153** | |

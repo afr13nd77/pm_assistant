@@ -2250,3 +2250,11 @@ body {
 .pg-templates-list {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
+
+/* Report search & filter chips (BL-161) */
+.report-type-chip.active {
+  background: var(--cyan-bg);
+}
+.report-search input {
+  background: var(--bg);
+}
