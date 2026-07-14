@@ -2258,3 +2258,155 @@ body {
 .report-search input {
   background: var(--bg);
 }
+
+/* ============================================================
+   EPIC DRAWER REDESIGN — light overrides (BL-162)
+   ============================================================ */
+
+/* Header */
+.epic-drawer-header {
+  background: var(--surface);
+  padding: 20px 22px 16px;
+}
+
+.epic-entity-code {
+  border-radius: 999px;
+}
+
+.epic-icon-button {
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.epic-icon-button:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+/* Title */
+.epic-title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* Badges */
+.epic-badge {
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* Tabs */
+.epic-tab {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  padding: 14px 12px 12px;
+}
+
+/* Tab panel padding (compensates .task-drawer-body padding:0) */
+.epic-tab-panel {
+  padding: 20px 22px;
+}
+
+/* Progress card */
+.epic-progress-card {
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.epic-progress-label {
+  font-size: 12px;
+}
+
+.epic-progress-value {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.epic-progress-track {
+  border-radius: 999px;
+}
+
+.epic-progress-fill {
+  border-radius: 999px;
+  background: linear-gradient(90deg, #D6A85F, #E0B96F);
+}
+
+.epic-progress-meta {
+  font-size: 11px;
+}
+
+/* Info grid */
+.epic-info-item {
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.epic-info-label {
+  font-size: 11px;
+}
+
+.epic-info-value {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Ticket card */
+.epic-ticket {
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.epic-ticket:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.epic-ticket-icon {
+  border-radius: var(--radius);
+}
+
+.epic-ticket-key {
+  font-size: 11px;
+}
+
+.epic-ticket-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.epic-ticket-status {
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+/* Body content */
+.epic-body-content {
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Section heading */
+.epic-section-heading h3 {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+/* Footer */
+.epic-drawer-footer {
+  background: var(--surface);
+}
+
+/* Link */
+.epic-link {
+  font-weight: 600;
+}

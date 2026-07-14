@@ -1564,13 +1564,14 @@ def get_epics(domain: str | None = Query(default=None)):
                     "jira_key": str(note.get("jira_key") or note.get("jira_id") or ""),
                     "jira_url": str(note.get("jira_url") or ""),
                     "filename": note["filename"],
+                    "body": body,
                 }
             )
         except Exception as exc:
             logger.error("GET /api/v1/epics — failed to parse %s: %s", f.name, exc)
             continue
 
-    logger.info("GET /api/v1/epics — returning %d epics", len(results))
+    logger.info(f"GET /api/v1/epics — returning {len(results)} epics")
     _cache.set(cache_key, results)
     return results
 

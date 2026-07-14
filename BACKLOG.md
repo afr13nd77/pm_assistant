@@ -1,7 +1,7 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.18.1 / knowledge-engine 1.15.1 / idea-pipeline 1.1.2 / web-ui 1.26.2 / shared 0.7.1
-**Обновлён:** 13.07.2026 (BL-161 реализован)
+**Версии:** pm-bot 1.18.2 / knowledge-engine 1.15.1 / idea-pipeline 1.1.2 / web-ui 1.26.3 / shared 0.7.1
+**Обновлён:** 13.07.2026 (BL-162 реализован)
 
 ---
 
@@ -146,6 +146,7 @@
 | BL-158 | ✅ Фильтрация моделей OpenRouter в Settings и Playground | web-ui, pm-bot, shared | Searchable dropdown (`searchable-model-select` в components.js) вместо `<select>` для выбора моделей OpenRouter: текстовый фильтр по name/id (case-insensitive), autofocus, outside-click close, compact-режим для inline fallback-цепочки. 3 места: settings.html (глобальный OPENROUTER_MODEL + per-step в fallback chain), playground.html (при провайдере openrouter). CSS в общем style.css. Бэкенд: `GET /playground/providers` теперь отдаёт live-список моделей через `list_models()` (TTL-кэш 1ч) вместо хардкода. Попутно: BUG-020 (Nemotron parse error) — детальное логирование raw-ответа в openrouter_client.py. Связано с BL-155, BL-156 |
 | BL-159 | ✅ Экспорт markdown-отчётов в PDF | web-ui, pm-bot | Кнопка EXPORT_PDF на report.html. Endpoint POST /api/v1/reports/{filename}/pdf. WeasyPrint + markdown-it-py рендеринг, шрифт Inter, монохромные emoji (Noto Emoji), кастомный CSS (pdf-export.css) |
 | BL-161 | ✅ Поиск и фильтрация отчётов | web-ui, pm-bot | report.html: поиск по имени/заголовку (input, case-insensitive) + фильтрация по типу отчёта (12 типов из frontmatter `type:`). Фильтр-чипы с каунтерами, dynamic computed, watcher авто-выбора. Бэкенд: `_extract_report_type()` + поле `type` в ответе `/api/v1/reports`. 20 unit-тестов. Спека: docs/report-search-filter/ |
+| BL-162 | ✅ Roadmap: просмотр тела эпика в popup | web-ui, pm-bot | roadmap.html: кнопка-тогглер SHOW_BODY / SHOW_TICKETS в drawer эпика. Полный markdown body рендерится через marked.js. Бэкенд: поле `body` добавлено в ответ GET /api/v1/epics. Сброс режима при смене эпика. Спека: docs/roadmap-epic-body/ |
 
 ### 5.2 Идеи
 
@@ -212,6 +213,7 @@
 | BL-81 | Мониторинг и алерты по доступности Ollama | pm-bot | Health check, uptime tracking (упомянуто в Out of Scope ollama-hybrid) |
 | BL-152 | Рефакторинг vault_api.py — разбивка на роутеры | pm-bot | 3883-строчный God File (51 эндпоинт) разбить на 9 FastAPI APIRouter-модулей: `routers/{jira,config,system,meetings,tasks,epics,reports,ideas,vault,playground}.py`. Параллельно вынести вспомогательные слои: `cache.py` (_VaultCache), `parsers.py` (parse_note, _calculate_readiness и др.), `scanner.py` (_scan_domain_folders), `search_index.py` (_SearchIndex). Порядок: сначала cache/parsers/scanner (чистый перенос без изменения логики), затем роутеры от простых к сложным (jira → config → system → meetings → tasks → epics → reports → ideas → vault). Каждый шаг атомарен и не ломает API. Репозиторный слой и сервисные абстракции не вводить — избыточны для однопользовательской системы. |
 | BL-144 | Pipeline Monitor — интерактивная визуализация обработки | web-ui, pm-bot, knowledge-engine | Расширение system-log (BL-143) до realtime pipeline view: текущий этап обработки для каждого элемента (fetch → parse → LLM call → write), elapsed time, provider chain, retry counts. Мотивация: BL-143 покрывает журнал завершённых операций, BL-144 — визуализацию процесса в реальном времени |
+| BL-163 | Jira sync: partial update вместо full rewrite | knowledge-engine | `update_frontmatter()` в mapper.py делает полный rewrite через `to_markdown()`, затирая vault-only поля (access_count, tier, relevance, digest, last_accessed, epic_key если Jira вернула null). Заменить на partial update: обновлять только поля, которые Jira реально возвращает (status, assignee, priority, labels, updated_at, synced_at), сохраняя остальные. Обнаружено на GO-181: raw имел `epic_key: TMPL-15408`, wiki — `epic_key: null` после re-sync. Связано с BL-160 (partial update для custom-named files уже реализован через frontmatter_utils) |
 | BL-157 | Пересмотреть место хранения пользовательских настроек | pm-bot, shared, инфраструктура | Открытый вопрос для повторного анализа: сейчас ВСЕ пользовательские настройки (fallback-цепочки провайдеров, тема, refresh-mode, openrouter_model и т.д., см. BL-76) хранятся в `VAULT_PATH/.pm-user-prefs.json` — том же смонтированном томе, что и контент vault (идеи, встречи, decision journal). Обоснование текущего выбора: vault — единственный durable-том проекта, персистентный между пересборками контейнеров (`docker-compose.yml`: `${VAULT_PATH}:/vault` монтируется во все сервисы), в отличие от файловой системы самого контейнера. Вопрос к пересмотру: стоит ли отделить app-конфигурацию от пользовательского контента — в проекте уже существует отдельный персистентный Docker-том `pm-bot-data:/data` (используется для SQLite: enrichment_db, system_log), который мог бы быть более подходящим местом для настроек приложения, не смешивая служебный JSON-файл с личным Obsidian-vault пользователя. Требует явного архитектурного решения (миграция формата хранения, обратная совместимость с уже существующим `.pm-user-prefs.json`) — не реализовывать без отдельного анализа. |
 
 ---
@@ -322,6 +324,6 @@
 |:---|:---|:---|
 | ✅ Реализовано | 93 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159 |
 | ✅ Баги исправлены | 25 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160 |
-| Идея | 33 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157 |
+| Идея | 34 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **153** | |
+| **Итого** | **154** | |

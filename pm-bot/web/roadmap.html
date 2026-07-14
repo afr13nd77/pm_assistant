@@ -106,110 +106,268 @@
     </main>
     <div class="drawer-overlay" v-if="drawerOpen" @click="closeDrawer"></div>
     <div class="task-drawer" :class="{ open: drawerOpen }">
-      <div class="task-drawer-header">
-        <span class="task-drawer-title">
-          <span v-if="drawerMode === 'task'" class="text-muted" style="cursor:pointer;margin-right:8px;" @click="backToEpic">&larr;</span>
-          {{ drawerMode === 'epic' ? (drawerEpic ? drawerEpic.id : 'EPIC') : (drawerTask ? (drawerTask.jira_key || drawerTask.filename || 'TASK') : 'LOADING...') }}
-        </span>
-        <button class="task-drawer-close" @click="closeDrawer">[&times;]</button>
-      </div>
 
-      <div class="task-drawer-body" v-if="drawerMode === 'epic' && drawerEpic">
-        <div class="task-drawer-section">
-          <div class="task-drawer-section-title">INFO</div>
-          <div class="task-drawer-meta">
-            <span class="task-drawer-meta-label">title:</span>
-            <span class="task-drawer-meta-value">{{ drawerEpic.title || '—' }}</span>
-            <span class="task-drawer-meta-label">priority:</span>
-            <span class="task-drawer-meta-value">{{ (drawerEpic.priority || '—').toUpperCase() }}</span>
-            <span class="task-drawer-meta-label">status:</span>
-            <span class="task-drawer-meta-value">{{ (drawerEpic.status || '—').toUpperCase() }}</span>
-            <span class="task-drawer-meta-label">progress:</span>
-            <span class="task-drawer-meta-value">{{ drawerEpic.progress }}%</span>
-            <span class="task-drawer-meta-label">domain:</span>
-            <span class="task-drawer-meta-value text-cyan">{{ (drawerEpic.domain || '—').toUpperCase() }}</span>
-            <span class="task-drawer-meta-label">prd_status:</span>
-            <span class="task-drawer-meta-value" :class="drawerEpic.prd_status === 'approved' ? 'text-green' : 'text-yellow'">{{ (drawerEpic.prd_status || '—').toUpperCase() }}</span>
-            <span class="task-drawer-meta-label" v-if="drawerEpic.confluence_link">confluence:</span>
-            <span class="task-drawer-meta-value" v-if="drawerEpic.confluence_link"><a :href="drawerEpic.confluence_link" target="_blank" class="text-cyan" style="text-decoration:none;">link</a></span>
+      <!-- ═══ EPIC MODE ═══ -->
+      <template v-if="drawerMode === 'epic' && drawerEpic">
+        <header class="epic-drawer-header">
+          <div class="epic-header-top">
+            <div class="epic-entity">
+              <span class="epic-entity-type">Epic</span>
+              <span class="epic-entity-code">{{ drawerEpic.id }}</span>
+            </div>
+            <div class="epic-header-actions">
+              <button class="epic-icon-button" title="Actions">&#8226;&#8226;&#8226;</button>
+              <button class="epic-icon-button" @click="closeDrawer" title="Close">&#10005;</button>
+            </div>
+          </div>
+          <div class="epic-title-row">
+            <h2 class="epic-title">{{ drawerEpic.title || '—' }}</h2>
+          </div>
+          <div class="epic-badges">
+            <span class="epic-badge epic-badge-status" :class="'epic-badge-status--' + (drawerEpic.status || '').toLowerCase().replace(/[^a-z]/g, '-')">
+              <span class="epic-badge-dot"></span>{{ (drawerEpic.status || '—').toUpperCase() }}
+            </span>
+            <span class="epic-badge epic-badge-domain" v-if="drawerEpic.domain">
+              <span class="epic-badge-dot"></span>{{ drawerEpic.domain.toUpperCase() }}
+            </span>
+            <span class="epic-badge epic-badge-priority" v-if="drawerEpic.priority">{{ drawerEpic.priority.toUpperCase() }}</span>
+          </div>
+        </header>
+
+        <nav class="epic-tabs">
+          <button class="epic-tab" :class="{ active: activeEpicTab === 'overview' }" @click="selectEpicTab('overview')">Обзор</button>
+          <button class="epic-tab" :class="{ active: activeEpicTab === 'description' }" @click="selectEpicTab('description')">Описание</button>
+          <button class="epic-tab" :class="{ active: activeEpicTab === 'jira' }" @click="selectEpicTab('jira')">Jira &middot; {{ (drawerEpic.tickets || []).length }}</button>
+          <button class="epic-tab" :class="{ active: activeEpicTab === 'history' }" @click="selectEpicTab('history')">История</button>
+        </nav>
+
+        <div class="task-drawer-body">
+          <!-- TAB: Overview -->
+          <div class="epic-tab-panel" :class="{ active: activeEpicTab === 'overview' }">
+            <div class="epic-section">
+              <div class="epic-section-heading">
+                <h3>Прогресс</h3>
+              </div>
+              <div class="epic-progress-card">
+                <div class="epic-progress-head">
+                  <span class="epic-progress-label">Готовность эпика</span>
+                  <strong class="epic-progress-value">{{ drawerEpic.progress || 0 }}%</strong>
+                </div>
+                <div class="epic-progress-track">
+                  <div class="epic-progress-fill" :style="{ width: (drawerEpic.progress || 0) + '%' }"></div>
+                </div>
+                <div class="epic-progress-meta">
+                  <span>{{ (drawerEpic.tickets || []).length }} Jira tickets</span>
+                  <span>PRD {{ (drawerEpic.prd_status || 'none').toUpperCase() }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="epic-section">
+              <div class="epic-section-heading">
+                <h3>Основная информация</h3>
+              </div>
+              <div class="epic-info-grid">
+                <div class="epic-info-item">
+                  <span class="epic-info-label">Jira Epic</span>
+                  <div class="epic-info-value">
+                    <a v-if="drawerEpic.jira_url" :href="drawerEpic.jira_url" target="_blank" class="epic-link">{{ drawerEpic.jira_key || '—' }} &#8599;</a>
+                    <span v-else class="text-muted">—</span>
+                  </div>
+                </div>
+                <div class="epic-info-item">
+                  <span class="epic-info-label">PRD</span>
+                  <div class="epic-info-value">
+                    <span :class="drawerEpic.prd_status === 'approved' ? 'text-green' : 'text-muted'">{{ (drawerEpic.prd_status || '—').toUpperCase() }}</span>
+                  </div>
+                </div>
+                <div class="epic-info-item">
+                  <span class="epic-info-label">Domain</span>
+                  <div class="epic-info-value">
+                    <span>{{ (drawerEpic.domain || '—').toUpperCase() }}</span>
+                  </div>
+                </div>
+                <div class="epic-info-item">
+                  <span class="epic-info-label">Confluence</span>
+                  <div class="epic-info-value">
+                    <a v-if="drawerEpic.confluence_link" :href="drawerEpic.confluence_link" target="_blank" class="epic-link">link &#8599;</a>
+                    <span v-else class="text-muted">—</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="epic-section" v-if="!drawerEpic.jira_key">
+              <jira-create-section
+                :filename="drawerEpic.filename || ''"
+                :current-type="'Epic'"
+                :title="drawerEpic.title || ''"
+                :has-jira-key="false"
+                :jira-key="''"
+                :jira-url="''"
+                :is-epic="true"
+                @created="onEpicJiraCreated"
+              ></jira-create-section>
+            </div>
+
+            <div class="epic-section" v-if="drawerEpic.jira_key">
+              <div class="epic-section-heading">
+                <h3>Задача эпика в Jira</h3>
+              </div>
+              <div class="epic-ticket" @click="drawerEpic.jira_url && window.open(drawerEpic.jira_url, '_blank')">
+                <div class="epic-ticket-icon">JR</div>
+                <div class="epic-ticket-body">
+                  <div class="epic-ticket-key">{{ drawerEpic.jira_key }}</div>
+                  <div class="epic-ticket-title">{{ drawerEpic.title }}</div>
+                </div>
+                <span class="epic-ticket-status" :class="'epic-ticket-status--' + (drawerEpic.status || '').toLowerCase()">{{ (drawerEpic.status || '').toUpperCase() }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB: Description -->
+          <div class="epic-tab-panel" :class="{ active: activeEpicTab === 'description' }">
+            <div class="epic-section" v-if="drawerEpic.body">
+              <div class="epic-section-heading">
+                <h3>Описание</h3>
+              </div>
+              <div class="epic-body-content">
+                <div class="task-drawer-content" v-html="renderMd(drawerEpic.body)"></div>
+              </div>
+            </div>
+            <div class="epic-section" v-if="drawerEpic.goal">
+              <div class="epic-section-heading">
+                <h3>Цель</h3>
+              </div>
+              <div class="epic-body-content">
+                <div class="task-drawer-content" v-html="renderMd(drawerEpic.goal)"></div>
+              </div>
+            </div>
+            <div class="epic-section" v-if="drawerEpic.scope">
+              <div class="epic-section-heading">
+                <h3>Объём</h3>
+              </div>
+              <div class="epic-body-content">
+                <div class="task-drawer-content" v-html="renderMd(drawerEpic.scope)"></div>
+              </div>
+            </div>
+            <div class="epic-section" v-if="drawerEpic.acceptance_criteria">
+              <div class="epic-section-heading">
+                <h3>Критерии приёмки</h3>
+              </div>
+              <div class="epic-body-content">
+                <div class="task-drawer-content" v-html="renderMd(drawerEpic.acceptance_criteria)"></div>
+              </div>
+            </div>
+            <div class="epic-section" v-if="!drawerEpic.body && !drawerEpic.goal && !drawerEpic.scope && !drawerEpic.acceptance_criteria">
+              <div class="empty-state">Нет описания</div>
+            </div>
+          </div>
+
+          <!-- TAB: Jira -->
+          <div class="epic-tab-panel" :class="{ active: activeEpicTab === 'jira' }">
+            <div class="epic-section">
+              <div class="epic-section-heading">
+                <h3>Задачи Jira</h3>
+              </div>
+              <div v-for="ticket in (drawerEpic.tickets || [])" :key="ticket.id" class="epic-ticket" @click="openTaskFromEpic(ticket.id)">
+                <div class="epic-ticket-icon">JR</div>
+                <div class="epic-ticket-body">
+                  <div class="epic-ticket-key">{{ ticket.id }}</div>
+                  <div class="epic-ticket-title">{{ ticket.title }}</div>
+                </div>
+                <span class="epic-ticket-status" :class="'epic-ticket-status--' + (ticket.status || '').toLowerCase()">{{ (ticket.status || '').toUpperCase() }}</span>
+              </div>
+              <div v-if="!drawerEpic.tickets || !drawerEpic.tickets.length" class="empty-state">Нет задач</div>
+            </div>
+          </div>
+
+          <!-- TAB: History -->
+          <div class="epic-tab-panel" :class="{ active: activeEpicTab === 'history' }">
+            <div class="epic-section">
+              <div class="epic-section-heading">
+                <h3>История</h3>
+              </div>
+              <div class="empty-state">История изменений пока недоступна</div>
+            </div>
           </div>
         </div>
-        <div class="task-drawer-section">
-          <jira-create-section
-            :filename="drawerEpic.filename || ''"
-            :current-type="'Epic'"
-            :title="drawerEpic.title || ''"
-            :has-jira-key="!!(drawerEpic.jira_key)"
-            :jira-key="drawerEpic.jira_key || ''"
-            :jira-url="drawerEpic.jira_url || ''"
-            :is-epic="true"
-            @created="onEpicJiraCreated"
-          ></jira-create-section>
-        </div>
-        <div class="task-drawer-section">
-          <div class="task-drawer-section-title">JIRA_TICKETS [{{ (drawerEpic.tickets || []).length }}]</div>
-          <div v-for="ticket in (drawerEpic.tickets || [])" :key="ticket.id" class="detail-ticket-row" style="cursor:pointer;" @click="openTaskFromEpic(ticket.id)">
-            <span><span class="detail-ticket-id">{{ ticket.id }}</span> <span class="detail-ticket-name">{{ ticket.title }}</span></span>
-            <span :class="'tag tag-' + ticket.status">{{ ticket.status }}</span>
-          </div>
-          <div v-if="!drawerEpic.tickets || !drawerEpic.tickets.length" class="empty-state">No tickets</div>
-        </div>
-        <div class="task-drawer-section" v-if="drawerEpic.goal">
-          <div class="task-drawer-section-title">GOAL</div>
-          <div class="task-drawer-content" v-html="renderMd(drawerEpic.goal)"></div>
-        </div>
-        <div class="task-drawer-section" v-if="drawerEpic.scope">
-          <div class="task-drawer-section-title">SCOPE</div>
-          <div class="task-drawer-content" v-html="renderMd(drawerEpic.scope)"></div>
-        </div>
-        <div class="task-drawer-section" v-if="drawerEpic.acceptance_criteria">
-          <div class="task-drawer-section-title">ACCEPTANCE_CRITERIA</div>
-          <div class="task-drawer-content" v-html="renderMd(drawerEpic.acceptance_criteria)"></div>
-        </div>
-      </div>
 
-      <div class="task-drawer-body" v-if="drawerMode === 'task' && drawerTask">
-        <div class="task-drawer-section">
-          <div class="task-drawer-section-title">INFO</div>
-          <div class="task-drawer-meta">
-            <span class="task-drawer-meta-label">title:</span>
-            <span class="task-drawer-meta-value">{{ drawerTask.title || '—' }}</span>
-            <span class="task-drawer-meta-label">date:</span>
-            <span class="task-drawer-meta-value">{{ fmtDate(drawerTask.date) || '—' }}</span>
-            <span class="task-drawer-meta-label">status:</span>
-            <span class="task-drawer-meta-value"><span :class="taskStatusClass">{{ (drawerTask.status || '—').toUpperCase() }}</span></span>
-            <span class="task-drawer-meta-label" v-if="drawerTask.type">type:</span>
-            <span class="task-drawer-meta-value" v-if="drawerTask.type">{{ drawerTask.type.toUpperCase() }}</span>
-            <span class="task-drawer-meta-label" v-if="drawerTask.domain">domain:</span>
-            <span class="task-drawer-meta-value text-cyan" v-if="drawerTask.domain">{{ drawerTask.domain.toUpperCase() }}</span>
-            <span class="task-drawer-meta-label" v-if="drawerTask.priority">priority:</span>
-            <span class="task-drawer-meta-value" v-if="drawerTask.priority">{{ drawerTask.priority.toUpperCase() }}</span>
-            <span class="task-drawer-meta-label" v-if="drawerTask.story_points">story_points:</span>
-            <span class="task-drawer-meta-value" v-if="drawerTask.story_points">{{ drawerTask.story_points }}</span>
-            <span class="task-drawer-meta-label" v-if="drawerTask.jira_key">jira_key:</span>
-            <span class="task-drawer-meta-value" v-if="drawerTask.jira_key">{{ drawerTask.jira_key }}</span>
+        <footer class="epic-drawer-footer">
+          <span class="epic-footer-note">
+            <a v-if="drawerEpic.confluence_link" :href="drawerEpic.confluence_link" target="_blank" class="epic-link">Confluence &#8599;</a>
+          </span>
+          <div class="epic-footer-actions">
+            <a v-if="drawerEpic.jira_url" :href="drawerEpic.jira_url" target="_blank" class="cmd-btn cmd-btn-cyan">ОТКРЫТЬ В JIRA</a>
+          </div>
+        </footer>
+      </template>
+
+      <!-- ═══ TASK MODE ═══ -->
+      <template v-if="drawerMode === 'task'">
+        <div class="task-drawer-header">
+          <span class="task-drawer-title">
+            <span class="text-muted" style="cursor:pointer;margin-right:8px;" @click="backToEpic">&larr;</span>
+            {{ drawerTask ? (drawerTask.jira_key || drawerTask.filename || 'TASK') : 'LOADING...' }}
+          </span>
+          <button class="task-drawer-close" @click="closeDrawer">[&times;]</button>
+        </div>
+
+        <div class="task-drawer-body" v-if="drawerTask">
+          <div class="task-drawer-section">
+            <div class="task-drawer-section-title">INFO</div>
+            <div class="task-drawer-meta">
+              <span class="task-drawer-meta-label">title:</span>
+              <span class="task-drawer-meta-value">{{ drawerTask.title || '—' }}</span>
+              <span class="task-drawer-meta-label">date:</span>
+              <span class="task-drawer-meta-value">{{ fmtDate(drawerTask.date) || '—' }}</span>
+              <span class="task-drawer-meta-label">status:</span>
+              <span class="task-drawer-meta-value"><span :class="taskStatusClass">{{ (drawerTask.status || '—').toUpperCase() }}</span></span>
+              <span class="task-drawer-meta-label" v-if="drawerTask.type">type:</span>
+              <span class="task-drawer-meta-value" v-if="drawerTask.type">{{ drawerTask.type.toUpperCase() }}</span>
+              <span class="task-drawer-meta-label" v-if="drawerTask.domain">domain:</span>
+              <span class="task-drawer-meta-value text-cyan" v-if="drawerTask.domain">{{ drawerTask.domain.toUpperCase() }}</span>
+              <span class="task-drawer-meta-label" v-if="drawerTask.priority">priority:</span>
+              <span class="task-drawer-meta-value" v-if="drawerTask.priority">{{ drawerTask.priority.toUpperCase() }}</span>
+              <span class="task-drawer-meta-label" v-if="drawerTask.story_points">story_points:</span>
+              <span class="task-drawer-meta-value" v-if="drawerTask.story_points">{{ drawerTask.story_points }}</span>
+              <span class="task-drawer-meta-label" v-if="drawerTask.jira_key">jira_key:</span>
+              <span class="task-drawer-meta-value" v-if="drawerTask.jira_key">{{ drawerTask.jira_key }}</span>
+            </div>
+          </div>
+          <div class="task-drawer-section" v-if="drawerTask.body">
+            <div class="task-drawer-section-title">BODY</div>
+            <div class="task-drawer-content" v-html="renderMd(drawerTask.body)"></div>
+          </div>
+          <div class="task-drawer-section">
+            <jira-create-section
+              :filename="drawerTask.filename || ''"
+              :current-type="drawerTask.type || 'Task'"
+              :title="drawerTask.title || ''"
+              :has-jira-key="!!(drawerTask.jira_key)"
+              :jira-key="drawerTask.jira_key || ''"
+              :jira-url="drawerTask.jira_url || ''"
+              @created="onTaskJiraCreated"
+            ></jira-create-section>
           </div>
         </div>
-        <div class="task-drawer-section" v-if="drawerTask.body">
-          <div class="task-drawer-section-title">BODY</div>
-          <div class="task-drawer-content" v-html="renderMd(drawerTask.body)"></div>
-        </div>
-        <div class="task-drawer-section">
-          <jira-create-section
-            :filename="drawerTask.filename || ''"
-            :current-type="drawerTask.type || 'Task'"
-            :title="drawerTask.title || ''"
-            :has-jira-key="!!(drawerTask.jira_key)"
-            :jira-key="drawerTask.jira_key || ''"
-            :jira-url="drawerTask.jira_url || ''"
-            @created="onTaskJiraCreated"
-          ></jira-create-section>
-        </div>
-      </div>
 
-      <div class="task-drawer-body" v-if="drawerMode === 'task' && !drawerTask" style="display:flex;align-items:center;justify-content:center;">
-        <div class="loading">LOADING...</div>
-      </div>
+        <div class="task-drawer-body" v-if="!drawerTask" style="display:flex;align-items:center;justify-content:center;">
+          <div class="loading">LOADING...</div>
+        </div>
+      </template>
+
+      <!-- ═══ FALLBACK (no epic, no task, drawer open) ═══ -->
+      <template v-if="drawerMode === 'epic' && !drawerEpic">
+        <div class="task-drawer-header">
+          <span class="task-drawer-title">EPIC</span>
+          <button class="task-drawer-close" @click="closeDrawer">[&times;]</button>
+        </div>
+        <div class="task-drawer-body" style="display:flex;align-items:center;justify-content:center;">
+          <div class="loading">LOADING...</div>
+        </div>
+      </template>
+
     </div>
   </div>
 
@@ -282,6 +440,7 @@
         var refreshMode = Vue.ref('auto');
         var refreshInterval = null;
         var searchOpen = Vue.ref(false);
+        var activeEpicTab = Vue.ref('overview');
 
         var taskStatusClass = Vue.computed(function() {
           if (!drawerTask.value) return 'tag tag-muted';
@@ -386,11 +545,17 @@
           console.log('[roadmap] showMore — new limit:', displayLimit.value);
         }
 
+        function selectEpicTab(tab) {
+          console.log('[roadmap] selectEpicTab:', tab);
+          activeEpicTab.value = tab;
+        }
+
         function selectEpic(epic) {
           console.log('[roadmap] selectEpic:', epic.id, epic.title);
           drawerEpic.value = epic;
           drawerTask.value = null;
           drawerMode.value = 'epic';
+          activeEpicTab.value = 'overview';
           drawerOpen.value = true;
         }
 
@@ -421,6 +586,7 @@
 
         function closeDrawer() {
           console.log('[roadmap] closeDrawer');
+          activeEpicTab.value = 'overview';
           drawerOpen.value = false;
           drawerEpic.value = null;
           drawerTask.value = null;
@@ -521,6 +687,8 @@
           openTaskFromEpic: openTaskFromEpic,
           backToEpic: backToEpic,
           closeDrawer: closeDrawer,
+          activeEpicTab: activeEpicTab,
+          selectEpicTab: selectEpicTab,
           renderMd: renderMd,
           onEpicJiraCreated: onEpicJiraCreated,
           onTaskJiraCreated: onTaskJiraCreated,

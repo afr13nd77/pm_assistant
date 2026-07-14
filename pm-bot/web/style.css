@@ -93,6 +93,9 @@
   --muted: var(--text-muted);
   --mono:  var(--font);
 
+  /* Radius */
+  --radius: 2px;
+
   /* Decay tier colors (theme-independent) */
   --tier-active:  #1D9E75;
   --tier-warm:    #EF9F27;
@@ -812,7 +815,7 @@ html, body {
   right: 0;
   bottom: 0;
   width: 30vw;
-  min-width: 600px;
+  min-width: 780px;
   max-width: 90vw;
   background: var(--card);
   border-left: 1px solid var(--border);
@@ -1142,6 +1145,408 @@ html, body {
   letter-spacing: 0.08em;
 }
 
+
+/* ============================================================
+   EPIC DRAWER REDESIGN (BL-162)
+   ============================================================ */
+
+/* ── Header ── */
+.epic-drawer-header {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.epic-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.epic-entity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.epic-entity-type {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-family: var(--font);
+}
+
+.epic-entity-code {
+  font-family: var(--font);
+  font-size: 11px;
+  color: var(--amber);
+  background: var(--amber-bg);
+  border: 1px solid var(--amber-bd);
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.epic-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.epic-icon-button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 0;
+}
+
+.epic-icon-button:hover {
+  border-color: var(--border-hover);
+  color: var(--text-body);
+}
+
+/* ── Title ── */
+.epic-title-row {
+  margin-top: 14px;
+}
+
+.epic-title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* ── Badges ── */
+.epic-badges {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.epic-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-family: var(--font);
+  letter-spacing: 0.06em;
+}
+
+.epic-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.epic-badge-status { color: var(--amber); background: var(--amber-bg); border-color: var(--amber-bd); }
+.epic-badge-status--done { color: var(--green); background: var(--green-bg); border-color: var(--green-bd); }
+.epic-badge-status--in-progress { color: var(--yellow); background: var(--yellow-bg); border-color: var(--yellow-bd); }
+.epic-badge-status--backlog { color: var(--text-muted); background: transparent; border-color: var(--border); }
+.epic-badge-domain { color: var(--cyan); background: var(--cyan-bg); border-color: var(--cyan-bd); }
+.epic-badge-priority { color: var(--text-muted); }
+
+/* ── Tabs ── */
+.epic-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.epic-tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  padding: 12px 10px 10px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+
+.epic-tab:hover {
+  color: var(--text-body);
+}
+
+.epic-tab.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--amber);
+}
+
+/* ── Tab panels ── */
+.epic-tab-panel {
+  display: none;
+}
+
+.epic-tab-panel.active {
+  display: block;
+  animation: epicFade 0.18s ease;
+}
+
+@keyframes epicFade {
+  from { opacity: 0.4; transform: translateY(4px); }
+  to   { opacity: 1;   transform: translateY(0); }
+}
+
+/* ── Section ── */
+.epic-section {
+  margin-bottom: 20px;
+}
+
+.epic-section + .epic-section {
+  margin-top: 0;
+}
+
+.epic-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.epic-section-heading h3 {
+  margin: 0;
+  font-size: 11px;
+  font-family: var(--font);
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+/* ── Progress card ── */
+.epic-progress-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+}
+
+.epic-progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+
+.epic-progress-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font);
+}
+
+.epic-progress-value {
+  font-size: 20px;
+  font-weight: 400;
+  color: var(--text-primary);
+  font-family: var(--font);
+  letter-spacing: -0.02em;
+}
+
+.epic-progress-track {
+  width: 100%;
+  height: 6px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.epic-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--amber);
+  transition: width 0.35s ease;
+}
+
+.epic-progress-meta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-family: var(--font);
+  letter-spacing: 0.04em;
+}
+
+/* ── Info grid ── */
+.epic-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.epic-info-item {
+  min-height: 70px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.epic-info-label {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-family: var(--font);
+  letter-spacing: 0.08em;
+}
+
+.epic-info-value {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-family: var(--font);
+  color: var(--text-primary);
+}
+
+.epic-link {
+  color: var(--amber);
+  text-decoration: none;
+  font-weight: 400;
+}
+
+.epic-link:hover {
+  text-decoration: underline;
+}
+
+/* ── Ticket card ── */
+.epic-ticket {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: start;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  margin-bottom: 6px;
+}
+
+.epic-ticket:hover {
+  border-color: var(--border-hover);
+}
+
+.epic-ticket-icon {
+  width: 30px;
+  height: 30px;
+  background: var(--amber-bg);
+  border: 1px solid var(--amber-bd);
+  color: var(--amber);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-family: var(--font);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.epic-ticket-body {
+  min-width: 0;
+}
+
+.epic-ticket-key {
+  color: var(--amber);
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 3px;
+  letter-spacing: 0.04em;
+}
+
+.epic-ticket-title {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-body);
+  font-family: var(--font);
+}
+
+.epic-ticket-status {
+  padding: 3px 7px;
+  font-size: 9px;
+  font-family: var(--font);
+  letter-spacing: 0.06em;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  background: transparent;
+  white-space: nowrap;
+  align-self: center;
+}
+
+.epic-ticket-status--done {
+  color: var(--green);
+  background: var(--green-bg);
+  border-color: var(--green-bd);
+}
+
+.epic-ticket-status--in-progress,
+.epic-ticket-status--in-review,
+.epic-ticket-status--in-testing {
+  color: var(--yellow);
+  background: var(--yellow-bg);
+  border-color: var(--yellow-bd);
+}
+
+/* ── Body content (markdown) ── */
+.epic-body-content {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+}
+
+/* ── Footer ── */
+.epic-drawer-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.epic-footer-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font);
+}
+
+.epic-footer-actions {
+  display: flex;
+  gap: 8px;
+}
 
 /* ============================================================
    PROJECT-SPECIFIC ADDITIONS
@@ -3379,3 +3784,4 @@ html, body {
   font-style: italic;
   text-align: center;
 }
+/* .epic-toggle-btn removed in BL-162 (replaced by epic tabs) */

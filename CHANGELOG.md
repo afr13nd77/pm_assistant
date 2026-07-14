@@ -5,6 +5,34 @@
 
 ---
 
+## 14.07.2026 — fix: Доработка epic drawer по прототипу (BUG-024, BL-162)
+
+Исправления расхождений epic drawer с прототипом: отступы, локализация, логика отображения данных.
+
+### web-ui 1.26.4
+- **roadmap.html**: локализация drawer (Обзор/Описание/История, Прогресс, Готовность эпика, Основная информация, Задачи Jira и др.)
+- **roadmap.html**: секция «Задача эпика в Jira» — показывает jira_key/title/status самого эпика вместо дочернего тикета
+- **roadmap.html**: кнопка PUSH_EPIC_TO_JIRA на вкладке Обзор (v-if="!drawerEpic.jira_key"), удалена с вкладки Jira
+- **style-light.css**: `.epic-tab-panel { padding: 20px 22px }` — компенсация обнулённого padding .task-drawer-body (BUG-024)
+- **style.css**: `.task-drawer { min-width: 780px }` (было 600px)
+
+### BACKLOG.md
+- **BL-163** добавлен: Jira sync partial update вместо full rewrite (epic_key затирается при re-sync)
+
+---
+
+## 13.07.2026 — feat: Просмотр тела эпика в drawer roadmap (BL-162)
+
+Кнопка-тогглер SHOW_BODY / SHOW_TICKETS в drawer эпика на roadmap.html. Позволяет прочитать полный markdown body эпика (все секции: архитектура, решения, контекст) без переключения в Obsidian.
+
+### pm-bot 1.18.2
+- **vault_api.py**: поле `body` добавлено в ответ `GET /api/v1/epics` (полный markdown без frontmatter)
+- **roadmap.html**: `epicViewMode` ref (tickets/body), кнопка-тогглер `.epic-toggle-btn`, `<template v-if>` переключение между тикетами и body, сброс при смене эпика/закрытии drawer
+- **style.css**: стили `.epic-toggle-btn` (border, cyan, uppercase)
+- **style-light.css**: override hover для light-темы (var(--cyan-bg))
+
+---
+
 ## 13.07.2026 — feat: Поиск и фильтрация отчётов (BL-161)
 
 Добавлены поиск по имени/заголовку и фильтрация по типу отчёта на страницу report.html.
