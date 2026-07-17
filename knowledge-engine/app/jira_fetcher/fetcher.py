@@ -357,8 +357,10 @@ def sync(
     # 7. Process CLOSED keys (verify actual status before marking done)
     # ------------------------------------------------------------------
     _CLOSED_STATUSES = frozenset({
-        "done", "готово", "готово/closed", "closed", "resolved",
-        "deploy", "staging", "отменена",
+        "done",        # Done, Готово, Готово/Closed, Closed, Resolved
+        "deploy",
+        "staging",
+        "cancelled",   # Отменена
     })
 
     for key in closed_keys:
