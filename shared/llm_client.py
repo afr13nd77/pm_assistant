@@ -6,6 +6,7 @@ from pathlib import Path
 import anthropic
 
 from shared import openrouter_client
+from shared.langfuse_client import get_langfuse
 
 logger = logging.getLogger(__name__)
 
@@ -307,8 +308,12 @@ def _call_claude(
     max_tokens: int,
     system: str | None,
     timeout: int | None,
-) -> str:
-    """Call Claude API via Anthropic SDK."""
+) -> tuple[str, dict]:
+    """Call Claude API via Anthropic SDK.
+
+    Returns (text, usage_dict) where usage_dict contains
+    input_tokens, output_tokens, and model.
+    """
     api_key = os.getenv("CLAUDE_API_KEY")
     client = anthropic.Anthropic(api_key=api_key)
     kwargs: dict = {
@@ -324,8 +329,16 @@ def _call_claude(
     logger.info("_call_claude: model=claude-sonnet-4-6, max_tokens=%d", max_tokens)
     response = client.messages.create(**kwargs)
     result = response.content[0].text
-    logger.info("_call_claude: success, output_len=%d", len(result))
-    return result
+    usage = {
+        "input_tokens": response.usage.input_tokens,
+        "output_tokens": response.usage.output_tokens,
+        "model": kwargs["model"],
+    }
+    logger.info(
+        "_call_claude: success, output_len=%d, input_tokens=%s, output_tokens=%s",
+        len(result), usage["input_tokens"], usage["output_tokens"],
+    )
+    return result, usage
 
 
 def _call_ollama(
@@ -334,8 +347,13 @@ def _call_ollama(
     max_tokens: int,
     system: str | None,
     timeout: int | None,
-) -> str:
-    """Call Ollama via Anthropic-compatible API."""
+) -> tuple[str, dict]:
+    """Call Ollama via Anthropic-compatible API.
+
+    Returns (text, usage_dict). usage_dict always contains 'model';
+    input_tokens/output_tokens are None when the Ollama response
+    does not include usage information.
+    """
     ollama_url = prefs.get("ollama_url", "")
     ollama_model = prefs.get("ollama_model", "qwen3.5:latest")
 
@@ -355,8 +373,18 @@ def _call_ollama(
     logger.info("_call_ollama: model=%s, timeout=%d", ollama_model, ollama_timeout)
     response = client.messages.create(**kwargs)
     result = response.content[0].text
-    logger.info("_call_ollama: success, output_len=%d", len(result))
-    return result
+    usage: dict = {"model": ollama_model}
+    if hasattr(response, "usage") and response.usage:
+        usage["input_tokens"] = getattr(response.usage, "input_tokens", None)
+        usage["output_tokens"] = getattr(response.usage, "output_tokens", None)
+    else:
+        usage["input_tokens"] = None
+        usage["output_tokens"] = None
+    logger.info(
+        "_call_ollama: success, output_len=%d, input_tokens=%s, output_tokens=%s",
+        len(result), usage["input_tokens"], usage["output_tokens"],
+    )
+    return result, usage
 
 
 def _call_openrouter(
@@ -366,8 +394,11 @@ def _call_openrouter(
     system: str | None,
     timeout: int | None,
     model: str | None = None,
-) -> str:
+) -> tuple[str, dict]:
     """Call OpenRouter via shared.openrouter_client.
+
+    Returns (text, usage_dict) -- usage_dict is forwarded directly from
+    openrouter_client.call() and contains input_tokens, output_tokens, model.
 
     `model` is the model resolved for this specific fallback-chain step
     (design.md §1.4, §3.5, T-04) -- it takes precedence so that a chain
@@ -386,14 +417,17 @@ def _call_openrouter(
     or_timeout = timeout or _OPENROUTER_DEFAULT_TIMEOUT
     logger.info("_call_openrouter: model=%s, timeout=%d", openrouter_model, or_timeout)
 
-    result = openrouter_client.call(
+    result, usage = openrouter_client.call(
         messages=or_messages,
         model=openrouter_model,
         max_tokens=max_tokens,
         timeout=or_timeout,
     )
-    logger.info("_call_openrouter: success, output_len=%d", len(result))
-    return result
+    logger.info(
+        "_call_openrouter: success, output_len=%d, input_tokens=%s, output_tokens=%s",
+        len(result), usage.get("input_tokens"), usage.get("output_tokens"),
+    )
+    return result, usage
 
 
 def _call_provider(
@@ -403,8 +437,10 @@ def _call_provider(
     max_tokens: int,
     system: str | None,
     timeout: int | None,
-) -> str:
+) -> tuple[str, dict]:
     """Dispatch a call to a specific provider. Raises on error.
+
+    Returns (text, usage_dict) from the underlying provider function.
 
     `step` is a normalized fallback-chain step {"provider": ..., "model": ...}
     (see _normalize_step/_resolve_chain, design.md §2.1). claude/ollama are
@@ -483,6 +519,24 @@ def call_detailed(
     import time as _time
     _t0 = _time.monotonic_ns()
 
+    # T-06: Langfuse trace for the entire call_detailed() operation
+    lf = get_langfuse()
+    trace = None
+    if lf:
+        try:
+            trace = lf.trace(
+                name=operation,
+                metadata={
+                    "operation": operation,
+                    "group": group,
+                    "provider_chain": chain,
+                },
+                tags=[group, operation],
+            )
+        except Exception as exc:
+            logger.warning("call_detailed: failed to create Langfuse trace: %s", exc)
+            trace = None
+
     errors: list[tuple[str, str]] = []
     # T-05: set when an openrouter step just failed with a 429 -- consumed
     # (and reset) at the start of the next attempted step if that step is
@@ -512,7 +566,7 @@ def call_detailed(
                 "call_detailed: trying provider=%s (%d/%d), operation=%s",
                 provider, i + 1, len(chain), operation,
             )
-            result = _call_provider(step, prefs, messages, max_tokens, system, timeout)
+            result, usage = _call_provider(step, prefs, messages, max_tokens, system, timeout)
             used_model = step.get("model")
             provider_record = {
                 "providers": chain,
@@ -521,11 +575,39 @@ def call_detailed(
                 "used_model": used_model,
                 "used_step_index": i,
                 "errors": errors,
+                "input_tokens": usage.get("input_tokens"),
+                "output_tokens": usage.get("output_tokens"),
+                "model": usage.get("model"),
             }
             logger.info(
-                "call_detailed: success, operation=%s, provider=%s, model=%s, output_len=%d",
+                "call_detailed: success, operation=%s, provider=%s, model=%s, "
+                "output_len=%d, input_tokens=%s, output_tokens=%s",
                 operation, provider, used_model, len(result),
+                usage.get("input_tokens"), usage.get("output_tokens"),
             )
+            # T-06: record successful generation in Langfuse
+            if trace:
+                try:
+                    lf_usage = {}
+                    if usage.get("input_tokens") is not None:
+                        lf_usage["input"] = usage["input_tokens"]
+                    if usage.get("output_tokens") is not None:
+                        lf_usage["output"] = usage["output_tokens"]
+                    trace.generation(
+                        name=f"{provider}:{usage.get('model', 'unknown')}",
+                        model=usage.get("model", "unknown"),
+                        input=messages if system is None else [{"role": "system", "content": system}] + messages,
+                        output=result,
+                        usage=lf_usage if lf_usage else None,
+                        metadata={
+                            "provider": provider,
+                            "step_index": i,
+                            "fallback_errors_before": len(errors),
+                        },
+                        level="DEFAULT",
+                    )
+                except Exception as lf_exc:
+                    logger.warning("call_detailed: failed to record Langfuse generation: %s", lf_exc)
             _duration = (_time.monotonic_ns() - _t0) // 1_000_000
             try:
                 from shared.system_log import log_event
@@ -543,6 +625,8 @@ def call_detailed(
                         "fallback_count": len(errors),
                         "fallback_errors": [{"provider": p, "error": e} for p, e in errors],
                         "output_len": len(result),
+                        "input_tokens": usage.get("input_tokens"),
+                        "output_tokens": usage.get("output_tokens"),
                     },
                     duration_ms=_duration,
                     source="llm-client",
@@ -563,6 +647,23 @@ def call_detailed(
             else:
                 error_key = provider
             errors.append((error_key, str(exc)))
+            # T-06: record failed generation in Langfuse
+            if trace:
+                try:
+                    trace.generation(
+                        name=f"{provider}:{step.get('model', 'unknown')}",
+                        model=step.get("model", "unknown"),
+                        input=messages if system is None else [{"role": "system", "content": system}] + messages,
+                        metadata={
+                            "provider": provider,
+                            "step_index": i,
+                            "error": str(exc),
+                        },
+                        level="ERROR",
+                        status_message=str(exc)[:500],
+                    )
+                except Exception as lf_exc:
+                    logger.warning("call_detailed: failed to record error generation: %s", lf_exc)
             remaining = [p for p in chain[i + 1:] if _is_provider_available(p, prefs)]
             if remaining:
                 logger.warning(
@@ -594,6 +695,15 @@ def call_detailed(
         )
     except Exception:
         pass
+    # T-06: update Langfuse trace with final failure status
+    if trace:
+        try:
+            trace.update(
+                metadata={"final_status": "all_providers_failed", "errors": len(errors)},
+                level="ERROR",
+            )
+        except Exception:
+            pass
     error_summary = "; ".join(f"{p}: {e}" for p, e in errors)
     raise RuntimeError(
         f"All providers failed for operation={operation} "

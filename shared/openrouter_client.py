@@ -53,10 +53,11 @@ def call(
     model: str = DEFAULT_MODEL,
     max_tokens: int = 4000,
     timeout: int = DEFAULT_TIMEOUT,
-) -> str:
+) -> tuple[str, dict]:
     """Send chat completion request to OpenRouter API.
 
-    Returns the model's text response.
+    Returns a tuple of (text_response, usage_dict).
+    usage_dict contains: input_tokens, output_tokens, model.
 
     Raises:
         ValueError: if OPENROUTER_API_KEY is not set.
@@ -118,11 +119,18 @@ def call(
             f"OpenRouter: unexpected response format: {exc}"
         ) from exc
 
+    raw_usage = data.get("usage", {})
+    usage = {
+        "input_tokens": raw_usage.get("prompt_tokens"),
+        "output_tokens": raw_usage.get("completion_tokens"),
+        "model": model,
+    }
+
     logger.info(
-        "openrouter_client.call: success, model=%s, output_len=%d",
-        model, len(text),
+        "openrouter_client.call: success, model=%s, output_len=%d, input_tokens=%s, output_tokens=%s",
+        model, len(text), usage["input_tokens"], usage["output_tokens"],
     )
-    return text
+    return text, usage
 
 
 def test_connection(api_key: str, model: str = DEFAULT_MODEL) -> dict:

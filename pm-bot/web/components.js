@@ -139,7 +139,8 @@ function registerComponents(app) {
           { name: 'decay', label: 'DECAY', href: 'decay.html', icon: 'psychology' },
           { name: 'decisions', label: 'DECISIONS', href: 'decisions.html', icon: 'gavel' },
           { name: 'playground', label: 'PLAYGROUND', href: 'playground.html', icon: 'smart_toy' },
-          { name: 'system-log', label: 'SYSTEM LOG', href: 'system-log.html', icon: 'terminal' }
+          { name: 'system-log', label: 'SYSTEM LOG', href: 'system-log.html', icon: 'terminal' },
+          { name: 'llm-traces', label: 'LLM TRACES', href: 'http://localhost:3100', icon: 'analytics', external: true }
         ];
       }
     },
@@ -150,6 +151,8 @@ function registerComponents(app) {
         <a v-for="link in links"\
            :key="link.name"\
            :href="link.href"\
+           :target="link.external ? \'_blank\' : \'\'"\
+           :rel="link.external ? \'noopener\' : \'\'"\
            class="nav-link"\
            :class="{ active: active === link.name }"\
         ><span class="material-symbols-outlined">{{ link.icon }}</span>{{ link.label }}</a>\

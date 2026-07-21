@@ -21,6 +21,7 @@ class PipelineClaudeClient:
         user_message: str,
         max_tokens: int,
         timeout: int,
+        langfuse_parent=None,
     ) -> str:
         logger.info(
             "Claude call started: model=%s, system_prompt_len=%d, user_message_len=%d, max_tokens=%d",
@@ -52,6 +53,10 @@ class PipelineClaudeClient:
                     model,
                     len(output_text),
                     latency,
+                )
+                self._record_langfuse_generation(
+                    langfuse_parent, model, system_prompt, user_message,
+                    output_text, response,
                 )
                 return output_text
 
@@ -104,6 +109,10 @@ class PipelineClaudeClient:
                         len(output_text),
                         latency,
                     )
+                    self._record_langfuse_generation(
+                        langfuse_parent, model, system_prompt, user_message,
+                        output_text, response,
+                    )
                     return output_text
                 except Exception as retry_exc:
                     logger.error(
@@ -123,3 +132,42 @@ class PipelineClaudeClient:
                     str(exc),
                 )
                 raise
+
+    @staticmethod
+    def _record_langfuse_generation(
+        langfuse_parent,
+        model: str,
+        system_prompt: str,
+        user_message: str,
+        output_text: str,
+        response,
+    ) -> None:
+        """Record a Langfuse generation event if parent span/trace is provided."""
+        if langfuse_parent is None:
+            return
+        try:
+            usage_data = {}
+            if hasattr(response, "usage") and response.usage:
+                usage_data = {
+                    "input": response.usage.input_tokens,
+                    "output": response.usage.output_tokens,
+                }
+            langfuse_parent.generation(
+                name=model,
+                model=model,
+                input=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+                output=output_text,
+                usage=usage_data,
+            )
+            logger.info(
+                "PipelineClaudeClient: Langfuse generation recorded, model=%s, usage=%s",
+                model,
+                usage_data,
+            )
+        except Exception as exc:
+            logger.warning(
+                "PipelineClaudeClient.call: Langfuse generation failed: %s", exc
+            )

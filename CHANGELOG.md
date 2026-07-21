@@ -5,6 +5,19 @@
 
 ---
 
+## 21.07.2026 — feat: Langfuse LLM Observability (BL-166)
+
+### BL-166: Langfuse LLM Observability (21.07.2026)
+- Self-hosted Langfuse v2 (Docker: langfuse + langfuse-db, порт 3100)
+- Инструментация shared/llm_client.py:call_detailed() — автоматические трассировки для всех LLM-вызовов
+- Token usage проброс: Anthropic SDK и OpenRouter -> input_tokens/output_tokens в provider_record
+- shared/langfuse_client.py — singleton с graceful degradation
+- Sidebar ссылка LLM TRACES -> Langfuse UI
+- Langfuse SDK v2.x (совместим с сервером v2)
+- idea-pipeline инструментация (T-07, AC-03 blocked — требует BL-167 для полной работы)
+
+---
+
 ## 17.07.2026 — fix: _CLOSED_STATUSES сырые значения вместо нормализованных (BUG-025, BL-165)
 
 Задачи со статусом "Отменена" в Jira не распознавались как закрытые при jira-sync: `_CLOSED_STATUSES` содержал сырые русские названия статусов, но проверка выполнялась после `normalize_status()`, который уже преобразовал их в нормализованные значения.

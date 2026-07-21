@@ -22,8 +22,8 @@ class DecomposerAgent(BaseAgent):
             cleaned = match.group(1).strip()
         return cleaned
 
-    def run(self, input_text: str, context: dict | None = None) -> str:
-        raw_output = super().run(input_text, context)
+    def run(self, input_text: str, context: dict | None = None, _langfuse_parent=None) -> str:
+        raw_output = super().run(input_text, context, _langfuse_parent=_langfuse_parent)
         raw_output = self._extract_json(raw_output)
 
         try:
@@ -53,6 +53,7 @@ class DecomposerAgent(BaseAgent):
             user_message=retry_message,
             max_tokens=self.config.max_tokens,
             timeout=self.config.timeout_seconds,
+            langfuse_parent=_langfuse_parent,
         )
         retry_output = self._extract_json(retry_output)
 

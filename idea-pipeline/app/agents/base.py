@@ -24,7 +24,7 @@ class BaseAgent:
         )
         return prompt_text
 
-    def run(self, input_text: str, context: dict | None = None) -> str:
+    def run(self, input_text: str, context: dict | None = None, _langfuse_parent=None) -> str:
         logger.info(
             "Agent %s: run started, input_len=%d, has_context=%s",
             self.config.name,
@@ -38,6 +38,7 @@ class BaseAgent:
             user_message=user_message,
             max_tokens=self.config.max_tokens,
             timeout=self.config.timeout_seconds,
+            langfuse_parent=_langfuse_parent,
         )
         logger.info(
             "Agent %s: run finished, output_len=%d",

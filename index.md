@@ -15,7 +15,7 @@ pm_assistant/
 ├── docker-compose.yml              # оркестрация: pm-bot + knowledge-engine (:8001 API) + ke-cron + idea-pipeline
 ├── settings.yaml                   # централизованная runtime-конфигурация (timeouts, cooldowns, rate_limits)
 ├── CHANGELOG.md                    # журнал изменений по всем компонентам (от новых к старым)
-├── BACKLOG.md                      # бэклог: реализованные фичи (92, +BL-158), баги (24), идеи (33), итого (150)
+├── BACKLOG.md                      # бэклог: реализованные фичи (94, +BL-166), баги (26), идеи (35), итого (157)
 │
 ├── shared/                         # общий модуль — единый источник для pm-bot, KE, idea-pipeline
 │   ├── __init__.py                 # __version__ = "0.1.0"
@@ -28,6 +28,7 @@ pm_assistant/
 │   ├── frontmatter_utils.py        # read_frontmatter, update_frontmatter
 │   ├── settings.py                 # загрузка settings.yaml, dot-notation доступ, singleton
 │   ├── system_log.py               # Централизованный журнал системных операций (SQLite, 13 process types вкл. cowork-context)
+│   ├── langfuse_client.py          # Singleton Langfuse client с graceful degradation (BL-166)
 │   └── tests/                      # unit-тесты для shared/
 │       ├── test_settings.py        # 14 тестов
 │       ├── test_openrouter.py      # 9 тестов (call, test_connection, models)
@@ -57,6 +58,7 @@ pm_assistant/
 │   ├── openrouter-transcription/    # BL-138 DONE: requirements.md, design.md, tasks.md (10 задач)
 │   ├── openrouter-model-selection/  # BL-155+BL-156 DONE: requirements.md, design.md, tasks.md (13 задач)
 │   ├── openrouter-model-filter/    # BL-158 DONE: requirements.md, design.md, tasks.md (4 задачи)
+│   ├── BL-166_langfuse-observability/  # BL-166: спека Langfuse LLM Observability (requirements, design, tasks)
 │   └── architecture/adr/           # 5 ADR (решения по архитектуре)
 │
 ├── pm-bot/                         # Telegram-бот (capture)
@@ -242,6 +244,8 @@ pm_assistant/
 | knowledge-engine | HTTP API (:8001) + Watchdog на Inbox/ | sh -c "python -m knowledge_engine serve & python -m knowledge_engine watch" |
 | idea-pipeline | Orchestrator: Analyst → PM → Decomposer | python -m idea_pipeline serve |
 | ke-cron | Синтез (09:00) + Cowork-context (01:00) + Jira sync (каждые 3ч) | crond |
+| langfuse-db | PostgreSQL 15, хранилище Langfuse | — |
+| langfuse | Langfuse v2 (LLM observability UI), порт 3100 | — |
 
 ## Web UI
 
@@ -338,6 +342,10 @@ pm_assistant/
 | DAILY_ALERT_MINUTE | нет | pm-bot | Минута проверки наличия Daily-протокола (default: 0) |
 | KE_API_URL | нет | pm-bot | URL KE HTTP API (default: http://knowledge-engine:8001) |
 | DB_PATH | нет | pm-bot | Путь к SQLite БД (default: /data) |
+| LANGFUSE_PUBLIC_KEY | нет | pm-bot, knowledge-engine, idea-pipeline | Public key проекта Langfuse |
+| LANGFUSE_SECRET_KEY | нет | pm-bot, knowledge-engine, idea-pipeline | Secret key проекта Langfuse |
+| LANGFUSE_HOST | нет | pm-bot, knowledge-engine, idea-pipeline | Внутренний URL Langfuse (default: http://langfuse:3000) |
+| LANGFUSE_ENABLED | нет | pm-bot, knowledge-engine, idea-pipeline | Включить/отключить Langfuse (default: true) |
 
 ## Performance (vault_api.py)
 

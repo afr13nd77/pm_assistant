@@ -1,7 +1,7 @@
 """Tests for shared/llm_client.py"""
 
 import os
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
@@ -281,6 +281,7 @@ class TestIsProviderAvailable:
 
 class TestCall:
     _MESSAGES = [{"role": "user", "content": "hello"}]
+    _EMPTY_USAGE = {"input_tokens": None, "output_tokens": None, "model": None}
 
     def test_first_provider_success_returns_result(self):
         """When the first provider succeeds, its result is returned immediately."""
@@ -292,7 +293,7 @@ class TestCall:
         }
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", return_value=True), \
-             patch("shared.llm_client._call_provider", return_value="ok-response") as mock_call:
+             patch("shared.llm_client._call_provider", return_value=("ok-response", self._EMPTY_USAGE)) as mock_call:
             result = call("idea", self._MESSAGES, max_tokens=100)
             assert result == "ok-response"
             mock_call.assert_called_once()
@@ -305,7 +306,7 @@ class TestCall:
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
         }
-        call_results = [Exception("ollama down"), "fallback-response"]
+        call_results = [Exception("ollama down"), ("fallback-response", self._EMPTY_USAGE)]
         call_iter = iter(call_results)
 
         def fake_call_provider(step, *args, **kwargs):
@@ -348,7 +349,7 @@ class TestCall:
 
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", side_effect=availability), \
-             patch("shared.llm_client._call_provider", return_value="claude-result") as mock_call:
+             patch("shared.llm_client._call_provider", return_value=("claude-result", self._EMPTY_USAGE)) as mock_call:
             result = call("idea", self._MESSAGES, max_tokens=100)
             assert result == "claude-result"
             # _call_provider must have been called only once, with the claude step
@@ -362,6 +363,8 @@ class TestCall:
 
 class TestCallDetailed:
     _MESSAGES = [{"role": "user", "content": "hello"}]
+    _EMPTY_USAGE = {"input_tokens": None, "output_tokens": None, "model": None}
+    _CLAUDE_USAGE = {"input_tokens": 100, "output_tokens": 50, "model": "claude-sonnet-4-6"}
 
     def test_first_provider_success_record(self):
         """First provider succeeds: used==first, providers holds the chain, no errors."""
@@ -373,12 +376,15 @@ class TestCallDetailed:
         }
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", return_value=True), \
-             patch("shared.llm_client._call_provider", return_value="ok-response"):
+             patch("shared.llm_client._call_provider", return_value=("ok-response", self._CLAUDE_USAGE)):
             text, record = call_detailed("idea", self._MESSAGES, max_tokens=100)
             assert text == "ok-response"
             assert record["used"] == "claude"
             assert record["providers"] == ["claude"]
             assert record["errors"] == []
+            assert record["input_tokens"] == 100
+            assert record["output_tokens"] == 50
+            assert record["model"] == "claude-sonnet-4-6"
 
     def test_fallback_to_second_provider_record(self):
         """First provider fails, second succeeds: used==second, errors has the first."""
@@ -388,7 +394,7 @@ class TestCallDetailed:
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
         }
-        call_results = [Exception("ollama down"), "fallback-response"]
+        call_results = [Exception("ollama down"), ("fallback-response", self._CLAUDE_USAGE)]
         call_iter = iter(call_results)
 
         def fake_call_provider(step, *args, **kwargs):
@@ -425,7 +431,7 @@ class TestCallDetailed:
 
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", side_effect=availability), \
-             patch("shared.llm_client._call_provider", return_value="claude-result"):
+             patch("shared.llm_client._call_provider", return_value=("claude-result", self._EMPTY_USAGE)):
             text, record = call_detailed("idea", self._MESSAGES, max_tokens=100)
             assert text == "claude-result"
             assert record["used"]  # non-empty
@@ -455,7 +461,7 @@ class TestCallDetailed:
         }
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", return_value=True), \
-             patch("shared.llm_client._call_provider", return_value="ok-response"):
+             patch("shared.llm_client._call_provider", return_value=("ok-response", self._EMPTY_USAGE)):
             text_only = call("idea", self._MESSAGES, max_tokens=100)
             text_detailed, _ = call_detailed("idea", self._MESSAGES, max_tokens=100)
             assert text_only == text_detailed == "ok-response"
@@ -469,26 +475,27 @@ class TestCallDetailed:
 
 class TestCallOpenrouterModelSelection:
     _MESSAGES = [{"role": "user", "content": "hello"}]
+    _OR_USAGE = {"input_tokens": 10, "output_tokens": 20, "model": "step-model"}
 
     def test_call_openrouter_uses_explicit_model_param_over_prefs(self):
         """A model passed explicitly takes precedence over prefs['openrouter_model']."""
         prefs = {"openrouter_model": "global-fallback-model"}
-        with patch("shared.openrouter_client.call", return_value="resp") as mock_call:
-            result = _call_openrouter(prefs, self._MESSAGES, 100, None, None, model="step-model")
+        with patch("shared.openrouter_client.call", return_value=("resp", self._OR_USAGE)) as mock_call:
+            result, usage = _call_openrouter(prefs, self._MESSAGES, 100, None, None, model="step-model")
             assert result == "resp"
             assert mock_call.call_args.kwargs["model"] == "step-model"
 
     def test_call_openrouter_falls_back_to_prefs_when_model_not_given(self):
         """Backward compatibility: no model arg -> behaves exactly as before T-04."""
         prefs = {"openrouter_model": "global-fallback-model"}
-        with patch("shared.openrouter_client.call", return_value="resp") as mock_call:
-            result = _call_openrouter(prefs, self._MESSAGES, 100, None, None)
+        with patch("shared.openrouter_client.call", return_value=("resp", self._OR_USAGE)) as mock_call:
+            result, usage = _call_openrouter(prefs, self._MESSAGES, 100, None, None)
             assert result == "resp"
             assert mock_call.call_args.kwargs["model"] == "global-fallback-model"
 
     def test_call_openrouter_falls_back_to_hardcoded_default_when_nothing_set(self):
         """No model arg, no prefs['openrouter_model'] -> hardcoded default (unchanged)."""
-        with patch("shared.openrouter_client.call", return_value="resp") as mock_call:
+        with patch("shared.openrouter_client.call", return_value=("resp", self._OR_USAGE)) as mock_call:
             _call_openrouter({}, self._MESSAGES, 100, None, None)
             assert mock_call.call_args.kwargs["model"] == "qwen/qwen3-32b"
 
@@ -496,16 +503,17 @@ class TestCallOpenrouterModelSelection:
         """_call_provider(step, ...) passes step['model'] through to _call_openrouter."""
         prefs = {"openrouter_model": "global-fallback-model"}
         step = {"provider": "openrouter", "model": "step-model"}
-        with patch("shared.openrouter_client.call", return_value="resp") as mock_call:
-            result = _call_provider(step, prefs, self._MESSAGES, 100, None, None)
+        with patch("shared.openrouter_client.call", return_value=("resp", self._OR_USAGE)) as mock_call:
+            result, usage = _call_provider(step, prefs, self._MESSAGES, 100, None, None)
             assert result == "resp"
             assert mock_call.call_args.kwargs["model"] == "step-model"
 
     def test_call_provider_claude_still_takes_step_object(self):
         """claude/ollama accept the same step-shaped argument (uniform signature),
         but keep resolving their own model from their own prefs fields."""
-        with patch("shared.llm_client._call_claude", return_value="claude-resp") as mock_claude:
-            result = _call_provider({"provider": "claude", "model": None}, {}, self._MESSAGES, 100, None, None)
+        claude_usage = {"input_tokens": 100, "output_tokens": 50, "model": "claude-sonnet-4-6"}
+        with patch("shared.llm_client._call_claude", return_value=("claude-resp", claude_usage)) as mock_claude:
+            result, usage = _call_provider({"provider": "claude", "model": None}, {}, self._MESSAGES, 100, None, None)
             assert result == "claude-resp"
             mock_claude.assert_called_once()
 
@@ -541,7 +549,8 @@ class TestMultiModelOpenrouterFallback:
             if model == "model-A":
                 raise RuntimeError("model-A rate limited")
             if model == "model-B":
-                return "response-from-model-B"
+                usage = {"input_tokens": 10, "output_tokens": 20, "model": "model-B"}
+                return "response-from-model-B", usage
             raise AssertionError(f"unexpected model requested: {model}")
 
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
@@ -590,10 +599,11 @@ class TestMultiModelOpenrouterFallback:
                 raise RuntimeError("model-B down")
             raise AssertionError(f"unexpected model requested: {model}")
 
+        claude_usage = {"input_tokens": 100, "output_tokens": 50, "model": "claude-sonnet-4-6"}
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", return_value=True), \
              patch("shared.openrouter_client.call", side_effect=fake_openrouter_call) as mock_call, \
-             patch("shared.llm_client._call_claude", return_value="claude-response") as mock_claude, \
+             patch("shared.llm_client._call_claude", return_value=("claude-response", claude_usage)) as mock_claude, \
              patch("time.sleep"):
             text, record = call_detailed("idea", self._MESSAGES, max_tokens=100)
 
@@ -660,7 +670,8 @@ class TestProviderRecordChainFields:
         def fake_openrouter_call(messages, model, max_tokens, timeout=None, **kwargs):
             if model == "model-A":
                 raise RuntimeError("model-A down")
-            return "response-from-model-B"
+            usage = {"input_tokens": 10, "output_tokens": 20, "model": "model-B"}
+            return "response-from-model-B", usage
 
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", return_value=True), \
@@ -677,6 +688,10 @@ class TestProviderRecordChainFields:
         # Existing keys keep their pre-T-05 form
         assert record["providers"] == ["openrouter", "openrouter"]
         assert record["used"] == "openrouter"
+        # T-02: new usage fields in provider_record
+        assert record["input_tokens"] == 10
+        assert record["output_tokens"] == 20
+        assert record["model"] == "model-B"
 
     def test_used_model_is_none_for_claude(self):
         prefs = {
@@ -685,20 +700,25 @@ class TestProviderRecordChainFields:
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
         }
+        claude_usage = {"input_tokens": 100, "output_tokens": 50, "model": "claude-sonnet-4-6"}
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", return_value=True), \
-             patch("shared.llm_client._call_provider", return_value="claude-response"):
+             patch("shared.llm_client._call_provider", return_value=("claude-response", claude_usage)):
             text, record = call_detailed("idea", self._MESSAGES, max_tokens=100)
 
         assert record["used_model"] is None
         assert record["used_step_index"] == 0
         assert record["chain"] == [{"provider": "claude", "model": None}]
+        assert record["input_tokens"] == 100
+        assert record["output_tokens"] == 50
+        assert record["model"] == "claude-sonnet-4-6"
 
 
 class TestErrorKeyFormat:
     """errors[] key for openrouter steps is 'openrouter:<model>' (design.md §6.4)."""
 
     _MESSAGES = [{"role": "user", "content": "hello"}]
+    _EMPTY_USAGE = {"input_tokens": None, "output_tokens": None, "model": None}
 
     def test_openrouter_error_key_includes_model(self):
         prefs = {
@@ -714,7 +734,7 @@ class TestErrorKeyFormat:
         def fake_call_provider(step, *args, **kwargs):
             if step["provider"] == "openrouter":
                 raise RuntimeError("boom")
-            return "claude-response"
+            return ("claude-response", self._EMPTY_USAGE)
 
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", return_value=True), \
@@ -738,7 +758,7 @@ class TestErrorKeyFormat:
         def fake_call_provider(step, *args, **kwargs):
             if step["provider"] == "claude":
                 raise RuntimeError("no balance")
-            return "ollama-response"
+            return ("ollama-response", self._EMPTY_USAGE)
 
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", return_value=True), \
@@ -770,7 +790,8 @@ class TestOpenrouter429Backoff:
         def fake_openrouter_call(messages, model, max_tokens, timeout=None, **kwargs):
             if model == "model-A":
                 raise _make_http_error(429)
-            return "response-from-model-B"
+            usage = {"input_tokens": 10, "output_tokens": 20, "model": "model-B"}
+            return "response-from-model-B", usage
 
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", return_value=True), \
@@ -794,11 +815,12 @@ class TestOpenrouter429Backoff:
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
         }
+        _empty_usage = {"input_tokens": None, "output_tokens": None, "model": None}
 
         def fake_call_provider(step, *args, **kwargs):
             if step["provider"] == "openrouter":
                 raise _make_http_error(429)
-            return "claude-response"
+            return ("claude-response", _empty_usage)
 
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", return_value=True), \
@@ -823,7 +845,8 @@ class TestOpenrouter429Backoff:
         def fake_openrouter_call(messages, model, max_tokens, timeout=None, **kwargs):
             if model == "model-A":
                 raise RuntimeError("400 Bad Request: invalid model")
-            return "response-from-model-B"
+            usage = {"input_tokens": 10, "output_tokens": 20, "model": "model-B"}
+            return "response-from-model-B", usage
 
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", return_value=True), \
@@ -833,3 +856,224 @@ class TestOpenrouter429Backoff:
 
         assert text == "response-from-model-B"
         mock_sleep.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# T-09: Langfuse instrumentation tests for call_detailed()
+# ---------------------------------------------------------------------------
+
+class TestLangfuseTraceOnSuccess:
+    """T-09a: Langfuse trace is created and generation recorded on successful call."""
+
+    _MESSAGES = [{"role": "user", "content": "hello"}]
+    _CLAUDE_USAGE = {"input_tokens": 100, "output_tokens": 50, "model": "claude-sonnet-4-6"}
+
+    def test_langfuse_trace_created_with_operation_name(self):
+        """get_langfuse().trace() is called with name=operation on success."""
+        prefs = {
+            "llm_provider": "claude",
+            "capture_fallback": ["claude"],
+            "transcription_fallback": ["claude"],
+            "analysis_fallback": ["claude"],
+        }
+        mock_lf = MagicMock()
+        mock_trace = MagicMock()
+        mock_lf.trace.return_value = mock_trace
+
+        with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
+             patch("shared.llm_client._is_provider_available", return_value=True), \
+             patch("shared.llm_client._call_provider", return_value=("ok-response", self._CLAUDE_USAGE)), \
+             patch("shared.llm_client.get_langfuse", return_value=mock_lf):
+            text, record = call_detailed("idea", self._MESSAGES, max_tokens=100)
+
+        assert text == "ok-response"
+        mock_lf.trace.assert_called_once()
+        trace_call_kwargs = mock_lf.trace.call_args
+        assert trace_call_kwargs.kwargs["name"] == "idea"
+
+    def test_langfuse_generation_called_with_usage(self):
+        """trace.generation() is called with input/output/usage on success."""
+        prefs = {
+            "llm_provider": "claude",
+            "capture_fallback": ["claude"],
+            "transcription_fallback": ["claude"],
+            "analysis_fallback": ["claude"],
+        }
+        mock_lf = MagicMock()
+        mock_trace = MagicMock()
+        mock_lf.trace.return_value = mock_trace
+
+        with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
+             patch("shared.llm_client._is_provider_available", return_value=True), \
+             patch("shared.llm_client._call_provider", return_value=("ok-response", self._CLAUDE_USAGE)), \
+             patch("shared.llm_client.get_langfuse", return_value=mock_lf):
+            text, record = call_detailed("idea", self._MESSAGES, max_tokens=100)
+
+        mock_trace.generation.assert_called_once()
+        gen_kwargs = mock_trace.generation.call_args.kwargs
+        assert gen_kwargs["output"] == "ok-response"
+        assert gen_kwargs["model"] == "claude-sonnet-4-6"
+        assert gen_kwargs["usage"] == {"input": 100, "output": 50}
+        assert gen_kwargs["level"] == "DEFAULT"
+
+
+class TestLangfuseDisabled:
+    """T-09b: When Langfuse is disabled (get_langfuse returns None), LLM works fine."""
+
+    _MESSAGES = [{"role": "user", "content": "hello"}]
+    _CLAUDE_USAGE = {"input_tokens": 100, "output_tokens": 50, "model": "claude-sonnet-4-6"}
+
+    def test_langfuse_none_call_succeeds(self):
+        """call_detailed() succeeds and returns text when Langfuse is None."""
+        prefs = {
+            "llm_provider": "claude",
+            "capture_fallback": ["claude"],
+            "transcription_fallback": ["claude"],
+            "analysis_fallback": ["claude"],
+        }
+        with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
+             patch("shared.llm_client._is_provider_available", return_value=True), \
+             patch("shared.llm_client._call_provider", return_value=("ok-response", self._CLAUDE_USAGE)), \
+             patch("shared.llm_client.get_langfuse", return_value=None):
+            text, record = call_detailed("idea", self._MESSAGES, max_tokens=100)
+
+        assert text == "ok-response"
+        assert record["used"] == "claude"
+
+
+class TestLangfuseSdkErrorDoesNotBreakLlm:
+    """T-09c: A Langfuse SDK error must not prevent the LLM call from succeeding."""
+
+    _MESSAGES = [{"role": "user", "content": "hello"}]
+    _CLAUDE_USAGE = {"input_tokens": 100, "output_tokens": 50, "model": "claude-sonnet-4-6"}
+
+    def test_langfuse_generation_error_does_not_interrupt_call(self):
+        """If trace.generation() raises, call_detailed() still returns LLM result."""
+        prefs = {
+            "llm_provider": "claude",
+            "capture_fallback": ["claude"],
+            "transcription_fallback": ["claude"],
+            "analysis_fallback": ["claude"],
+        }
+        mock_lf = MagicMock()
+        mock_trace = MagicMock()
+        mock_trace.generation.side_effect = RuntimeError("Langfuse SDK exploded")
+        mock_lf.trace.return_value = mock_trace
+
+        with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
+             patch("shared.llm_client._is_provider_available", return_value=True), \
+             patch("shared.llm_client._call_provider", return_value=("ok-response", self._CLAUDE_USAGE)), \
+             patch("shared.llm_client.get_langfuse", return_value=mock_lf):
+            text, record = call_detailed("idea", self._MESSAGES, max_tokens=100)
+
+        assert text == "ok-response"
+        assert record["used"] == "claude"
+
+    def test_langfuse_trace_creation_error_does_not_interrupt_call(self):
+        """If lf.trace() raises, call_detailed() still returns LLM result."""
+        prefs = {
+            "llm_provider": "claude",
+            "capture_fallback": ["claude"],
+            "transcription_fallback": ["claude"],
+            "analysis_fallback": ["claude"],
+        }
+        mock_lf = MagicMock()
+        mock_lf.trace.side_effect = RuntimeError("Langfuse trace creation exploded")
+
+        with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
+             patch("shared.llm_client._is_provider_available", return_value=True), \
+             patch("shared.llm_client._call_provider", return_value=("ok-response", self._CLAUDE_USAGE)), \
+             patch("shared.llm_client.get_langfuse", return_value=mock_lf):
+            text, record = call_detailed("idea", self._MESSAGES, max_tokens=100)
+
+        assert text == "ok-response"
+        assert record["used"] == "claude"
+
+
+class TestLangfuseErrorGenerationOnFallback:
+    """T-09d: When a provider fails and fallback succeeds, Langfuse records both
+    an ERROR generation for the failed step and a DEFAULT generation for the success."""
+
+    _MESSAGES = [{"role": "user", "content": "hello"}]
+    _CLAUDE_USAGE = {"input_tokens": 100, "output_tokens": 50, "model": "claude-sonnet-4-6"}
+
+    def test_error_and_success_generations_recorded(self):
+        """Fallback chain: first provider fails (ERROR generation), second succeeds
+        (DEFAULT generation). trace.generation() is called twice with appropriate levels."""
+        prefs = {
+            "llm_provider": "claude",
+            "capture_fallback": ["ollama", "claude"],
+            "transcription_fallback": ["claude"],
+            "analysis_fallback": ["claude"],
+        }
+        call_results = [Exception("ollama down"), ("fallback-response", self._CLAUDE_USAGE)]
+        call_iter = iter(call_results)
+
+        def fake_call_provider(step, *args, **kwargs):
+            val = next(call_iter)
+            if isinstance(val, Exception):
+                raise val
+            return val
+
+        mock_lf = MagicMock()
+        mock_trace = MagicMock()
+        mock_lf.trace.return_value = mock_trace
+
+        with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
+             patch("shared.llm_client._is_provider_available", return_value=True), \
+             patch("shared.llm_client._call_provider", side_effect=fake_call_provider), \
+             patch("shared.llm_client.get_langfuse", return_value=mock_lf):
+            text, record = call_detailed("idea", self._MESSAGES, max_tokens=100)
+
+        assert text == "fallback-response"
+        assert record["used"] == "claude"
+
+        # trace.generation() must have been called exactly twice
+        assert mock_trace.generation.call_count == 2
+
+        # First call: error generation for failed ollama
+        error_gen_kwargs = mock_trace.generation.call_args_list[0].kwargs
+        assert error_gen_kwargs["level"] == "ERROR"
+        assert "ollama down" in error_gen_kwargs["status_message"]
+
+        # Second call: success generation for claude
+        success_gen_kwargs = mock_trace.generation.call_args_list[1].kwargs
+        assert success_gen_kwargs["level"] == "DEFAULT"
+        assert success_gen_kwargs["output"] == "fallback-response"
+
+    def test_error_generation_when_langfuse_error_gen_fails(self):
+        """If Langfuse error generation raises, the fallback chain still continues
+        and succeeds with the next provider."""
+        prefs = {
+            "llm_provider": "claude",
+            "capture_fallback": ["ollama", "claude"],
+            "transcription_fallback": ["claude"],
+            "analysis_fallback": ["claude"],
+        }
+        call_results = [Exception("ollama down"), ("fallback-response", self._CLAUDE_USAGE)]
+        call_iter = iter(call_results)
+
+        def fake_call_provider(step, *args, **kwargs):
+            val = next(call_iter)
+            if isinstance(val, Exception):
+                raise val
+            return val
+
+        mock_lf = MagicMock()
+        mock_trace = MagicMock()
+        # First generation call (error) raises, second (success) works
+        mock_trace.generation.side_effect = [
+            RuntimeError("Langfuse error gen exploded"),
+            MagicMock(),
+        ]
+        mock_lf.trace.return_value = mock_trace
+
+        with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
+             patch("shared.llm_client._is_provider_available", return_value=True), \
+             patch("shared.llm_client._call_provider", side_effect=fake_call_provider), \
+             patch("shared.llm_client.get_langfuse", return_value=mock_lf):
+            text, record = call_detailed("idea", self._MESSAGES, max_tokens=100)
+
+        # LLM call succeeds despite Langfuse error generation failure
+        assert text == "fallback-response"
+        assert record["used"] == "claude"

@@ -9,18 +9,55 @@ from shared.openrouter_client import AVAILABLE_MODELS, call, list_models, test_c
 
 
 class TestCall:
-    def test_call_success(self):
-        """Mock successful API call, verify content extraction."""
+    def test_call_success_returns_tuple(self):
+        """Mock successful API call, verify tuple[str, dict] return."""
         mock_resp = MagicMock()
         mock_resp.json.return_value = {
-            "choices": [{"message": {"content": "Hello world"}}]
+            "choices": [{"message": {"content": "Hello world"}}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 25},
         }
         mock_resp.raise_for_status = MagicMock()
 
         with patch("shared.openrouter_client.os.getenv", return_value="sk-test-key"), \
              patch("shared.openrouter_client.requests.post", return_value=mock_resp):
             result = call([{"role": "user", "content": "test"}])
-            assert result == "Hello world"
+            assert isinstance(result, tuple)
+            assert len(result) == 2
+            text, usage = result
+            assert text == "Hello world"
+
+    def test_call_usage_contains_required_fields(self):
+        """usage dict must contain input_tokens, output_tokens, model."""
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": "ok"}}],
+            "usage": {"prompt_tokens": 42, "completion_tokens": 17},
+        }
+        mock_resp.raise_for_status = MagicMock()
+
+        with patch("shared.openrouter_client.os.getenv", return_value="sk-test-key"), \
+             patch("shared.openrouter_client.requests.post", return_value=mock_resp):
+            text, usage = call([{"role": "user", "content": "test"}], model="test/model")
+            assert usage["input_tokens"] == 42
+            assert usage["output_tokens"] == 17
+            assert usage["model"] == "test/model"
+
+    def test_call_usage_graceful_when_usage_absent(self):
+        """When API response has no 'usage' field, usage dict has None tokens."""
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": "no usage"}}],
+            # No "usage" key at all
+        }
+        mock_resp.raise_for_status = MagicMock()
+
+        with patch("shared.openrouter_client.os.getenv", return_value="sk-test-key"), \
+             patch("shared.openrouter_client.requests.post", return_value=mock_resp):
+            text, usage = call([{"role": "user", "content": "test"}], model="test/model")
+            assert text == "no usage"
+            assert usage["input_tokens"] is None
+            assert usage["output_tokens"] is None
+            assert usage["model"] == "test/model"
 
     def test_call_no_api_key(self):
         """ValueError when OPENROUTER_API_KEY not set."""

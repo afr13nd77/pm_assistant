@@ -57,7 +57,37 @@ PM Assistant -- система автоматизации рабочих зам�
 
 Голосовые сообщения транскрибируются локально через **faster-whisper** (модель `small`, CPU, int8). Управление: переменная `STT_ENABLED` (по умолчанию включен).
 
-### 2.4. Web UI
+### 2.4. Langfuse (LLM Observability)
+
+Langfuse -- self-hosted платформа аналитики LLM-вызовов. Автоматически записывает трассировки промптов,
+подсчёт токенов (input/output), стоимость в деньгах, fallback-цепочки.
+
+**Первый запуск:**
+
+1. Поднять Langfuse: `docker compose up -d langfuse-db langfuse`
+2. Открыть http://<server-ip>:3100
+3. Создать admin-аккаунт (Sign Up -- первый пользователь = admin)
+4. Создать проект (например "pm-assistant")
+5. Settings -> API Keys -> скопировать Public Key и Secret Key
+6. Прописать в `.env`:
+   ```
+   LANGFUSE_PUBLIC_KEY=pk-lf-xxxxx
+   LANGFUSE_SECRET_KEY=sk-lf-xxxxx
+   LANGFUSE_HOST=http://langfuse:3000
+   LANGFUSE_ENABLED=true
+   ```
+7. Перезапустить сервисы: `docker compose restart pm-bot knowledge-engine idea-pipeline`
+8. Отправить тестовую идею в Telegram -> проверить trace в Langfuse UI
+
+**Архитектура:**
+- Langfuse SDK v2.x (`langfuse>=2.0.0,<3.0.0`) установлен во все компоненты
+- Инструментация в `shared/llm_client.py:call_detailed()` -- автоматическая для всех LLM-вызовов через shared
+- Graceful degradation: если Langfuse недоступен -- LLM-вызовы продолжают работать
+- Dual logging: system_log (SQLite) сохраняется параллельно с Langfuse
+
+**Отключение:** `LANGFUSE_ENABLED=false` в `.env` или удалить `LANGFUSE_PUBLIC_KEY`.
+
+### 2.5. Web UI
 
 9 страниц статического SPA на Vue 3 + vanilla JS. Данные получают из Vault API (FastAPI, порт 8000) через `api.js`.
 
@@ -75,7 +105,7 @@ PM Assistant -- система автоматизации рабочих зам�
 
 Dual-theme: **MATRIX** (dark, glow/neon) и **LIGHT** (cream, warm). Переключение в settings, хранение серверное (`.pm-user-prefs.json` в vault).
 
-### 2.5. Доменная структура vault
+### 2.6. Доменная структура vault
 
 Знания организованы по 5 продуктовым доменам:
 
@@ -259,6 +289,10 @@ docker compose up -d
 | `PIPELINE_API_KEY` | нет | pm-bot, pipeline | API key для аутентификации pipeline | Произвольная строка |
 | `PIPELINE_HOST` | нет | pipeline | Bind host | Default: `0.0.0.0` |
 | `PIPELINE_PORT` | нет | pipeline | Bind port | Default: `8100` |
+| `LANGFUSE_PUBLIC_KEY` | нет | все | Public key проекта Langfuse | Langfuse UI -> Settings -> API Keys |
+| `LANGFUSE_SECRET_KEY` | нет | все | Secret key проекта Langfuse | Langfuse UI -> Settings -> API Keys |
+| `LANGFUSE_HOST` | нет | все | Внутренний URL Langfuse | Default: `http://langfuse:3000` |
+| `LANGFUSE_ENABLED` | нет | все | Включить/отключить Langfuse | Default: `true` |
 
 ---
 
@@ -497,6 +531,7 @@ docker compose exec knowledge-engine python -m knowledge_engine <command>
 | Web UI | http://192.168.0.6:8080 |
 | KE API | http://192.168.0.6:8001 (health: `/health`) |
 | Pipeline API | http://192.168.0.6:8100 |
+| Langfuse UI | http://192.168.0.6:3100 |
 | Структура проекта | `index.md` |
 | Бэклог | `BACKLOG.md` |
 | Журнал изменений | `CHANGELOG.md` |
