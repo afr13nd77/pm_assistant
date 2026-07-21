@@ -9,7 +9,6 @@ from idea_pipeline import vault_writer
 from idea_pipeline.agents.analyst import AnalystAgent
 from idea_pipeline.agents.decomposer import DecomposerAgent
 from idea_pipeline.agents.pm_agent import PMAgent
-from idea_pipeline.claude_client import PipelineClaudeClient
 from idea_pipeline.config import PipelineConfig
 from idea_pipeline.state import PipelineStage, PipelineStore
 
@@ -22,20 +21,18 @@ class PipelineOrchestrator:
     def __init__(
         self,
         config: PipelineConfig,
-        claude_client: PipelineClaudeClient,
         store: PipelineStore,
         vault_path: Path,
     ) -> None:
         self.config = config
-        self.client = claude_client
         self.store = store
         self.vault_path = vault_path
         self._lock = asyncio.Lock()
         self._running_pipeline_id: str | None = None
 
-        self.analyst = AnalystAgent(config.agents["analyst"], claude_client)
-        self.pm_agent = PMAgent(config.agents["pm"], claude_client)
-        self.decomposer = DecomposerAgent(config.agents["decomposer"], claude_client)
+        self.analyst = AnalystAgent(config.agents["analyst"])
+        self.pm_agent = PMAgent(config.agents["pm"])
+        self.decomposer = DecomposerAgent(config.agents["decomposer"])
 
         logger.info(
             "PipelineOrchestrator initialized: vault_path=%s, agents=%s",
@@ -82,30 +79,6 @@ class PipelineOrchestrator:
         slug = run.slug
         today = date.today().isoformat()
 
-        # --- Langfuse trace ---
-        from shared.langfuse_client import get_langfuse
-
-        lf = get_langfuse()
-        trace = None
-        if lf:
-            try:
-                trace = lf.trace(
-                    name="idea_pipeline",
-                    metadata={
-                        "pipeline_id": pipeline_id,
-                        "domain": domain,
-                        "slug": slug,
-                    },
-                    tags=["pipeline"],
-                )
-                logger.info(
-                    "Pipeline %s: Langfuse trace created", pipeline_id
-                )
-            except Exception as exc:
-                logger.warning(
-                    "run_pipeline: failed to create Langfuse trace: %s", exc
-                )
-
         # analysis_text and prd_text flow between stages; set to None so each
         # stage can assert they were populated by the preceding one.
         analysis_text: str | None = None
@@ -119,23 +92,9 @@ class PipelineOrchestrator:
 
                 vault_context = self._get_vault_context(input_text)
 
-                analyst_span = None
-                if trace:
-                    try:
-                        analyst_span = trace.span(name="analyst")
-                    except Exception:
-                        pass
-
                 analysis_text = await asyncio.to_thread(
                     self.analyst.run, input_text, vault_context,
-                    _langfuse_parent=analyst_span,
                 )
-
-                if analyst_span:
-                    try:
-                        analyst_span.end()
-                    except Exception:
-                        pass
 
                 vault_writer.write_analysis(
                     analysis_text, pipeline_id,
@@ -163,23 +122,9 @@ class PipelineOrchestrator:
                         len(analysis_text),
                     )
 
-                pm_span = None
-                if trace:
-                    try:
-                        pm_span = trace.span(name="pm")
-                    except Exception:
-                        pass
-
                 prd_text = await asyncio.to_thread(
                     self.pm_agent.run, analysis_text,
-                    _langfuse_parent=pm_span,
                 )
-
-                if pm_span:
-                    try:
-                        pm_span.end()
-                    except Exception:
-                        pass
 
                 vault_writer.write_prd(
                     prd_text, pipeline_id,
@@ -209,23 +154,9 @@ class PipelineOrchestrator:
                         len(prd_text),
                     )
 
-                decomposer_span = None
-                if trace:
-                    try:
-                        decomposer_span = trace.span(name="decomposer")
-                    except Exception:
-                        pass
-
                 decomposer_output = await asyncio.to_thread(
                     self.decomposer.run, prd_text,
-                    _langfuse_parent=decomposer_span,
                 )
-
-                if decomposer_span:
-                    try:
-                        decomposer_span.end()
-                    except Exception:
-                        pass
 
                 parsed = json.loads(decomposer_output)
                 epic_data = parsed.get("epic", {})

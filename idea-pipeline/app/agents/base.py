@@ -1,16 +1,15 @@
 import logging
 from pathlib import Path
 
-from idea_pipeline.claude_client import PipelineClaudeClient
+from shared import llm_client
 from idea_pipeline.config import AgentConfig
 
 logger = logging.getLogger(__name__)
 
 
 class BaseAgent:
-    def __init__(self, config: AgentConfig, claude_client: PipelineClaudeClient) -> None:
+    def __init__(self, config: AgentConfig) -> None:
         self.config = config
-        self.client = claude_client
         self.prompt = self._load_prompt()
 
     def _load_prompt(self) -> str:
@@ -24,7 +23,7 @@ class BaseAgent:
         )
         return prompt_text
 
-    def run(self, input_text: str, context: dict | None = None, _langfuse_parent=None) -> str:
+    def run(self, input_text: str, context: dict | None = None) -> str:
         logger.info(
             "Agent %s: run started, input_len=%d, has_context=%s",
             self.config.name,
@@ -32,13 +31,13 @@ class BaseAgent:
             context is not None,
         )
         user_message = self._build_user_message(input_text, context)
-        output = self.client.call(
-            model=self.config.model,
-            system_prompt=self.prompt,
-            user_message=user_message,
+        operation = f"pipeline_{self.config.name}"
+        output = llm_client.call(
+            operation=operation,
+            messages=[{"role": "user", "content": user_message}],
             max_tokens=self.config.max_tokens,
+            system=self.prompt,
             timeout=self.config.timeout_seconds,
-            langfuse_parent=_langfuse_parent,
         )
         logger.info(
             "Agent %s: run finished, output_len=%d",

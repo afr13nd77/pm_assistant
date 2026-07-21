@@ -2,6 +2,7 @@ import json
 import logging
 import re
 
+from shared import llm_client
 from idea_pipeline.agents.base import BaseAgent
 
 logger = logging.getLogger(__name__)
@@ -22,8 +23,8 @@ class DecomposerAgent(BaseAgent):
             cleaned = match.group(1).strip()
         return cleaned
 
-    def run(self, input_text: str, context: dict | None = None, _langfuse_parent=None) -> str:
-        raw_output = super().run(input_text, context, _langfuse_parent=_langfuse_parent)
+    def run(self, input_text: str, context: dict | None = None) -> str:
+        raw_output = super().run(input_text, context)
         raw_output = self._extract_json(raw_output)
 
         try:
@@ -47,13 +48,13 @@ class DecomposerAgent(BaseAgent):
         hint = "\n\nВАЖНО: твой предыдущий ответ не был валидным JSON. Верни СТРОГО валидный JSON. Первый символ — {, последний — }. Никакого текста до или после JSON."
         retry_message = self._build_user_message(input_text, context) + hint
 
-        retry_output = self.client.call(
-            model=self.config.model,
-            system_prompt=self.prompt,
-            user_message=retry_message,
+        operation = f"pipeline_{self.config.name}"
+        retry_output = llm_client.call(
+            operation=operation,
+            messages=[{"role": "user", "content": retry_message}],
             max_tokens=self.config.max_tokens,
+            system=self.prompt,
             timeout=self.config.timeout_seconds,
-            langfuse_parent=_langfuse_parent,
         )
         retry_output = self._extract_json(retry_output)
 

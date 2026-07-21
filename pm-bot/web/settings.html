@@ -604,7 +604,13 @@
         {
           key: 'analysis',
           name: 'ANALYSIS',
-          operations: ['enrich', 'synthesize', 'report', 'pipeline'],
+          operations: ['enrich', 'synthesize', 'report'],
+          chain: [{ provider: 'claude', model: null }]
+        },
+        {
+          key: 'pipeline',
+          name: 'PIPELINE',
+          operations: ['pipeline_analyst', 'pipeline_pm', 'pipeline_decomposer'],
           chain: [{ provider: 'claude', model: null }]
         }
       ]);
@@ -689,6 +695,7 @@
         var captureChain = (findGroup('capture') || {}).chain || [{ provider: 'claude', model: null }];
         var transcriptionChain = (findGroup('transcription') || {}).chain || [{ provider: 'claude', model: null }];
         var analysisChain = (findGroup('analysis') || {}).chain || [{ provider: 'claude', model: null }];
+        var pipelineChain = (findGroup('pipeline') || {}).chain || [{ provider: 'claude', model: null }];
 
         return {
           refresh_mode: refreshMode.value,
@@ -702,7 +709,8 @@
           openrouter_model: openrouterModel.value,
           capture_fallback: captureChain,
           transcription_fallback: transcriptionChain,
-          analysis_fallback: analysisChain
+          analysis_fallback: analysisChain,
+          pipeline_fallback: pipelineChain
         };
       }
 
@@ -1092,6 +1100,9 @@
           }
           if (prefs.analysis_fallback && Array.isArray(prefs.analysis_fallback)) {
             findGroup('analysis').chain = prefs.analysis_fallback.map(normalizeChainStep);
+          }
+          if (prefs.pipeline_fallback && Array.isArray(prefs.pipeline_fallback)) {
+            findGroup('pipeline').chain = prefs.pipeline_fallback.map(normalizeChainStep);
           }
 
           console.log('[settings] prefs loaded: refresh=%s theme=%s llm=%s capture=%s transcription=%s', refreshMode.value, currentTheme.value, llmProvider.value, captureMode.value, transcriptionProvider.value);

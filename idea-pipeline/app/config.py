@@ -1,16 +1,9 @@
 import logging
-import os
 from dataclasses import dataclass
 
 import yaml
 
 logger = logging.getLogger(__name__)
-
-_ENV_VAR_MAP = {
-    "analyst": "PIPELINE_ANALYST_MODEL",
-    "pm": "PIPELINE_PM_MODEL",
-    "decomposer": "PIPELINE_DECOMPOSER_MODEL",
-}
 
 
 @dataclass
@@ -50,18 +43,6 @@ def load_config(yaml_path: str) -> PipelineConfig:
         max_tokens = agent_section.get("max_tokens", default_max_tokens)
         timeout_seconds = agent_section.get("timeout_seconds", default_timeout)
         prompt_file = agent_section.get("prompt_file", "")
-
-        env_var = _ENV_VAR_MAP.get(agent_name)
-        if env_var:
-            env_value = os.getenv(env_var)
-            if env_value:
-                logger.info(
-                    "Agent %s: model overridden by env %s -> %s",
-                    agent_name,
-                    env_var,
-                    env_value,
-                )
-                model = env_value
 
         cfg = AgentConfig(
             name=agent_name,

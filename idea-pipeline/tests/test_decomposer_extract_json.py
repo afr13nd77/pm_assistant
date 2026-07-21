@@ -2,7 +2,7 @@
 
 import json
 import logging
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from idea_pipeline.agents.decomposer import DecomposerAgent
@@ -19,9 +19,8 @@ def agent():
         timeout_seconds=60,
         prompt_file="prompts/decomposer.md",
     )
-    client = MagicMock()
     with patch.object(DecomposerAgent, "_load_prompt", return_value="system prompt"):
-        return DecomposerAgent(config, client)
+        return DecomposerAgent(config)
 
 
 class TestExtractJson:
@@ -97,8 +96,9 @@ class TestRunWithFencedOutput:
 
         with patch(
             "idea_pipeline.agents.base.BaseAgent.run", return_value=invalid_output
+        ), patch(
+            "idea_pipeline.agents.decomposer.llm_client.call", return_value=fenced_retry
         ):
-            agent.client.call.return_value = fenced_retry
             result = agent.run("some input")
 
         parsed = json.loads(result)
@@ -109,7 +109,8 @@ class TestRunWithFencedOutput:
 
         with patch(
             "idea_pipeline.agents.base.BaseAgent.run", return_value=invalid_output
+        ), patch(
+            "idea_pipeline.agents.decomposer.llm_client.call", return_value="still not json"
         ):
-            agent.client.call.return_value = "still not json"
             with pytest.raises(ValueError, match="failed to produce valid JSON"):
                 agent.run("some input")

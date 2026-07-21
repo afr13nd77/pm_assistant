@@ -171,7 +171,6 @@ pm_assistant/
         ├── __main__.py             # точка входа: serve, run, status
         ├── api.py                  # FastAPI endpoints (5 endpoints)
         ├── orchestrator.py         # pipeline orchestration: Analyst → PM → Decomposer
-        ├── claude_client.py        # Claude API с configurable model per agent
         ├── config.py               # загрузка pipeline.yaml + env overrides
         ├── state.py                # PipelineRun, PipelineStore (in-memory + _state.json)
         ├── vault_writer.py         # запись артефактов в vault с frontmatter
@@ -194,10 +193,10 @@ pm_assistant/
 |---|---|---|---|
 | **pm-bot** | 1.18.2 | 2026-07-13 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py, 22 функции). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. context_assembler: waterfall сборка контекста из llm_wiki/ (kill switch DIGEST_CONTEXT_SOURCE), enrich_creative_recall (BL-147 Phase 2). Digest context injection в process_idea и weekly report. Мультимодельные OpenRouter fallback-цепочки с inline model selector + GET /openrouter-models (BL-155, BL-156). Playground providers: live-список моделей OpenRouter через list_models() (BL-158). Report search/filter: _extract_report_type + type в ответе /api/v1/reports, UI поиск + фильтр-чипы (BL-161). Epic body в drawer roadmap: SHOW_BODY/SHOW_TICKETS тогглер, body в ответе /api/v1/epics (BL-162). |
 | **knowledge-engine** | 1.15.2 | 2026-07-17 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (29 эндпоинтов). DigestHandler в watcher.py (DIGEST_ENABLED env, debounce 5s, body_hash check). 3 API endpoints: digest/generate, digest/bulk, digest/status (BL-147 Phase 2). cowork_context: _cowork-session.md для Cowork (BL-151). Jira sync fallback: поиск vault-файлов по jira_key в frontmatter для кастомных имён (BUG-023). Fix _CLOSED_STATUSES: задачи "Отменена" корректно распознаются как закрытые (BUG-025). |
-| **idea-pipeline** | 1.1.2 | 2026-06-14 | Orchestrator: Analyst → PM → Decomposer. Импорты vault_paths и file_writer из shared/. |
+| **idea-pipeline** | 1.2.0 | 2026-07-22 | Orchestrator: Analyst → PM → Decomposer. LLM-вызовы через shared/llm_client с fallback-цепочками (pipeline_analyst, pipeline_pm, pipeline_decomposer). PipelineClaudeClient удалён. Импорты vault_paths и file_writer из shared/. |
 | **web-ui** | 1.26.3 | 2026-07-13 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141), LLM Playground (BL-142). Decision Journal (BL-24): decisions.html + meeting.html + overview виджет RECENT DECISIONS. Process Catalog (processes.html, process.html). Searchable dropdown для моделей OpenRouter в settings.html и playground.html, общий CSS в style.css (BL-158). Report search/filter: поиск по имени/заголовку + фильтр-чипы по типу (BL-161). Epic body toggle в drawer roadmap (BL-162). BUG-021/022: Jira Import direct key fix + ticket list filtering. |
 | **инфраструктура** | 1.1.0 | 2026-06-30 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120). KE-контейнер: процесс queue-watch (watchdog на pending/); ke-cron: process-queue каждые 10 мин — страховка/reclaim (BL-145). |
-| **shared** | 0.7.1 | 2026-07-06 | Общий модуль: llm_client (call с настраиваемыми fallback-цепочками, _normalize_step для мультимодельных цепочек {provider, model}, backoff 0.7s при 429, Ollama timeout ×5, call_transcription, call_detailed — additive, отдаёт provider_record + chain/used_model/used_step_index + автоматический LLM trace в system_log — BL-155), meeting_queue (enqueue-ядро файловой очереди: Unit, make_unit_id, build_meta, enqueue, path-хелперы — BL-145), openrouter_client (list_models с live API + TTL-кэш 1ч + fallback — BL-156; call() с детальным логированием raw-body при ошибке парсинга — BUG-020), system_log (13 process types, LoggedProcess, per-unit details), file_writer, vault_paths (26 функций, +llm_wiki_cowork_session), domain_config, frontmatter_utils, settings. Единый источник для всех компонентов. |
+| **shared** | 0.7.2 | 2026-07-22 | Общий модуль: llm_client (call с настраиваемыми fallback-цепочками, 4 группы операций: capture/transcription/analysis/pipeline, _normalize_step для мультимодельных цепочек {provider, model}, backoff 0.7s при 429, Ollama timeout ×5, call_transcription, call_detailed — additive, отдаёт provider_record + chain/used_model/used_step_index + автоматический LLM trace в system_log — BL-155, BL-167), langfuse_client (singleton с graceful degradation — BL-166), meeting_queue (enqueue-ядро файловой очереди: Unit, make_unit_id, build_meta, enqueue, path-хелперы — BL-145), openrouter_client (list_models с live API + TTL-кэш 1ч + fallback — BL-156; call() с детальным логированием raw-body при ошибке парсинга — BUG-020), system_log (13 process types, LoggedProcess, per-unit details), file_writer, vault_paths (26 функций, +llm_wiki_cowork_session), domain_config, frontmatter_utils, settings. Единый источник для всех компонентов. |
 
 Схема: semver `MAJOR.MINOR.PATCH`. MAJOR — ломающие изменения API/контрактов. MINOR — новый функционал. PATCH — багофиксы.
 
@@ -323,9 +322,6 @@ pm_assistant/
 | PIPELINE_API_KEY | нет | idea-pipeline, pm-bot | API key для аутентификации |
 | PIPELINE_HOST | нет | idea-pipeline | Bind host (default: 0.0.0.0) |
 | PIPELINE_PORT | нет | idea-pipeline | Bind port (default: 8100) |
-| PIPELINE_ANALYST_MODEL | нет | idea-pipeline | Override модели для Analyst |
-| PIPELINE_PM_MODEL | нет | idea-pipeline | Override модели для PM |
-| PIPELINE_DECOMPOSER_MODEL | нет | idea-pipeline | Override модели для Decomposer |
 | JIRA_URL | да | knowledge-engine | URL Jira-сервера (https://jira.webpower.ru/) |
 | JIRA_TOKEN | да | knowledge-engine | Personal Access Token (Bearer auth) |
 | JIRA_SYNC_CRON | нет | ke-cron | Расписание синка (default: 0 */3 * * *) |

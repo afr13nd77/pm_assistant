@@ -28,7 +28,6 @@ def cmd_run(args):
     from pathlib import Path
 
     from idea_pipeline import vault_writer
-    from idea_pipeline.claude_client import PipelineClaudeClient
     from idea_pipeline.config import load_config
     from idea_pipeline.orchestrator import PipelineOrchestrator
     from idea_pipeline.state import PipelineStore
@@ -37,7 +36,6 @@ def cmd_run(args):
     vault_path = Path(os.getenv("VAULT_PATH", "/vault"))
     config_path = os.getenv("PIPELINE_CONFIG", "pipeline.yaml")
     config = load_config(config_path)
-    client = PipelineClaudeClient(os.getenv("CLAUDE_API_KEY", ""))
     store = PipelineStore()
 
     domain = args.domain
@@ -80,7 +78,6 @@ def cmd_run(args):
 
     orchestrator = PipelineOrchestrator(
         config=config,
-        claude_client=client,
         store=store,
         vault_path=vault_path,
     )

@@ -1,8 +1,8 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.18.2 / knowledge-engine 1.15.2 / idea-pipeline 1.1.2 / web-ui 1.26.3 / shared 0.7.1
-**Обновлён:** 21.07.2026 (BL-166 реализован, BL-167 добавлен)
-**Бэклог:** реализованные фичи (94, +BL-166), баги (26), идеи (35), итого (157)
+**Версии:** pm-bot 1.18.2 / knowledge-engine 1.15.2 / idea-pipeline 1.2.0 / web-ui 1.26.3 / shared 0.7.2
+**Обновлён:** 22.07.2026 (BL-167 реализован)
+**Бэклог:** реализованные фичи (95, +BL-167), баги (26), идеи (34), итого (157)
 
 ---
 
@@ -109,7 +109,6 @@
 | BL-37 | Запуск pipeline из существующей заметки | idea-pipeline | /pipeline_file <path> -- запуск по файлу из vault (описан в FLOW-02 idea-pipeline) |
 | BL-38 | Авто-статус по readiness | pm-bot | При достижении порогов readiness (44%, 100%) автоматически менять статус идеи |
 | BL-39 | Board-as-Opponent | idea-pipeline | При каждой идее агент генерирует devil's advocate: "почему НЕ делать, риски, альтернативы" |
-| BL-167 | Перевод idea-pipeline на shared/llm_client fallback chains | idea-pipeline, shared | PipelineClaudeClient использует прямой Claude API (anthropic SDK). Перевести на shared/llm_client.call_detailed() с fallback-цепочками (Claude → OpenRouter → Ollama). Мотивация: при низком балансе Claude API pipeline полностью недоступен. Бонус: Langfuse инструментация (BL-166 AC-03) будет работать автоматически через call_detailed(). Поглощает BL-72 |
 
 ---
 
@@ -208,6 +207,7 @@
 | BL-80 | ✅ Frontmatter utils | knowledge-engine | Чтение/запись YAML frontmatter |
 | BL-143 | ✅ Trace Log — централизованный журнал операций | pm-bot, knowledge-engine, shared | shared/system_log.py (SQLite модуль), 11 процессов обёрнуты в LoggedProcess, API /system-log + /system-log/stats, Web UI system-log.html, LLM trace (provider chain, fallback, ошибки), per-unit details meeting queue, overview badge, cron cleanup 90д, 12 unit-тестов. Спека: docs/system-activity-log/ |
 | BL-166 | ✅ Langfuse LLM Observability | shared, pm-bot, knowledge-engine, idea-pipeline, инфраструктура | Self-hosted Langfuse v2 (Docker: langfuse + langfuse-db, порт 3100). Инструментация shared/llm_client.py:call_detailed() — автоматические трассировки. Token usage проброс из Anthropic SDK и OpenRouter. shared/langfuse_client.py — singleton с graceful degradation. Sidebar ссылка LLM TRACES. Langfuse SDK v2.x. idea-pipeline инструментация частичная (AC-03 blocked — требует BL-167). Спека: docs/BL-166_langfuse-observability/ |
+| BL-167 | ✅ Pipeline fallback chains | idea-pipeline, shared, web-ui | Перевод idea-pipeline на shared/llm_client fallback chains. Pipeline = 4-я группа операций. PipelineClaudeClient удалён. Settings UI: PIPELINE карточка. Спека: docs/BL-167_pipeline-fallback-chains/ |
 
 ### 7.2 Идеи
 
@@ -326,8 +326,8 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 94 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166 |
+| ✅ Реализовано | 95 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-167 |
 | ✅ Баги исправлены | 26 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165 |
-| Идея | 35 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-167 |
+| Идея | 34 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163 |
 | ❌ Удалено | 1 | BL-121 |
 | **Итого** | **157** | |

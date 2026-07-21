@@ -58,22 +58,48 @@ class TestMigrateLegacyPrefs:
         assert result["transcription_fallback"] == ["openrouter", "ollama", "claude"]
 
     def test_already_migrated_prefs_unchanged(self):
-        """If all three fallback fields are present, prefs are returned as-is."""
+        """If all four fallback fields are present, prefs are returned as-is."""
         prefs = {
             "llm_provider": "claude",
             "capture_fallback": ["openrouter", "claude"],
             "transcription_fallback": ["openrouter"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
         original_capture = prefs["capture_fallback"][:]
         original_transcription = prefs["transcription_fallback"][:]
         original_analysis = prefs["analysis_fallback"][:]
+        original_pipeline = prefs["pipeline_fallback"][:]
 
         result = _migrate_legacy_prefs(prefs)
 
         assert result["capture_fallback"] == original_capture
         assert result["transcription_fallback"] == original_transcription
         assert result["analysis_fallback"] == original_analysis
+        assert result["pipeline_fallback"] == original_pipeline
+
+    def test_pipeline_fallback_default_claude(self):
+        """llm_provider=claude -> pipeline_fallback=['claude']."""
+        prefs = {"llm_provider": "claude"}
+        result = _migrate_legacy_prefs(prefs)
+        assert result["pipeline_fallback"] == ["claude"]
+
+    def test_pipeline_fallback_ollama(self):
+        """llm_provider=ollama -> pipeline_fallback=['ollama', 'claude']."""
+        prefs = {"llm_provider": "ollama"}
+        result = _migrate_legacy_prefs(prefs)
+        assert result["pipeline_fallback"] == ["ollama", "claude"]
+
+    def test_early_return_missing_pipeline_fallback(self):
+        """Prefs with 3 fallback fields but without pipeline_fallback -> migration runs."""
+        prefs = {
+            "llm_provider": "claude",
+            "capture_fallback": ["claude"],
+            "transcription_fallback": ["claude"],
+            "analysis_fallback": ["claude"],
+        }
+        result = _migrate_legacy_prefs(prefs)
+        assert result["pipeline_fallback"] == ["claude"]
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +118,19 @@ class TestResolveGroup:
 
     def test_unknown_operation_defaults_to_analysis(self):
         assert _resolve_group("unknown_op") == "analysis"
+
+    def test_pipeline_analyst_maps_to_pipeline(self):
+        assert _resolve_group("pipeline_analyst") == "pipeline"
+
+    def test_pipeline_pm_maps_to_pipeline(self):
+        assert _resolve_group("pipeline_pm") == "pipeline"
+
+    def test_pipeline_decomposer_maps_to_pipeline(self):
+        assert _resolve_group("pipeline_decomposer") == "pipeline"
+
+    def test_pipeline_generic_not_in_groups(self):
+        """Generic 'pipeline' operation removed -- defaults to 'analysis' as unknown."""
+        assert _resolve_group("pipeline") == "analysis"
 
 
 # ---------------------------------------------------------------------------
@@ -290,6 +329,7 @@ class TestCall:
             "capture_fallback": ["claude"],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", return_value=True), \
@@ -305,6 +345,7 @@ class TestCall:
             "capture_fallback": ["ollama", "claude"],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
         call_results = [Exception("ollama down"), ("fallback-response", self._EMPTY_USAGE)]
         call_iter = iter(call_results)
@@ -328,6 +369,7 @@ class TestCall:
             "capture_fallback": ["claude"],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", return_value=True), \
@@ -342,6 +384,7 @@ class TestCall:
             "capture_fallback": ["ollama", "claude"],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
 
         def availability(provider, _prefs):
@@ -373,6 +416,7 @@ class TestCallDetailed:
             "capture_fallback": ["claude"],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", return_value=True), \
@@ -393,6 +437,7 @@ class TestCallDetailed:
             "capture_fallback": ["ollama", "claude"],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
         call_results = [Exception("ollama down"), ("fallback-response", self._CLAUDE_USAGE)]
         call_iter = iter(call_results)
@@ -424,6 +469,7 @@ class TestCallDetailed:
             "capture_fallback": ["openrouter", "claude"],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
 
         def availability(provider, _prefs):
@@ -444,6 +490,7 @@ class TestCallDetailed:
             "capture_fallback": ["claude"],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", return_value=True), \
@@ -458,6 +505,7 @@ class TestCallDetailed:
             "capture_fallback": ["claude"],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", return_value=True), \
@@ -543,6 +591,7 @@ class TestMultiModelOpenrouterFallback:
             ],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
 
         def fake_openrouter_call(messages, model, max_tokens, timeout=None, **kwargs):
@@ -588,6 +637,7 @@ class TestMultiModelOpenrouterFallback:
             ],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
 
         def fake_openrouter_call(messages, model, max_tokens, timeout=None, **kwargs):
@@ -665,6 +715,7 @@ class TestProviderRecordChainFields:
             ],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
 
         def fake_openrouter_call(messages, model, max_tokens, timeout=None, **kwargs):
@@ -699,6 +750,7 @@ class TestProviderRecordChainFields:
             "capture_fallback": ["claude"],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
         claude_usage = {"input_tokens": 100, "output_tokens": 50, "model": "claude-sonnet-4-6"}
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
@@ -729,6 +781,7 @@ class TestErrorKeyFormat:
             ],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
 
         def fake_call_provider(step, *args, **kwargs):
@@ -753,6 +806,7 @@ class TestErrorKeyFormat:
             "capture_fallback": ["claude", "ollama"],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
 
         def fake_call_provider(step, *args, **kwargs):
@@ -785,6 +839,7 @@ class TestOpenrouter429Backoff:
             ],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
 
         def fake_openrouter_call(messages, model, max_tokens, timeout=None, **kwargs):
@@ -814,6 +869,7 @@ class TestOpenrouter429Backoff:
             ],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
         _empty_usage = {"input_tokens": None, "output_tokens": None, "model": None}
 
@@ -840,6 +896,7 @@ class TestOpenrouter429Backoff:
             ],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
 
         def fake_openrouter_call(messages, model, max_tokens, timeout=None, **kwargs):
@@ -875,6 +932,7 @@ class TestLangfuseTraceOnSuccess:
             "capture_fallback": ["claude"],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
         mock_lf = MagicMock()
         mock_trace = MagicMock()
@@ -898,6 +956,7 @@ class TestLangfuseTraceOnSuccess:
             "capture_fallback": ["claude"],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
         mock_lf = MagicMock()
         mock_trace = MagicMock()
@@ -930,6 +989,7 @@ class TestLangfuseDisabled:
             "capture_fallback": ["claude"],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
         with patch("shared.llm_client._load_llm_prefs", return_value=prefs), \
              patch("shared.llm_client._is_provider_available", return_value=True), \
@@ -954,6 +1014,7 @@ class TestLangfuseSdkErrorDoesNotBreakLlm:
             "capture_fallback": ["claude"],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
         mock_lf = MagicMock()
         mock_trace = MagicMock()
@@ -976,6 +1037,7 @@ class TestLangfuseSdkErrorDoesNotBreakLlm:
             "capture_fallback": ["claude"],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
         mock_lf = MagicMock()
         mock_lf.trace.side_effect = RuntimeError("Langfuse trace creation exploded")
@@ -1005,6 +1067,7 @@ class TestLangfuseErrorGenerationOnFallback:
             "capture_fallback": ["ollama", "claude"],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
         call_results = [Exception("ollama down"), ("fallback-response", self._CLAUDE_USAGE)]
         call_iter = iter(call_results)
@@ -1049,6 +1112,7 @@ class TestLangfuseErrorGenerationOnFallback:
             "capture_fallback": ["ollama", "claude"],
             "transcription_fallback": ["claude"],
             "analysis_fallback": ["claude"],
+            "pipeline_fallback": ["claude"],
         }
         call_results = [Exception("ollama down"), ("fallback-response", self._CLAUDE_USAGE)]
         call_iter = iter(call_results)

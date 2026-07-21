@@ -6,7 +6,6 @@ from typing import Optional
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from idea_pipeline import vault_writer
 from idea_pipeline.auth import ApiKeyMiddleware
-from idea_pipeline.claude_client import PipelineClaudeClient
 from idea_pipeline.config import load_config
 from idea_pipeline.models import (
     HealthResponse,
@@ -43,12 +42,8 @@ async def startup():
     config_path = os.getenv("PIPELINE_CONFIG", "pipeline.yaml")
     config = load_config(config_path)
 
-    api_key = os.getenv("CLAUDE_API_KEY", "")
-    client = PipelineClaudeClient(api_key)
-
     _orchestrator = PipelineOrchestrator(
         config=config,
-        claude_client=client,
         store=_store,
         vault_path=_vault_path,
     )

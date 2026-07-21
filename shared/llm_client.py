@@ -24,13 +24,18 @@ _OPERATION_GROUPS: dict[str, str] = {
     "enrich": "analysis",
     "synthesize": "analysis",
     "report": "analysis",
-    "pipeline": "analysis",
+
+    # Pipeline: idea processing agents (analyst -> PM -> decomposer)
+    "pipeline_analyst": "pipeline",
+    "pipeline_pm": "pipeline",
+    "pipeline_decomposer": "pipeline",
 }
 
 _DEFAULT_FALLBACK: dict[str, list[str]] = {
     "capture": ["claude"],
     "transcription": ["claude"],
     "analysis": ["claude"],
+    "pipeline": ["claude"],
 }
 
 _DEFAULT_LLM_PREFS = {
@@ -126,6 +131,7 @@ def _migrate_legacy_prefs(prefs: dict) -> dict:
         "capture_fallback" in prefs
         and "transcription_fallback" in prefs
         and "analysis_fallback" in prefs
+        and "pipeline_fallback" in prefs
     ):
         logger.debug("_migrate_legacy_prefs: new fields present, no migration needed")
         return prefs
@@ -152,6 +158,12 @@ def _migrate_legacy_prefs(prefs: dict) -> dict:
             prefs["analysis_fallback"] = ["ollama", "claude"]
         else:
             prefs["analysis_fallback"] = ["claude"]
+
+    if "pipeline_fallback" not in prefs:
+        if provider == "ollama":
+            prefs["pipeline_fallback"] = ["ollama", "claude"]
+        else:
+            prefs["pipeline_fallback"] = ["claude"]
 
     logger.info(
         "_migrate_legacy_prefs: migrated from legacy fields "

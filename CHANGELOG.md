@@ -5,6 +5,19 @@
 
 ---
 
+## 22.07.2026 — feat: Pipeline fallback chains (BL-167)
+
+### BL-167: Перевод idea-pipeline на shared/llm_client fallback chains (22.07.2026)
+- Pipeline = 4-я группа операций (pipeline_analyst, pipeline_pm, pipeline_decomposer)
+- BaseAgent/DecomposerAgent переведены на shared/llm_client.call() с fallback-цепочками
+- PipelineClaudeClient удалён (174 строки), _ENV_VAR_MAP удалён из config.py
+- Ручные Langfuse trace/span убраны из orchestrator — автоинструментация через call_detailed()
+- Settings UI: карточка PIPELINE в секции FALLBACK CHAINS (drag-and-drop цепочка)
+- _migrate_legacy_prefs: автоматическая миграция pipeline_fallback для существующих пользователей
+- idea-pipeline v1.2.0, shared v0.7.2
+
+---
+
 ## 21.07.2026 — feat: Langfuse LLM Observability (BL-166)
 
 ### BL-166: Langfuse LLM Observability (21.07.2026)
