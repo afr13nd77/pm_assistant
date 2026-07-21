@@ -96,6 +96,7 @@ Vault подключен к **Яндекс.Диск** и автоматичес�
 - **knowledge-engine** — сервис обогащения и синтеза знаний, watchdog на входящие файлы, Jira-интеграция, линтер, индексатор
 - **idea-pipeline** — оркестратор проработки идей через цепочку AI-агентов (Analyst -> PM -> Decomposer)
 - **ke-cron** — cron-контейнер для периодических задач (синтез, Jira sync, rebuild index, lint, vault health, cowork-context)
+- **langfuse** — self-hosted LLM observability (трассировки промптов, токены, стоимость). Доступен по http://<server-ip>:3100
 
 Все сервисы работают с одним и тем же Obsidian vault, смонтированным как Docker volume.
 
@@ -327,13 +328,14 @@ Drag-n-drop правила: readiness 100% для перехода в «Гото
 | Vue.js | 3.x (CDN) | web-ui |
 | marked.js | 15.x (CDN) | web-ui |
 | Docker Compose | v3.9 | инфраструктура |
+| Langfuse SDK | >=2.0.0,<3.0.0 | pm-bot, knowledge-engine, idea-pipeline |
 | Claude модель | claude-sonnet-4-6 | pm-bot, knowledge-engine, idea-pipeline |
 
 ---
 
 ## Docker-топология
 
-4 контейнера:
+6 контейнеров:
 
 | Контейнер | Роль | Порты |
 |---|---|---|
@@ -341,6 +343,8 @@ Drag-n-drop правила: readiness 100% для перехода в «Гото
 | knowledge-engine | HTTP API (:8001) + Watchdog на raw/inbound/ (auto-enrichment) + queue-watch на meeting-queue/pending/ (BL-145) | 8001 (API) |
 | idea-pipeline | Оркестратор AI-агентов | 8100 |
 | ke-cron | Синтез (09:00) + Cowork-context (01:00) + Meeting fetch (:15) + Process queue (/10мин) + Jira sync (каждые 3ч) | — |
+| langfuse-db | PostgreSQL 15 — хранилище Langfuse | — |
+| langfuse | Langfuse v2 — LLM observability UI | 3100 (Web) |
 
 ---
 
