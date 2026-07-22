@@ -1,8 +1,9 @@
 import logging
 from pathlib import Path
 
-from shared import llm_client
 from idea_pipeline.config import AgentConfig
+
+from shared import llm_client
 
 logger = logging.getLogger(__name__)
 

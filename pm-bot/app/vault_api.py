@@ -4023,7 +4023,7 @@ def playground_chat(body: PlaygroundChatRequest):
     # user-picked OpenRouter model) is threaded through to _call_openrouter.
     start = _t.time()
     try:
-        content = _call_provider(
+        content, _usage = _call_provider(
             step={"provider": body.provider, "model": model},
             prefs=call_prefs,
             messages=body.messages,

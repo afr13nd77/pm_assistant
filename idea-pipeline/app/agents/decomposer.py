@@ -2,8 +2,9 @@ import json
 import logging
 import re
 
-from shared import llm_client
 from idea_pipeline.agents.base import BaseAgent
+
+from shared import llm_client
 
 logger = logging.getLogger(__name__)
 
