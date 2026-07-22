@@ -2670,6 +2670,7 @@ _DEFAULT_USER_PREFS = {
     "capture_fallback": ["claude"],
     "transcription_fallback": ["claude"],
     "analysis_fallback": ["claude"],
+    "pipeline_fallback": ["claude"],
 }
 
 
@@ -2692,6 +2693,7 @@ class UserPrefs(BaseModel):
     capture_fallback: list[Any] = ["claude"]
     transcription_fallback: list[Any] = ["claude"]
     analysis_fallback: list[Any] = ["claude"]
+    pipeline_fallback: list[Any] = ["claude"]
 
 
 def _read_user_prefs() -> dict:
@@ -2807,9 +2809,11 @@ def get_user_prefs():
         prefs["transcription_fallback"] = ["claude"]
     if "analysis_fallback" not in prefs:
         prefs["analysis_fallback"] = ["claude"]
+    if "pipeline_fallback" not in prefs:
+        prefs["pipeline_fallback"] = ["claude"]
     from shared.openrouter_client import DEFAULT_MODEL as _OR_DEFAULT_MODEL
     default_openrouter_model = prefs.get("openrouter_model") or _OR_DEFAULT_MODEL
-    for key in ("capture_fallback", "transcription_fallback", "analysis_fallback"):
+    for key in ("capture_fallback", "transcription_fallback", "analysis_fallback", "pipeline_fallback"):
         val = prefs[key]
         if not isinstance(val, list) or len(val) == 0:
             logger.info("GET /api/v1/user-prefs — %s invalid (not list or empty), resetting to default", key)
@@ -2880,7 +2884,7 @@ def put_user_prefs(body: UserPrefs):
     from shared.openrouter_client import DEFAULT_MODEL as _OR_DEFAULT_MODEL
     default_openrouter_model = body.openrouter_model or _OR_DEFAULT_MODEL
 
-    for key in ("capture_fallback", "transcription_fallback", "analysis_fallback"):
+    for key in ("capture_fallback", "transcription_fallback", "analysis_fallback", "pipeline_fallback"):
         chain = getattr(body, key)
         if not isinstance(chain, list) or len(chain) == 0:
             logger.warning("PUT /api/v1/user-prefs — %s is empty or not a list, rejecting", key)
@@ -2967,7 +2971,8 @@ def put_user_prefs(body: UserPrefs):
             "capture_mode": body.capture_mode,
             "capture_fallback": body.capture_fallback,
             "transcription_fallback": body.transcription_fallback,
-            "analysis_fallback": body.analysis_fallback}
+            "analysis_fallback": body.analysis_fallback,
+            "pipeline_fallback": body.pipeline_fallback}
 
 
 # ---------------------------------------------------------------------------
