@@ -14,6 +14,7 @@
 - Ручные Langfuse trace/span убраны из orchestrator — автоинструментация через call_detailed()
 - Settings UI: карточка PIPELINE в секции FALLBACK CHAINS (drag-and-drop цепочка)
 - _migrate_legacy_prefs: автоматическая миграция pipeline_fallback для существующих пользователей
+- fix: pipeline_fallback добавлен в UserPrefs, _DEFAULT_USER_PREFS, GET/PUT валидацию vault API
 - idea-pipeline v1.2.0, shared v0.7.2
 
 ---
