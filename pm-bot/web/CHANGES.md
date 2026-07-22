@@ -5,6 +5,250 @@
 
 ---
 
+## 22.07.2026 — feat: Pipeline fallback chains (BL-167)
+
+### BL-167: Перевод idea-pipeline на shared/llm_client fallback chains (22.07.2026)
+- Pipeline = 4-я группа операций (pipeline_analyst, pipeline_pm, pipeline_decomposer)
+- BaseAgent/DecomposerAgent переведены на shared/llm_client.call() с fallback-цепочками
+- PipelineClaudeClient удалён (174 строки), _ENV_VAR_MAP удалён из config.py
+- Ручные Langfuse trace/span убраны из orchestrator — автоинструментация через call_detailed()
+- Settings UI: карточка PIPELINE в секции FALLBACK CHAINS (drag-and-drop цепочка)
+- _migrate_legacy_prefs: автоматическая миграция pipeline_fallback для существующих пользователей
+- fix: pipeline_fallback добавлен в UserPrefs, _DEFAULT_USER_PREFS, GET/PUT валидацию vault API
+- idea-pipeline v1.2.0, shared v0.7.2
+
+---
+
+## 21.07.2026 — feat: Langfuse LLM Observability (BL-166)
+
+### BL-166: Langfuse LLM Observability (21.07.2026)
+- Self-hosted Langfuse v2 (Docker: langfuse + langfuse-db, порт 3100)
+- Инструментация shared/llm_client.py:call_detailed() — автоматические трассировки для всех LLM-вызовов
+- Token usage проброс: Anthropic SDK и OpenRouter -> input_tokens/output_tokens в provider_record
+- shared/langfuse_client.py — singleton с graceful degradation
+- Sidebar ссылка LLM TRACES -> Langfuse UI
+- Langfuse SDK v2.x (совместим с сервером v2)
+- idea-pipeline инструментация (T-07, AC-03 blocked — требует BL-167 для полной работы)
+
+---
+
+## 17.07.2026 — fix: _CLOSED_STATUSES сырые значения вместо нормализованных (BUG-025, BL-165)
+
+Задачи со статусом "Отменена" в Jira не распознавались как закрытые при jira-sync: `_CLOSED_STATUSES` содержал сырые русские названия статусов, но проверка выполнялась после `normalize_status()`, который уже преобразовал их в нормализованные значения.
+
+### knowledge-engine 1.15.1
+- **fetcher.py**: `_CLOSED_STATUSES` заменён на нормализованные значения (`done`, `deploy`, `staging`, `cancelled`) — 4 элемента вместо 7 сырых. Задачи со статусом "Отменена" теперь корректно помечаются `mark_closed()` в sync state
+
+---
+
+## 14.07.2026 — fix: Доработка epic drawer по прототипу (BUG-024, BL-162)
+
+Исправления расхождений epic drawer с прототипом: отступы, локализация, логика отображения данных.
+
+### web-ui 1.26.4
+- **roadmap.html**: локализация drawer (Обзор/Описание/История, Прогресс, Готовность эпика, Основная информация, Задачи Jira и др.)
+- **roadmap.html**: секция «Задача эпика в Jira» — показывает jira_key/title/status самого эпика вместо дочернего тикета
+- **roadmap.html**: кнопка PUSH_EPIC_TO_JIRA на вкладке Обзор (v-if="!drawerEpic.jira_key"), удалена с вкладки Jira
+- **style-light.css**: `.epic-tab-panel { padding: 20px 22px }` — компенсация обнулённого padding .task-drawer-body (BUG-024)
+- **style.css**: `.task-drawer { min-width: 780px }` (было 600px)
+
+### BACKLOG.md
+- **BL-163** добавлен: Jira sync partial update вместо full rewrite (epic_key затирается при re-sync)
+
+---
+
+## 13.07.2026 — feat: Просмотр тела эпика в drawer roadmap (BL-162)
+
+Кнопка-тогглер SHOW_BODY / SHOW_TICKETS в drawer эпика на roadmap.html. Позволяет прочитать полный markdown body эпика (все секции: архитектура, решения, контекст) без переключения в Obsidian.
+
+### pm-bot 1.18.2
+- **vault_api.py**: поле `body` добавлено в ответ `GET /api/v1/epics` (полный markdown без frontmatter)
+- **roadmap.html**: `epicViewMode` ref (tickets/body), кнопка-тогглер `.epic-toggle-btn`, `<template v-if>` переключение между тикетами и body, сброс при смене эпика/закрытии drawer
+- **style.css**: стили `.epic-toggle-btn` (border, cyan, uppercase)
+- **style-light.css**: override hover для light-темы (var(--cyan-bg))
+
+---
+
+## 13.07.2026 — feat: Поиск и фильтрация отчётов (BL-161)
+
+Добавлены поиск по имени/заголовку и фильтрация по типу отчёта на страницу report.html.
+
+### pm-bot 1.18.1
+- **vault_api.py**: новая функция `_extract_report_type(text)` — лёгкий парсинг YAML frontmatter для извлечения `type:`, fallback `"other"`. Поле `type` добавлено в ответ `GET /api/v1/reports`
+- **report.html**: поисковая строка (v-model, case-insensitive по title/filename) + фильтр-чипы по типу (динамические из уникальных type, с каунтерами, single-select). Computed `filteredReports`/`typeChips`. Watcher автовыбора при фильтрации. Пустое состояние "Ничего не найдено"
+- **style-light.css**: override `.report-type-chip.active` (var(--cyan-bg)) и `.report-search input` (var(--bg)) для light-темы
+- **tests/test_report_type_extraction.py** (новый): 20 unit-тестов (все типы, кавычки, пустые значения, без frontmatter)
+
+---
+
+## 13.07.2026 — fix: Jira sync не обновляет кастомные vault-файлы (BUG-023, BL-160)
+
+Jira sync не обновлял статус vault-файлов с кастомными именами (E-15-*.md, E-18-*.md), созданных через PM Assistant. Sync искал файлы только по имени `{JIRA_KEY}.md`, игнорируя файлы с `jira_key` в frontmatter.
+
+### knowledge-engine 1.15.1
+- **fetcher.py**: новая функция `_find_vault_file_by_jira_key(domain, jira_key, artifact_types)` — fallback-поиск vault-файла по полю `jira_key` в YAML frontmatter
+- **fetcher.py** (секция 6 — UPDATED): если `{KEY}.md` не существует → fallback поиск → точечное обновление через `frontmatter_utils.update_frontmatter` (status, synced_at, updated_at) без полного rewrite
+- **fetcher.py** (секция 7 — CLOSED): аналогичный fallback перед regex-заменой status
+- **fetcher.py** (`import_single_issue`): fallback предотвращает создание дубликатов при повторном импорте
+- **tests/test_jira_sync_custom_files.py** (новый): 11 unit-тестов (find, updated fallback, closed fallback, import fallback, regression)
+
+---
+
+## 11.07.2026 — feat: Экспорт markdown-отчётов в PDF (BL-159)
+
+Экспорт wiki-отчётов в PDF с полной стилизацией. Серверный рендеринг через WeasyPrint + markdown-it-py. Шрифт Inter (кириллица + латиница), монохромные emoji (Noto Emoji), таблицы с рамками, цветные заголовки.
+
+### pm-bot 1.18.0
+- **pdf_exporter.py** (новый): модуль конвертации markdown → HTML → PDF. Поддержка: frontmatter stripping, wikilinks, GFM-таблицы, blockquotes, code-блоки. Защита от внешних URL (url_fetcher), лимит 1MB
+- **vault_api.py**: endpoint `POST /api/v1/reports/{filename}/pdf` — валидация, LoggedProcess, Content-Disposition attachment
+- **api.js**: функция `exportPdf()` — fetch + blob download (первый бинарный download в проекте)
+- **report.html**: кнопка EXPORT_PDF (yellow, loading/disabled состояния)
+- **pdf-export.css** (новый): стили PDF — Inter, Fira Code для code, таблицы с рамками, цветные заголовки h1-h3
+- **Dockerfile**: системные зависимости WeasyPrint (libpango, libcairo, fontconfig), шрифты Inter/Fira Code/Noto Emoji в /usr/share/fonts/custom/
+- **requirements.txt**: weasyprint>=62.0, markdown-it-py>=3.0.0, mdit-py-plugins>=0.4.0
+
+---
+
+## 09.07.2026 — fix: Jira Import direct key в extended capture terminal (BUG-021, BUG-022)
+
+Исправлена работа поля прямого ввода ключа Jira в расширенном режиме capture terminal на ideas.html.
+
+### web-ui 1.26.1
+- **components.js** (capture-terminal):
+  - BUG-021: `canImport` теперь учитывает `directKey` — кнопка IMPORT активна при вводе ключа без выбора из списка
+  - BUG-021: `importSelected()` парсит `directKey` (поддержка голого ключа SUP-1234 и полного URL), добавляет в очередь импорта, очищает поле после завершения
+  - BUG-022: `filteredTickets` фильтрует список задач по введённому ключу (substring match, case-insensitive)
+  - Обновлена подсказка footer: "Выбери проект или введи ID"
+
+---
+
+## 06.07.2026 — feat: Фильтрация моделей OpenRouter в Settings и Playground (BL-158) + BUG-020
+
+Searchable dropdown для выбора моделей OpenRouter вместо обычного `<select>`. Текстовый фильтр по вхождению подстроки в имя или id модели (case-insensitive). Решает проблему навигации по большому списку моделей OpenRouter API (сотни позиций).
+
+### web-ui 1.26.0
+- **components.js**: новый компонент `searchable-model-select` — кастомный dropdown с текстовым фильтром, autofocus при открытии, закрытие по клику вне, compact-режим для inline в fallback-цепочке
+- **settings.html**: замена глобального `<select>` OPENROUTER_MODEL и inline `<select>` в fallback-шагах на `<searchable-model-select>`
+- **playground.html**: условный рендеринг — `searchable-model-select` при провайдере OpenRouter, стандартный `<select>` для Claude/Ollama
+- **style.css**: CSS model-search-* вынесен из inline `<style>` settings.html и playground.html в общий файл (устранено дублирование)
+
+### pm-bot 1.17.1
+- **vault_api.py**: `GET /api/v1/playground/providers` — OpenRouter теперь отдаёт live-список моделей через `list_models()` (TTL-кэш 1ч) вместо хардкода из 3 моделей
+
+### shared 0.7.1
+- **openrouter_client.py**: детальное логирование raw-ответа при ошибке парсинга (BUG-020) — `raw_body[:2000]`, model name, response keys. Catch `TypeError` для нестандартных структур. Отдельный catch для невалидного JSON
+
+### BUG-020: OpenRouter Nemotron 3 Ultra parse error
+- Nemotron иногда возвращает HTTP 200 без ключа `choices` (нестабильность free-tier). Парсер бросает KeyError, fallback-цепочка переходит к следующей модели. Не баг в коде — нестабильность upstream. Логирование добавлено для диагностики. Статус: OPEN
+
+### Спека: docs/openrouter-model-filter/ (requirements, design, tasks — 4 задачи)
+
+---
+
+## 01.07.2026 — feat: Множественный выбор моделей OpenRouter + динамический список из API (BL-155, BL-156)
+
+Расширение поддержки OpenRouter: live-запрос актуального списка моделей с TTL-кэшем, мультимодельные fallback-цепочки. Пользователь теперь может добавить несколько шагов OpenRouter подряд с разными моделями в одну цепочку.
+
+### shared 0.7.0
+- **openrouter_client.py**: `list_models(api_key, ttl_seconds)` — live-запрос к OpenRouter API с in-memory кэшем (TTL 1ч), graceful fallback на хардкод-список при ошибке
+- **settings.py**: новый ключ `cache_ttl.openrouter_models_seconds: 3600` (управляет TTL кэша моделей)
+- **llm_client.py**: `_normalize_step()`, `_default_model_for()` — нормализация шага цепочки (legacy-строка ↔ объект {provider, model}); `_resolve_chain()` возвращает список объектов вместо строк; backoff 0.7s между смежными openrouter-шагами после 429 (rate limit); расширение `provider_record` с полями `chain`, `used_model`, `used_step_index`; формат ошибки "openrouter:модель" для шагов openrouter в `errors[]`
+- **tests**: +50 unit-тестов в test_llm_client.py, test_openrouter.py (T-01..T-05: 0 new failures, 5 pre-existing задокументированы)
+
+### pm-bot 1.17.0
+- **app/vault_api.py**: `GET /api/v1/openrouter-models` — отдаёт live-список (schema: {models, source, cached, fetched_at, count}); `PUT /api/v1/user-prefs` — валидирует openrouter-шаги (обязательна непустая model), дедупирует смежные дубли, сохраняет в формате {provider, model}; `GET /api/v1/user-prefs` — нормализует цепочки в объектный формат для UI
+- **web/settings.html**: редактор fallback-цепочек теперь поддерживает несколько openrouter-шагов с инлайн-селектором модели, пометка "резервный список" при fallback-источнике, бейдж "OpenRouter: <имя модели>" на карточке шага, клиентская валидация (нельзя сохранить openrouter-шаг без модели)
+- **web/system-log.html**: при логировании операций видно какая именно модель OpenRouter использовалась на каждом шаге цепочки и какая упала (поле `used_model`, формат ошибки "openrouter:модель")
+- **tests**: +37 unit-тестов в test_openrouter_api.py, test_user_prefs.py (T-06..T-08: 0 new failures)
+
+### Тесты (Phase 4.1 — полный test suite)
+- **pytest shared/ -q**: 121 passed, 5 pre-existing failed (не связаны с фичей)
+- **pytest pm-bot/ -q**: 455 passed, 12 xfailed (новых регрессий нет)
+- **Монорепо (full test suite)**: 1580 passed, 8 pre-existing failed, 0 new failures
+
+---
+
+## 01.07.2026 — feat(knowledge-engine): llm_wiki Cowork Context (BL-151)
+
+Детерминированная генерация `_cowork-session.md` для Claude Cowork — контекстный файл из 5 секций wiki (дейли, открытые задачи, эпики, решения, активность LOG.md). Без LLM.
+
+### knowledge-engine
+- **cowork_context.py** (NEW): `generate_cowork_session()` — 5 коллекторов, frontmatter + vault_stats, atomic_write, truncation при >200 задач
+- **cli.py**: CLI-команда `cowork-context` (LoggedProcess + regenerate_index + generate_cowork_session)
+- **api.py**: `POST /api/v1/cowork-context` — endpoint #29
+
+### shared
+- **system_log.py**: новый process type `cowork-context` в VALID_PROCESS_TYPES (13 типов)
+- **vault_paths.py**: `llm_wiki_cowork_session()` — путь к `_cowork-session.md`
+
+### pm-bot
+- **system-log.html**: option `cowork-context` в dropdown фильтра
+
+### инфраструктура
+- **docker-compose.yml**: ke-cron — cron job `0 1 * * *` (cowork-context, ежедневно 01:00)
+
+### тесты
+- **test_cowork_context.py** (NEW): 15 unit-тестов (empty vault, sorting, filtering, limits, broken frontmatter, schema)
+
+---
+
+## 01.07.2026 — fix(system-log): fallback errors отображение
+
+- **shared/llm_client.py**: переименован ключ `errors` → `fallback_errors` в details success-записей system_log. Error-path без изменений.
+- **web-ui/system-log.html**: fallback_errors рендерятся отдельно — метка "FALLBACK", opacity 0.6. Не смешиваются с реальными ошибками.
+
+---
+
+## 01.07.2026 — Context Compaction Phase 2: Автоматизация (BL-147)
+
+Автоматическая генерация дайджестов при изменении wiki/ + waterfall context assembly для LLM-вызовов. Kill switch через env переменные (DIGEST_ENABLED, DIGEST_CONTEXT_SOURCE) — по default ничего не меняется.
+
+### knowledge-engine 1.14.0
+- **watcher.py**: DigestHandler — auto-digest при DIGEST_ENABLED=1, debounce 5s, body_hash check, условная регистрация на все wiki/ директории
+- **api.py**: 3 новых эндпоинта — POST /api/v1/digest/generate, POST /api/v1/digest/bulk, GET /api/v1/digest/status
+
+### pm-bot 1.16.0
+- **context_assembler.py** (NEW): waterfall сборка контекста из llm_wiki/ — 3 уровня (one-liners ≤3000 tok, core-digests ≤10000 tok, extended-digests ≤6000 tok). Kill switch DIGEST_CONTEXT_SOURCE=wiki (default). Fallback на wiki/ в режиме auto. touch() для core/extended, НЕ для one-liners.
+- **claude_client.py**: _get_digest_context() injection в _build_idea_prompt() — digest context подмешивается в промпт перед raw_text
+- **reporter.py**: digest context injection в generate_weekly_report() — one-liners добавляются в контекст отчёта
+- **ke_client.py**: +3 функции: digest_generate, digest_bulk, digest_status
+- **enrich_creative_recall()**: обогащение creative recall one-liner'ами из llm_wiki/ (touch NOT called)
+- **requirements.txt**: +tiktoken>=0.7.0
+
+### Тесты
+- test_digest_watcher.py: 18 тестов (debounce, should_process, start_watch)
+- test_context_assembler.py: 37 тестов (waterfall, tier filter, fallback, creative recall)
+- test_digest_context_integration.py: 14 тестов (kill switch, injection, reporter)
+- test_api_digest.py: 11 тестов (status, generate, bulk)
+
+---
+
+## 01.07.2026 — Context Compaction Phase 1 (BL-147)
+
+Offline-пайплайн генерации LLM-оптимизированных дайджестов из wiki-артефактов. 3-уровневая структура: one-liner (≤30 токенов), core-digest (200-500 токенов), extended-digest (≤2000 токенов). Digest'ы хранятся в vault/llm_wiki/, зеркалируя структуру wiki/. Интеграция с decay engine (BL-110): tier/relevance из оригиналов wiki/.
+
+### shared 0.5.1
+- **vault_paths.py**: 6 новых функций llm_wiki_*() — пути для слоя 1' (llm_wiki_root, llm_wiki_domain_dir, llm_wiki_meetings, llm_wiki_daily_logs, llm_wiki_reports, llm_wiki_index_file)
+- **llm_client.py**: операция "digest" добавлена в hybrid routing (Ollama для генерации дайджестов)
+
+### knowledge-engine 1.13.0
+- **digest/** (NEW, 6 модулей): пакет генерации дайджестов
+  - `generator.py`: generate_digest (единичная генерация + retry с feedback), generate_bulk (массовая с фильтрами), regenerate_index (сортировка по tier priority)
+  - `paths.py`: wiki_to_llm_wiki / llm_wiki_to_wiki path mapping, ensure_llm_wiki_structure
+  - `templates.py`: detect_type (frontmatter → path → fallback), 15 типов артефактов, required fields
+  - `token_counter.py`: tiktoken cl100k_base, count_tokens / count_sections (4 секции)
+  - `validator.py`: 6 проверок — token budgets, required fields (regex), source exists, changelog, key-value format (≥70%), dependency warnings
+  - `__init__.py`: 11 экспортов
+- **prompts/**: digest.txt (base) + 12 type-specific промптов (prd, decision, sprint, meeting, competitor, jira, idea, epic, daily, bug, knowledge, userstory)
+- **cli.py**: 5 новых команд — digest, digest-bulk, digest-index, digest-audit, digest-status
+- **requirements.txt**: + tiktoken>=0.7.0
+
+### Тесты
+- `test_digest.py`: 39 unit-тестов (paths, token_counter, templates, validator, generator). 0 new failures.
+- Pre-existing: 3 failure в test_jira_search.py (JQL quoting), не связаны с BL-147.
+
+---
+
 ## 30.06.2026 — BUG-019: enrich NoneType на пустом frontmatter tags
 
 ### knowledge-engine 1.12.1
