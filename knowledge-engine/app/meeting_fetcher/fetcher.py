@@ -72,7 +72,7 @@ def _notify(message: str, *, ttl: int | None = None) -> bool:
                 timer = threading.Timer(
                     ttl, _delete_message, args=[bot_token, chat_id, msg_id],
                 )
-                timer.daemon = True
+                timer.daemon = False
                 timer.start()
                 logger.info(
                     "[BL-173] scheduled delete for message_id=%s in %ds",
