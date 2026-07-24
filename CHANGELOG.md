@@ -5,6 +5,53 @@
 
 ---
 
+## 24.07.2026 — fix: Visual diff today.html (BL-168)
+
+- fix(web-ui): Разделение визуалов для «Идёт сейчас» (`meeting.current`) и «Следующая» (`meeting.active`) встреч в timeline
+  - Новый CSS-класс `.meeting.current` — amber-градиент по аналогии с focus-card
+  - `.meeting.active` — фиолетовый border (#D6C8F5) + светлый фон (#FBF9FF)
+
+---
+
+## [pm-bot 1.19.0 / web-ui 1.27.0] — 23.07.2026
+
+### Добавлено
+- **BL-172**: Настройка CalDAV в Settings UI
+  - Секция «CALENDAR» на settings.html: 4 поля (username, app password, timezone, URL)
+  - `POST /api/v1/test-caldav` — проверка подключения к CalDAV-серверу
+  - Маскировка пароля CalDAV в GET /user-prefs (sentinel `"••••••••"`)
+  - `calendar_client.py`: динамические credentials из user-prefs с fallback на env
+  - Инвалидация CalDAV-кэша при сохранении settings
+  - `api.testCaldav()` — frontend API метод
+  - `conference_url`: извлечение URL конференции из iCal (URL property → location → description)
+  - today.html: кликабельная ссылка на конференцию в timeline card и drawer, автолинковка URL в описании
+
+---
+
+## 23.07.2026 — feat: Реорганизация меню + страница TODAY (BL-168)
+
+- feat(web-ui): Реорганизация sidebar-навигации — 4 группы (Рабочий день, Знания, Мониторинг, Система), collapse группы «Система»
+- feat(web-ui): Новая страница TODAY — стартовая страница рабочего дня с фокусом дня, дайджестом, TODO, встречами, отчётами и новостями
+- feat(pm-bot): CalDAV-интеграция Яндекс Календаря (calendar_client.py) — получение встреч, определение статусов, сопоставление с протоколами
+- feat(pm-bot): Парсеры vault-файлов (today_parsers.py) — morning-digest, todo.md, daily-news
+- feat(pm-bot): API для TODO CRUD (GET/POST/PATCH /api/v1/todos)
+- feat(pm-bot): API для TODAY-данных (GET /api/v1/today/digest, /today/news, /today/meetings)
+- feat(pm-bot): DS v2 CSS-токены (--a, --g, --b, --p, --r) в light и matrix темах
+
+### Hotfixes TODAY page (Phase 4.1 live testing)
+- fix(web-ui): renderMarkdown — поддержка таблиц (`|`-delimited → `<table class="md-table">`)
+- fix(web-ui): renderMarkdown — поддержка заголовков (h3/h4), списков (`- `→`<ul><li>`), пустых строк
+- fix(web-ui): Иконки дайджеста — переход с Unicode/emoji на Material Symbols Outlined (единый стиль)
+- fix(web-ui): Полный дайджест в попапе — markdown-форматирование, убран `white-space:pre-wrap`
+- fix(web-ui): Блок «Последний отчёт» — открытие в попапе вместо редиректа, markdown-рендеринг, min-width 820px
+- fix(web-ui): Убрана кнопка «Сохранить как решение» из блока отчёта
+- fix(pm-bot): `_extract_report_date` — приоритет: frontmatter `date:` → `created:` → regex имени файла → `0000-00-00` (без mtime)
+- fix(pm-bot): `list_reports` — опциональная фильтрация по `?type=` (today использует `weekly-status-report,feature-analysis-report`, reports.html — без фильтра)
+- fix(pm-bot): Валидация дат из имён файлов (месяц 1-12, день 1-31)
+- fix(web-ui): style-today.css — стили `.md-table`, `.digest-detail h3/h4/ul/li`, `.today-modal.wide`
+
+---
+
 ## 22.07.2026 — feat: Pipeline fallback chains (BL-167)
 
 ### BL-167: Перевод idea-pipeline на shared/llm_client fallback chains (22.07.2026)

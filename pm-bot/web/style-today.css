@@ -1,0 +1,1106 @@
+/* ================================================================
+   TODAY PAGE — style-today.css
+   Self-contained styles for the TODAY (morning page) dashboard.
+   Uses DS v2 accent tokens: --a, --g, --b, --p, --r (+ --as, --gs,
+   --bs, --ps, --rs, --a-border) and --rad defined in theme files.
+   Base tokens (--bg, --card, --surface, --border, --text-primary,
+   --text-body, --text-muted) come from style.css / style-light.css.
+   ================================================================ */
+
+/* ================================================================
+   1. LAYOUT
+   ================================================================ */
+
+.today-content {
+  margin-left: 180px;
+  min-height: 100vh;
+  min-width: 0;
+}
+
+.today-topbar {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px 0 30px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  backdrop-filter: blur(14px);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.today-topbar .title-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+}
+
+.today-topbar h1 {
+  font-size: 22px;
+  margin: 0;
+  letter-spacing: -0.03em;
+  font-weight: 800;
+}
+
+.today-topbar .date {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.today-topbar .top-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.today-topbar .sync {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.today-page {
+  padding: 18px 28px 34px;
+  max-width: 1680px;
+  margin: 0 auto;
+}
+
+/* ================================================================
+   2. BUTTONS (today-scoped)
+   ================================================================ */
+
+.today-btn {
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: 0.14s;
+  color: var(--text-primary);
+}
+
+.today-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(14,19,17,0.10));
+  border-color: var(--border-hover);
+}
+
+.today-btn.primary {
+  background: var(--text-primary);
+  color: var(--card);
+  border-color: var(--text-primary);
+}
+
+.today-btn.primary:hover {
+  opacity: 0.85;
+}
+
+.today-btn.amber {
+  background: linear-gradient(var(--a), var(--a));
+  color: #fff;
+  border-color: var(--a);
+}
+
+.today-page .icon-btn {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.today-page .text-action {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 800;
+}
+
+.today-page .text-action:hover {
+  color: var(--text-primary);
+}
+
+/* ================================================================
+   3. METRICS STRIP
+   ================================================================ */
+
+.today-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) 220px;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.today-metric {
+  min-height: 78px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--rad);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  transition: 0.14s;
+}
+
+.today-metric:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(14,19,17,0.10));
+}
+
+.today-metric .metric-ico {
+  font-size: 24px;
+  width: 34px;
+  text-align: center;
+}
+
+.today-metric .metric-ico .material-symbols-outlined {
+  font-size: 24px;
+}
+
+.today-metric .metric-number {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.today-metric .metric-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+/* Override base style.css .metric-label::before */
+.today-metric .metric-label::before {
+  content: none;
+}
+
+.today-metrics .quick-note {
+  align-self: center;
+  justify-self: end;
+  width: 100%;
+  height: 42px;
+}
+
+/* ================================================================
+   4. CONTENT GRID
+   ================================================================ */
+
+.today-content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(370px, 0.8fr);
+  gap: 12px;
+}
+
+.today-left-stack {
+  display: grid;
+  gap: 12px;
+}
+
+/* ================================================================
+   5. FOCUS CARD
+   ================================================================ */
+
+.focus-card {
+  background: linear-gradient(100deg, var(--as) 0%, var(--as) 54%, var(--card) 100%);
+  border: 1px solid var(--a-border);
+  border-radius: var(--rad);
+  padding: 18px 22px;
+}
+
+.focus-card .card-head,
+.today-page .panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.today-page .section-title {
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.today-page .section-title::before {
+  content: none;
+}
+
+.today-page .section-title.amber {
+  color: var(--a);
+}
+
+.focus-title {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+}
+
+.focus-desc {
+  font-size: 13px;
+  color: var(--text-body);
+  line-height: 1.5;
+  max-width: 900px;
+}
+
+.today-page .chip {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  font-weight: 700;
+}
+
+.today-page .chip.p1 {
+  color: var(--a);
+  border-color: var(--a-border);
+  background: var(--as);
+}
+
+.focus-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+/* ================================================================
+   6. PANELS (shared)
+   ================================================================ */
+
+.today-page .panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--rad);
+  overflow: hidden;
+}
+
+.today-page .panel-inner {
+  padding: 18px 20px;
+}
+
+.today-page .panel-link {
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-transform: uppercase;
+  font-weight: 750;
+}
+
+.today-page .panel-link:hover {
+  color: var(--text-primary);
+}
+
+/* ================================================================
+   7. SPLIT ROW (digest + todo)
+   ================================================================ */
+
+.split-row {
+  display: grid;
+  grid-template-columns: 0.85fr 1.08fr;
+  gap: 12px;
+}
+
+/* ── Digest panel ── */
+.digest-row {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  border-bottom: 1px solid var(--surface);
+  min-height: 42px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.digest-row:hover {
+  background: var(--surface);
+}
+
+.digest-row:last-child {
+  border-bottom: 0;
+}
+
+.digest-row .material-symbols-outlined {
+  font-size: 18px;
+  vertical-align: middle;
+}
+
+.today-page .count {
+  font-size: 12px;
+}
+
+.today-page .add-row {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 11px 0 2px;
+  text-align: left;
+  font-weight: 750;
+}
+
+.today-page .add-row:hover {
+  color: var(--text-primary);
+}
+
+/* ================================================================
+   8. TODO
+   ================================================================ */
+
+.todo-row {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  border-bottom: 1px solid var(--surface);
+  padding: 5px 0;
+  cursor: pointer;
+}
+
+.todo-row:hover {
+  background: var(--surface);
+}
+
+.todo-row:last-child {
+  border-bottom: 0;
+}
+
+.todo-row input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--text-primary);
+  cursor: pointer;
+}
+
+.todo-title {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.todo-id {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.todo-date {
+  font-size: 11px;
+}
+
+.todo-date.urgent {
+  color: var(--r);
+  font-weight: 800;
+}
+
+.todo-row.done .todo-title {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.todo-row.done .todo-id,
+.todo-row.done .todo-date {
+  opacity: 0.5;
+}
+
+/* ================================================================
+   9. MEETINGS TIMELINE (right column, full height)
+   ================================================================ */
+
+.today-page .panel.meetings {
+  min-height: 480px;
+}
+
+.today-page .timeline {
+  position: relative;
+  padding-left: 4px;
+}
+
+.today-page .timeline::before {
+  content: "";
+  position: absolute;
+  left: 79px;
+  top: 10px;
+  bottom: 10px;
+  width: 1px;
+  background: var(--surface);
+}
+
+.meeting {
+  display: grid;
+  grid-template-columns: 65px 18px 1fr auto;
+  gap: 8px;
+  align-items: start;
+  padding: 12px 7px;
+  border-radius: 8px;
+  cursor: pointer;
+  position: relative;
+  transition: 0.14s;
+}
+
+.meeting:hover {
+  background: var(--surface);
+}
+
+.meeting.active {
+  border: 1px solid #D6C8F5;
+  background: #FBF9FF;
+  padding: 11px 6px;
+}
+
+.meeting.current {
+  border: 1px solid var(--a-border);
+  background: linear-gradient(100deg, var(--as) 0%, var(--as) 54%, var(--card) 100%);
+  padding: 11px 6px;
+}
+
+.meeting-time {
+  font-size: 14px;
+}
+
+.meeting-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 2px solid var(--p);
+  margin-top: 5px;
+  z-index: 1;
+}
+
+.meeting.done .meeting-dot {
+  border-color: var(--g);
+}
+
+.meeting-title {
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.meeting-duration {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.today-page .status {
+  font-size: 11px;
+  border-radius: 6px;
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+
+.today-page .status.done {
+  color: var(--g);
+  background: var(--gs);
+}
+
+.today-page .status.next {
+  color: var(--p);
+  background: var(--ps);
+}
+
+.today-page .status.prepare {
+  color: var(--a);
+  background: var(--as);
+}
+
+.today-page .status.none {
+  color: var(--text-muted);
+  background: var(--surface);
+}
+
+/* ================================================================
+   10. BOTTOM ROW (report + news)
+   ================================================================ */
+
+.bottom-row {
+  display: grid;
+  grid-template-columns: 0.9fr 1.45fr;
+  gap: 12px;
+}
+
+/* ── Report card ── */
+.report-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid var(--surface);
+  border-bottom: 1px solid var(--surface);
+  margin: 14px 0;
+}
+
+.report-metric {
+  padding: 14px;
+  text-align: center;
+  border-right: 1px solid var(--surface);
+}
+
+.report-metric:last-child {
+  border-right: 0;
+}
+
+.report-value {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.report-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.report-actions {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+
+/* ── News grid ── */
+.news-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.news-col {
+  padding: 0 12px;
+}
+
+.news-col:first-child {
+  border-right: 1px solid var(--surface);
+  padding-left: 0;
+}
+
+.news-col:last-child {
+  padding-right: 0;
+}
+
+.news-subhead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.news-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  align-items: center;
+  border-bottom: 1px solid var(--surface);
+  padding: 7px 0;
+  cursor: pointer;
+}
+
+.news-row:hover {
+  background: var(--surface);
+}
+
+.news-row:last-child {
+  border-bottom: 0;
+}
+
+.news-title {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.news-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* ================================================================
+   11. DRAWER (today-prefixed to avoid style.css conflicts)
+   ================================================================ */
+
+.today-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(14, 19, 17, 0.16);
+  opacity: 0;
+  pointer-events: none;
+  transition: 0.2s;
+  z-index: 49;
+}
+
+.today-drawer-overlay.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.today-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(560px, 94vw);
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  transform: translateX(105%);
+  transition: 0.28s;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -30px 0 70px rgba(0, 0, 0, 0.10);
+}
+
+.today-drawer.show {
+  transform: translateX(0);
+}
+
+.today-drawer .drawer-head {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--surface);
+}
+
+.today-drawer .icon-btn,
+.today-modal .icon-btn {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.today-drawer .drawer-kicker {
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+
+.today-drawer .drawer-title {
+  font-size: 17px;
+  font-weight: 850;
+  margin-top: 6px;
+  line-height: 1.3;
+}
+
+.today-drawer .drawer-body {
+  padding: 18px 20px 28px;
+  overflow: auto;
+  flex: 1;
+}
+
+.today-drawer .drawer-section {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--card);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.today-drawer .drawer-section-head {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--surface);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.today-drawer .drawer-section-body {
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-body);
+}
+
+.today-drawer .bullets {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.today-drawer .bullets li + li {
+  margin-top: 5px;
+}
+
+.today-drawer .material {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--surface);
+}
+
+.today-drawer .material:last-child {
+  border-bottom: 0;
+}
+
+.today-drawer .material-type {
+  font-size: 10px;
+  color: #fff;
+  border-radius: 4px;
+  padding: 3px 6px;
+  background: var(--b);
+}
+
+.today-drawer .material-title {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.today-drawer .material-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.today-drawer .drawer-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  background: var(--bg);
+}
+
+.today-drawer .digest-detail {
+  display: grid;
+  gap: 10px;
+}
+
+.today-drawer .digest-block {
+  border-left: 3px solid var(--b);
+  background: var(--bs);
+  padding: 10px 13px;
+  border-radius: 0 8px 8px 0;
+}
+
+.today-drawer .digest-block.warn {
+  border-left-color: var(--a);
+  background: var(--as);
+}
+
+.today-drawer .digest-block.risk {
+  border-left-color: var(--r);
+  background: var(--rs);
+}
+
+/* ================================================================
+   12. MODAL (today-prefixed to avoid style.css conflicts)
+   ================================================================ */
+
+.today-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(14, 19, 17, 0.22);
+  opacity: 0;
+  pointer-events: none;
+  transition: 0.2s;
+  z-index: 59;
+}
+
+.today-modal-overlay.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.today-modal {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -46%);
+  width: min(620px, 92vw);
+  max-height: 84vh;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.16);
+  opacity: 0;
+  pointer-events: none;
+  transition: 0.2s;
+  z-index: 60;
+  overflow: hidden;
+}
+
+.today-modal.show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+}
+.today-modal.wide {
+  width: min(820px, 92vw);
+}
+
+.today-modal .modal-head {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.today-modal .modal-title {
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.today-modal .modal-body {
+  padding: 18px;
+  overflow: auto;
+  max-height: 66vh;
+}
+
+.today-modal .field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.today-modal .field label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.today-modal .input,
+.today-modal .textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--surface);
+  color: var(--text-primary);
+  outline: none;
+  font-family: var(--font);
+}
+
+.today-modal .textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.today-modal .modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* digest-detail inside modal */
+.today-modal .digest-detail {
+  display: grid;
+  gap: 10px;
+}
+
+.today-modal .digest-block {
+  border-left: 3px solid var(--b);
+  background: var(--bs);
+  padding: 10px 13px;
+  border-radius: 0 8px 8px 0;
+}
+
+.today-modal .digest-block.warn {
+  border-left-color: var(--a);
+  background: var(--as);
+}
+
+.today-modal .digest-block.risk {
+  border-left-color: var(--r);
+  background: var(--rs);
+}
+
+/* ================================================================
+   13. TOAST (today-prefixed to avoid style.css conflicts)
+   ================================================================ */
+
+.today-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translate(-50%, 18px);
+  opacity: 0;
+  pointer-events: none;
+  background: var(--text-primary);
+  color: var(--card);
+  border-radius: 8px;
+  padding: 10px 28px;
+  font-size: 12px;
+  z-index: 80;
+  transition: 0.2s;
+  white-space: nowrap;
+}
+
+.today-toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* ================================================================
+   14. UTILITY (loading / empty states)
+   ================================================================ */
+
+.today-loading {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.today-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* ================================================================
+   15. RESPONSIVE
+   ================================================================ */
+
+@media (max-width: 1200px) {
+  .today-metrics {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .today-content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .today-page .panel.meetings {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 820px) {
+  .today-content {
+    margin-left: 72px;
+  }
+
+  .today-topbar {
+    padding: 0 16px;
+  }
+
+  .today-topbar .date,
+  .today-topbar .sync {
+    display: none;
+  }
+
+  .today-page {
+    padding: 14px;
+  }
+
+  .today-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .split-row,
+  .bottom-row,
+  .news-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .news-col:first-child {
+    border-right: 0;
+    border-bottom: 1px solid var(--surface);
+    padding-right: 0;
+    padding-bottom: 8px;
+  }
+
+  .news-col:last-child {
+    padding-left: 0;
+    padding-top: 8px;
+  }
+}
+
+@media (max-width: 560px) {
+  .today-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .today-topbar h1 {
+    font-size: 19px;
+  }
+
+  .today-metrics .quick-note {
+    display: none;
+  }
+}
+
+/* ================================================================
+   16. MARKDOWN TABLES
+   ================================================================ */
+
+.md-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0;
+    font-size: 13px;
+}
+.md-table th,
+.md-table td {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    text-align: left;
+}
+.md-table th {
+    background: var(--surface);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.md-table td {
+    color: var(--text-body);
+}
+.md-table tr:hover td {
+    background: var(--surface);
+}
+
+/* Markdown headings & lists in digest modal */
+.digest-detail h3,
+.digest-detail h4 {
+    margin: 12px 0 4px;
+    color: var(--text-primary);
+}
+.digest-detail h3 { font-size: 15px; }
+.digest-detail h4 { font-size: 14px; }
+.digest-detail ul {
+    margin: 4px 0;
+    padding-left: 20px;
+}
+.digest-detail li {
+    margin: 2px 0;
+    color: var(--text-body);
+}

@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="ru" class="theme-matrix">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Board — Today</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+  <link rel="stylesheet" href="style-today.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <script>
+  (function() {
+    try {
+      var t = localStorage.getItem('pm_theme');
+      if (t === 'light') {
+        document.documentElement.className = 'theme-light';
+        document.getElementById('theme-css').href = 'style-light.css';
+      }
+    } catch(e) {}
+  })();
+  </script>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <app-sidebar active="today" @search="searchOpen = true"></app-sidebar>
+    <search-overlay :open="searchOpen" @close="searchOpen = false"></search-overlay>
+    <div class="drawer-overlay" v-if="captureDrawerOpen" @click="captureDrawerOpen = false"></div>
+    <div class="capture-drawer" :class="{ open: captureDrawerOpen }">
+      <capture-terminal layout="drawer" :open="captureDrawerOpen" @close="captureDrawerOpen = false" @saved="onCaptureSaved"></capture-terminal>
+    </div>
+
+    <main class="today-content">
+      <!-- TOPBAR (sticky) -->
+      <header class="today-topbar">
+        <div class="title-wrap">
+          <h1>Старт рабочего дня</h1>
+          <div class="date">{{ formattedDate }}</div>
+        </div>
+        <div class="top-actions">
+          <div class="sync">Последняя синхронизация: <span>{{ syncTime }}</span></div>
+          <button class="today-btn" @click="refreshAll(true)">&#x21bb; Обновить</button>
+        </div>
+      </header>
+
+      <div class="today-page">
+        <!-- METRICS STRIP -->
+        <section class="today-metrics">
+          <div class="today-metric" @click="scrollTo('meetingsPanel')">
+            <div class="metric-ico" style="color:var(--b)"><span class="material-symbols-outlined">groups</span></div>
+            <div><div class="metric-number">{{ meetingsCount }}</div><div class="metric-label">Встречи сегодня</div></div>
+          </div>
+          <div class="today-metric" @click="scrollTo('todoPanel')">
+            <div class="metric-ico" style="color:var(--g)"><span class="material-symbols-outlined">checklist</span></div>
+            <div><div class="metric-number">{{ todosCount }}</div><div class="metric-label">Открытых TODO</div></div>
+          </div>
+          <div class="today-metric" @click="scrollTo('todoPanel')">
+            <div class="metric-ico" style="color:var(--a)"><span class="material-symbols-outlined">warning</span></div>
+            <div><div class="metric-number">{{ urgentCount }}</div><div class="metric-label">Срочное</div></div>
+          </div>
+          <div class="today-metric" @click="scrollTo('reportPanel')">
+            <div class="metric-ico" style="color:var(--b)"><span class="material-symbols-outlined">summarize</span></div>
+            <div><div class="metric-number">{{ reportReady }}</div><div class="metric-label">Отчёт готов</div></div>
+          </div>
+          <div class="today-metric" @click="scrollTo('newsPanel')">
+            <div class="metric-ico" style="color:var(--a)"><span class="material-symbols-outlined">lightbulb</span></div>
+            <div><div class="metric-number">{{ todayIdeasCount }}</div><div class="metric-label">Новых идей</div></div>
+          </div>
+          <button class="today-btn quick-note" @click="captureDrawerOpen = true">+ Быстрая заметка</button>
+        </section>
+
+        <!-- CONTENT GRID: 2 columns -->
+        <section class="today-content-grid">
+
+          <!-- LEFT STACK -->
+          <div class="today-left-stack">
+
+            <!-- FOCUS CARD -->
+            <article class="focus-card" v-if="digest && digest.focus">
+              <div class="card-head">
+                <div class="section-title amber">&#x25CE; Фокус дня</div>
+                <span class="chip p1" v-if="focusIsUrgent">P1</span>
+              </div>
+              <div class="focus-title" v-html="renderMarkdown(digest.focus.title)"></div>
+              <div class="focus-desc" v-html="renderMarkdown(digest.focus.description)"></div>
+              <div class="focus-actions">
+                <button class="today-btn amber" @click="openFocusDrawer">Открыть контекст</button>
+                <button class="text-action" @click="openMaterialsDrawer" v-if="digest.focus.wikilinks && digest.focus.wikilinks.length">Связанные материалы <span class="chip">{{ digest.focus.wikilinks.length }}</span></button>
+              </div>
+            </article>
+            <article class="focus-card" v-else-if="!digestLoading" style="opacity:0.6">
+              <div class="card-head">
+                <div class="section-title amber">&#x25CE; Фокус дня</div>
+              </div>
+              <div class="focus-desc">Фокус дня ещё не определён</div>
+            </article>
+
+            <!-- SPLIT ROW: digest + todo side by side -->
+            <div class="split-row">
+
+              <!-- DIGEST PANEL -->
+              <article class="panel" id="digestPanel">
+                <div class="panel-inner">
+                  <div class="panel-head">
+                    <div class="section-title">Утренний дайджест</div>
+                    <span class="chip" v-if="!digestIsToday && digestDate" style="font-size:10px">{{ digestDate }}</span>
+                  </div>
+                  <div v-if="digestLoading" class="today-loading">Загрузка...</div>
+                  <template v-else-if="digest && digest.sections && digest.sections.length">
+                    <div class="digest-row" v-for="(sec, idx) in digest.sections" :key="sec.key" @click="openDigestDrawer(sec)">
+                      <span :style="'color:' + digestIconColor(sec.key)" v-html="digestIcon(sec.key)"></span>
+                      <span>{{ sec.label }}</span>
+                      <span class="count">{{ sec.count }}</span>
+                    </div>
+                    <button class="add-row" @click="openFullDigestModal">Открыть полный дайджест &#x2192;</button>
+                  </template>
+                  <div v-else class="today-empty">Дайджест ещё не сгенерирован</div>
+                </div>
+              </article>
+
+              <!-- TODO PANEL -->
+              <article class="panel" id="todoPanel">
+                <div class="panel-inner">
+                  <div class="panel-head">
+                    <div class="section-title">Мои TODO</div>
+                    <button class="panel-link" @click="showToast('Функция в разработке')">Все TODO &#x2192;</button>
+                  </div>
+                  <div v-if="todosLoading" class="today-loading">Загрузка...</div>
+                  <template v-else-if="todos && todos.length">
+                    <label class="todo-row" v-for="todo in todos" :key="todo.id"
+                           :class="{done: todo.status === 'done'}">
+                      <input type="checkbox" :checked="todo.status === 'done'" @change="toggleTodo(todo)">
+                      <div>
+                        <div class="todo-title">{{ todo.title }}</div>
+                        <div class="todo-id">{{ todo.id }}</div>
+                      </div>
+                      <div class="todo-date" :class="{urgent: todo.is_urgent}">{{ formatDueDate(todo.due_date) }}</div>
+                    </label>
+                    <button class="add-row" @click="openAddTodoModal">&#xFF0B; Добавить TODO</button>
+                  </template>
+                  <template v-else>
+                    <div class="today-empty">Нет открытых TODO</div>
+                    <button class="add-row" @click="openAddTodoModal">&#xFF0B; Добавить TODO</button>
+                  </template>
+                </div>
+              </article>
+
+            </div><!-- /split-row -->
+
+            <!-- BOTTOM ROW: report + news side by side -->
+            <div class="bottom-row">
+
+              <!-- REPORT PANEL -->
+              <article class="panel" id="reportPanel">
+                <div class="panel-inner">
+                  <div class="panel-head">
+                    <div>
+                      <div class="section-title">Последний отчёт <span v-if="latestReport" style="color:var(--g);font-size:10px">Готов</span></div>
+                      <div v-if="latestReport" style="font-size:11px;color:var(--text-muted);margin-top:6px">{{ latestReport.type || 'Report' }} · {{ formatReportDate(latestReport.date) }}</div>
+                    </div>
+                  </div>
+                  <div v-if="reportLoading" class="today-loading">Загрузка...</div>
+                  <template v-else-if="latestReport">
+                    <div style="font-size:14px;font-weight:700;margin-bottom:10px">{{ latestReport.title }}</div>
+                    <div class="report-actions">
+                      <button class="today-btn" @click="openReport">Открыть отчёт</button>
+                      <button class="text-action" @click="showToast('Функция в разработке')">Создать TODO</button>
+                    </div>
+                  </template>
+                  <div v-else class="today-empty">Отчёты ещё не генерировались</div>
+                </div>
+              </article>
+
+              <!-- NEWS PANEL -->
+              <article class="panel" id="newsPanel">
+                <div class="panel-inner">
+                  <div class="panel-head">
+                    <div class="section-title">Новости и сигналы</div>
+                    <span class="chip" v-if="!newsIsToday && newsDate" style="font-size:10px">{{ newsDate }}</span>
+                  </div>
+                  <div v-if="newsLoading" class="today-loading">Загрузка...</div>
+                  <template v-else-if="news && news.categories && (news.categories.competitors.length || news.categories.ai_llm.length)">
+                    <div class="news-grid">
+                      <div class="news-col">
+                        <div class="news-subhead"><span>Конкуренты</span></div>
+                        <div class="news-row" v-for="(item, idx) in news.categories.competitors" :key="'c' + idx" @click="openNewsDrawer(item)">
+                          <div>
+                            <div class="news-title">{{ item.title }}</div>
+                            <div class="news-meta">{{ item.source }}</div>
+                          </div>
+                        </div>
+                        <div v-if="!news.categories.competitors.length" style="font-size:12px;color:var(--text-muted);padding:8px 0">Нет новостей</div>
+                      </div>
+                      <div class="news-col">
+                        <div class="news-subhead"><span>AI / LLM</span></div>
+                        <div class="news-row" v-for="(item, idx) in news.categories.ai_llm" :key="'a' + idx" @click="openNewsDrawer(item)">
+                          <div>
+                            <div class="news-title">{{ item.title }}</div>
+                            <div class="news-meta">{{ item.source }}</div>
+                          </div>
+                        </div>
+                        <div v-if="!news.categories.ai_llm.length" style="font-size:12px;color:var(--text-muted);padding:8px 0">Нет новостей</div>
+                      </div>
+                    </div>
+                  </template>
+                  <div v-else class="today-empty">Новости недоступны</div>
+                </div>
+              </article>
+
+            </div><!-- /bottom-row -->
+
+          </div><!-- /today-left-stack -->
+
+          <!-- RIGHT COLUMN: meetings timeline, spans full height -->
+          <article class="panel meetings" id="meetingsPanel">
+            <div class="panel-inner">
+              <div class="panel-head">
+                <div class="section-title">Встречи сегодня</div>
+                <button class="panel-link" @click="showToast('Функция в разработке')">Все встречи &#x2192;</button>
+              </div>
+              <div v-if="meetingsLoading" class="today-loading">Загрузка...</div>
+              <div v-else-if="meetingsSource === 'disabled'" class="today-empty">
+                Подключите Яндекс Календарь в <a href="settings.html">Settings</a>
+              </div>
+              <div v-else-if="meetingsSource === 'error'" class="today-empty">Календарь временно недоступен</div>
+              <template v-else-if="meetings && meetings.length">
+                <div class="timeline">
+                  <div class="meeting" v-for="m in meetings" :key="m.uid"
+                       :class="{done: m.status === 'done', active: m.status === 'next', current: m.status === 'in_progress'}"
+                       @click="openMeetingDrawer(m)">
+                    <div class="meeting-time" :style="m.status === 'next' ? 'color:var(--p)' : ''">{{ m.start }}</div>
+                    <div class="meeting-dot"></div>
+                    <div>
+                      <div class="meeting-title">{{ m.title }}</div>
+                      <div class="meeting-duration">{{ m.duration_minutes }} мин</div>
+                    </div>
+                    <span class="status" :class="meetingStatusClass(m.status)">{{ meetingStatusLabel(m.status) }}</span>
+                  </div>
+                </div>
+              </template>
+              <div v-else class="today-empty">Нет встреч на сегодня</div>
+            </div>
+          </article>
+
+        </section><!-- /today-content-grid -->
+      </div><!-- /today-page -->
+
+      <!-- DRAWER (today-prefixed classes) -->
+      <div class="today-drawer-overlay" :class="{show: drawerOpen}" @click="closeDrawer"></div>
+      <aside class="today-drawer" :class="{show: drawerOpen}">
+        <div class="drawer-head">
+          <div>
+            <div class="drawer-kicker">{{ drawerKicker }}</div>
+            <div class="drawer-title">{{ drawerTitle }}</div>
+          </div>
+          <button class="icon-btn" @click="closeDrawer">&#x2715;</button>
+        </div>
+        <div class="drawer-body" v-html="drawerBody"></div>
+      </aside>
+
+      <!-- MODAL (today-prefixed classes) -->
+      <div class="today-modal-overlay" :class="{show: modalOpen}" @click="closeModal"></div>
+      <div class="today-modal" :class="{show: modalOpen, wide: modalWide}">
+        <div class="modal-head">
+          <div class="modal-title">{{ modalTitle }}</div>
+          <button class="icon-btn" @click="closeModal" data-close-modal>&#x2715;</button>
+        </div>
+        <div class="modal-body" v-html="modalBody"></div>
+      </div>
+
+      <!-- TOAST (today-prefixed class) -->
+      <div class="today-toast" :class="{show: toastVisible}">{{ toastText }}</div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="api.js"></script>
+  <script src="components.js"></script>
+  <script>
+  var app = Vue.createApp({
+    data: function() {
+      return {
+        searchOpen: false,
+        captureDrawerOpen: false,
+
+        // Data
+        digest: null,
+        digestDate: null,
+        digestIsToday: false,
+        digestLoading: true,
+
+        todos: [],
+        todosLoading: true,
+
+        meetings: [],
+        meetingsSource: 'loading',
+        meetingsLoading: true,
+
+        news: null,
+        newsDate: null,
+        newsIsToday: false,
+        newsLoading: true,
+
+        latestReport: null,
+        reportLoading: true,
+
+        todayIdeas: [],
+
+        addTodoTitle: '',
+        addTodoDueDate: '',
+
+        syncTime: '--:--',
+
+        // Drawer
+        drawerOpen: false,
+        drawerKicker: '',
+        drawerTitle: '',
+        drawerBody: '',
+
+        // Modal
+        modalOpen: false,
+        modalWide: false,
+        modalTitle: '',
+        modalBody: '',
+
+        // Toast
+        toastVisible: false,
+        toastText: '',
+        toastTimer: null
+      };
+    },
+    computed: {
+      formattedDate: function() {
+        var d = new Date();
+        var days = ['Воскресенье','Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'];
+        var months = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+        return days[d.getDay()] + ', ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+      },
+      meetingsCount: function() {
+        return this.meetings ? this.meetings.length : 0;
+      },
+      todosCount: function() {
+        return this.todos ? this.todos.length : 0;
+      },
+      urgentCount: function() {
+        if (!this.todos) return 0;
+        return this.todos.filter(function(t) { return t.is_urgent; }).length;
+      },
+      reportReady: function() {
+        return this.latestReport ? 1 : 0;
+      },
+      todayIdeasCount: function() {
+        return this.todayIdeas ? this.todayIdeas.length : 0;
+      },
+      focusIsUrgent: function() {
+        if (!this.todos || !this.todos.length) return false;
+        return this.todos.some(function(t) { return t.is_urgent; });
+      }
+    },
+    mounted: function() {
+      this.refreshAll();
+      var self = this;
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          if (self.modalOpen) self.closeModal();
+          else if (self.drawerOpen) self.closeDrawer();
+        }
+      });
+    },
+    methods: {
+      refreshAll: function(isRefresh) {
+        var self = this;
+        var refreshParam = isRefresh ? true : false;
+
+        self.digestLoading = true;
+        self.todosLoading = true;
+        self.meetingsLoading = true;
+        self.newsLoading = true;
+        self.reportLoading = true;
+
+        Promise.allSettled([
+          self.loadDigest(refreshParam),
+          self.loadTodos(),
+          self.loadMeetings(refreshParam),
+          self.loadNews(refreshParam),
+          self.loadLatestReport(),
+          self.loadTodayIdeas()
+        ]).then(function() {
+          var d = new Date();
+          self.syncTime = d.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
+        });
+      },
+      loadDigest: function(refresh) {
+        var self = this;
+        return api.todayDigest(refresh).then(function(r) {
+          self.digest = r;
+          self.digestDate = r.date || null;
+          self.digestIsToday = r.is_today || false;
+          self.digestLoading = false;
+        }).catch(function() { self.digestLoading = false; });
+      },
+      loadTodos: function() {
+        var self = this;
+        return api.todos('open').then(function(r) {
+          self.todos = r.todos || [];
+          self.todosLoading = false;
+        }).catch(function() { self.todosLoading = false; });
+      },
+      loadMeetings: function(refresh) {
+        var self = this;
+        return api.todayMeetings(refresh).then(function(r) {
+          self.meetings = r.meetings || [];
+          self.meetingsSource = r.source || 'caldav';
+          self.meetingsLoading = false;
+        }).catch(function() { self.meetingsSource = 'error'; self.meetingsLoading = false; });
+      },
+      loadNews: function(refresh) {
+        var self = this;
+        return api.todayNews(refresh).then(function(r) {
+          self.news = r;
+          self.newsDate = r.date || null;
+          self.newsIsToday = r.is_today || false;
+          self.newsLoading = false;
+        }).catch(function() { self.newsLoading = false; });
+      },
+      loadLatestReport: function() {
+        var self = this;
+        return api.todayLatestReport().then(function(r) {
+          if (r && r.reports && r.reports.length > 0) {
+            self.latestReport = r.reports[0];
+          }
+          self.reportLoading = false;
+        }).catch(function() { self.reportLoading = false; });
+      },
+      loadTodayIdeas: function() {
+        var self = this;
+        return api.domains().then(function(r) {
+          var todayStr = new Date().toISOString().slice(0, 10);
+          self.todayIdeas = [];
+          if (r && r.domains) {
+            r.domains.forEach(function(d) {
+              if (d.ideas) {
+                d.ideas.forEach(function(idea) {
+                  if (idea.created && idea.created.startsWith(todayStr)) {
+                    self.todayIdeas.push(idea);
+                  }
+                });
+              }
+            });
+          }
+        }).catch(function() {});
+      },
+
+      cleanWikilinks: function(text) {
+        if (!text) return '';
+        var out = '';
+        var i = 0;
+        while (i < text.length) {
+          if (text[i] === '[' && text[i + 1] === '[') {
+            var end = text.indexOf(']]', i + 2);
+            if (end === -1) { out += text[i]; i++; continue; }
+            var inner = text.substring(i + 2, end);
+            var pipe = inner.lastIndexOf('|');
+            out += pipe !== -1 ? inner.substring(pipe + 1) : inner;
+            i = end + 2;
+          } else {
+            out += text[i];
+            i++;
+          }
+        }
+        return out;
+      },
+
+      renderTable: function(lines) {
+        var html = '<table class="md-table">';
+        var i;
+        for (i = 0; i < lines.length; i++) {
+          var raw = lines[i];
+          // Strip leading/trailing pipes and split
+          var trimmed = raw.replace(/^\|/, '').replace(/\|$/, '');
+          var cells = trimmed.split('|');
+          var j;
+          // Skip separator row (contains only dashes, spaces, colons, pipes)
+          if (i === 1 && /^[\s|:\-]+$/.test(raw)) {
+            continue;
+          }
+          var tag = (i === 0) ? 'th' : 'td';
+          if (i === 0) {
+            html += '<thead>';
+          }
+          if (i === 2 || (i === 1 && !/^[\s|:\-]+$/.test(lines[1]))) {
+            html += '<tbody>';
+          }
+          html += '<tr>';
+          for (j = 0; j < cells.length; j++) {
+            html += '<' + tag + '>' + cells[j].replace(/^\s+|\s+$/g, '') + '</' + tag + '>';
+          }
+          html += '</tr>';
+          if (i === 0) {
+            html += '</thead>';
+          }
+        }
+        if (lines.length > 1) {
+          html += '</tbody>';
+        }
+        html += '</table>';
+        return html;
+      },
+
+      renderMarkdown: function(text) {
+        if (!text) return '';
+        var cleaned = this.escapeHtml(this.cleanWikilinks(text));
+        var lines = cleaned.split('\n');
+        var result = [];
+        var tableBuffer = [];
+        var listBuffer = [];
+        var i;
+
+        for (i = 0; i < lines.length; i++) {
+          var line = lines[i];
+
+          // Table rows
+          if (/^\s*\|/.test(line)) {
+            if (listBuffer.length > 0) {
+              result.push('<ul>' + listBuffer.join('') + '</ul>');
+              listBuffer = [];
+            }
+            tableBuffer.push(line);
+            continue;
+          }
+
+          // Flush table buffer
+          if (tableBuffer.length > 0) {
+            result.push(this.renderTable(tableBuffer));
+            tableBuffer = [];
+          }
+
+          // List items
+          if (/^\s*- /.test(line)) {
+            var li = line.replace(/^\s*- /, '');
+            li = li.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            li = li.replace(/\*(.+?)\*/g, '<em>$1</em>');
+            li = li.replace(/`(.+?)`/g, '<code>$1</code>');
+            listBuffer.push('<li>' + li + '</li>');
+            continue;
+          }
+
+          // Flush list buffer
+          if (listBuffer.length > 0) {
+            result.push('<ul>' + listBuffer.join('') + '</ul>');
+            listBuffer = [];
+          }
+
+          // Empty lines — skip (avoid excessive <br>)
+          if (line.replace(/\s/g, '') === '') {
+            continue;
+          }
+
+          // Headings
+          if (/^#{3}\s+/.test(line)) {
+            result.push('<h4>' + line.replace(/^#{3}\s+/, '') + '</h4>');
+            continue;
+          }
+          if (/^#{2}\s+/.test(line)) {
+            result.push('<h3>' + line.replace(/^#{2}\s+/, '') + '</h3>');
+            continue;
+          }
+          if (/^#{1}\s+/.test(line)) {
+            result.push('<h3>' + line.replace(/^#{1}\s+/, '') + '</h3>');
+            continue;
+          }
+
+          // Inline formatting
+          line = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+          line = line.replace(/\*(.+?)\*/g, '<em>$1</em>');
+          line = line.replace(/`(.+?)`/g, '<code>$1</code>');
+          line = line.replace(/^---$/, '<hr>');
+          result.push(line);
+        }
+
+        // Flush remaining buffers
+        if (tableBuffer.length > 0) {
+          result.push(this.renderTable(tableBuffer));
+        }
+        if (listBuffer.length > 0) {
+          result.push('<ul>' + listBuffer.join('') + '</ul>');
+        }
+
+        return result.join('<br>');
+      },
+
+      // Drawer helpers
+      openDrawer: function(kicker, title, body) {
+        this.drawerKicker = kicker;
+        this.drawerTitle = title;
+        this.drawerBody = body;
+        this.drawerOpen = true;
+      },
+      closeDrawer: function() {
+        this.drawerOpen = false;
+      },
+
+      // Modal helpers
+      openModal: function(title, body, wide) {
+        this.modalTitle = title;
+        this.modalBody = body;
+        this.modalWide = !!wide;
+        this.modalOpen = true;
+      },
+      closeModal: function() {
+        this.modalOpen = false;
+        this.modalWide = false;
+      },
+
+      // Toast
+      showToast: function(text) {
+        var self = this;
+        self.toastText = text;
+        self.toastVisible = true;
+        clearTimeout(self.toastTimer);
+        self.toastTimer = setTimeout(function() {
+          self.toastVisible = false;
+        }, 2200);
+      },
+
+      // Focus
+      findTodoInFocus: function() {
+        if (!this.digest || !this.digest.focus) return null;
+        var title = this.digest.focus.title || '';
+        var match = title.match(/TODO-\d+/);
+        if (!match || !this.todos || !this.todos.length) return null;
+        var todoId = match[0];
+        for (var i = 0; i < this.todos.length; i++) {
+          if (this.todos[i].id === todoId) return this.todos[i];
+        }
+        return null;
+      },
+
+      openFocusDrawer: function() {
+        if (!this.digest || !this.digest.focus) return;
+        var focus = this.digest.focus;
+        var todo = this.findTodoInFocus();
+        var self = this;
+        var body = '';
+
+        if (todo && todo.context) {
+          body += '<div class="drawer-section"><div class="drawer-section-head">Что нужно решить</div><div class="drawer-section-body">' + self.renderMarkdown(todo.context) + '</div></div>';
+        } else {
+          body += '<div class="drawer-section"><div class="drawer-section-head">Описание</div><div class="drawer-section-body">' + self.renderMarkdown(focus.description || 'Нет описания') + '</div></div>';
+        }
+
+        if (todo) {
+          if (todo.questions && todo.questions.length) {
+            body += '<div class="drawer-section"><div class="drawer-section-head">Нужно ответить</div><div class="drawer-section-body"><ul class="bullets">';
+            todo.questions.forEach(function(q) {
+              body += '<li>' + self.renderMarkdown(q) + '</li>';
+            });
+            body += '</ul></div></div>';
+          }
+          if (todo.due_date) {
+            body += '<div class="drawer-section"><div class="drawer-section-head">Срок</div><div class="drawer-section-body"><span style="color:' + (todo.is_urgent ? 'var(--r);font-weight:700' : 'var(--t)') + '">' + self.escapeHtml(self.formatDueDate(todo.due_date)) + '</span>' + (todo.is_urgent ? ' <span class="chip p1" style="margin-left:8px">Срочное</span>' : '') + '</div></div>';
+          }
+          if (todo.jira) {
+            body += '<div class="drawer-section"><div class="drawer-section-head">Jira</div><div class="drawer-section-body">' + self.escapeHtml(todo.jira) + '</div></div>';
+          }
+        }
+
+        var wikilinks = [];
+        if (todo && todo.wikilinks && todo.wikilinks.length) {
+          wikilinks = todo.wikilinks;
+        } else if (focus.wikilinks && focus.wikilinks.length) {
+          wikilinks = focus.wikilinks;
+        }
+        if (wikilinks.length) {
+          body += '<div class="drawer-section"><div class="drawer-section-head">Связанные материалы</div><div class="drawer-section-body">';
+          wikilinks.forEach(function(w) {
+            var display = self.cleanWikilinks('[[' + w + ']]');
+            body += '<div class="material"><span class="material-type">DOC</span><div><div class="material-title">' + self.escapeHtml(display) + '</div></div></div>';
+          });
+          body += '</div></div>';
+        }
+
+        this.openDrawer('Фокус дня', this.cleanWikilinks(focus.title), body);
+      },
+      openMaterialsDrawer: function() {
+        if (!this.digest || !this.digest.focus || !this.digest.focus.wikilinks) return;
+        var body = '<div class="drawer-section"><div class="drawer-section-head">Материалы</div><div class="drawer-section-body">';
+        var self = this;
+        this.digest.focus.wikilinks.forEach(function(w) {
+          body += '<div class="material"><span class="material-type">DOC</span><div><div class="material-title">' + self.escapeHtml(w) + '</div></div></div>';
+        });
+        body += '</div></div>';
+        this.openDrawer('Связанные материалы', this.digest.focus.wikilinks.length + ' материалов', body);
+      },
+
+      // Digest icons by section key content
+      digestIcon: function(key) {
+        var ico = 'circle';
+        if (key) {
+          var k = key.toLowerCase();
+          if (k.indexOf('производств') >= 0 || k.indexOf('изменил') >= 0) ico = 'engineering';
+          else if (k.indexOf('внимани') >= 0) ico = 'warning';
+          else if (k.indexOf('todo') >= 0) ico = 'checklist';
+          else if (k.indexOf('идеи') >= 0 || k.indexOf('бэклог') >= 0 || k.indexOf('backlog') >= 0) ico = 'lightbulb';
+          else if (k.indexOf('готов') >= 0 || k.indexOf('запуск') >= 0) ico = 'rocket_launch';
+          else if (k.indexOf('риск') >= 0 || k.indexOf('блокер') >= 0) ico = 'error';
+        }
+        return '<span class="material-symbols-outlined">' + ico + '</span>';
+      },
+      digestIconColor: function(key) {
+        if (!key) return 'var(--text-muted)';
+        var k = key.toLowerCase();
+        if (k.indexOf('производств') >= 0 || k.indexOf('изменил') >= 0) return 'var(--b)';
+        if (k.indexOf('внимани') >= 0) return 'var(--a)';
+        if (k.indexOf('todo') >= 0) return 'var(--a)';
+        if (k.indexOf('идеи') >= 0 || k.indexOf('бэклог') >= 0 || k.indexOf('backlog') >= 0) return 'var(--p)';
+        if (k.indexOf('готов') >= 0 || k.indexOf('запуск') >= 0) return 'var(--g)';
+        if (k.indexOf('риск') >= 0 || k.indexOf('блокер') >= 0) return 'var(--r)';
+        return 'var(--text-muted)';
+      },
+      openDigestDrawer: function(section) {
+        var self = this;
+        var body = '<div class="drawer-section"><div class="drawer-section-body"><div class="digest-detail">';
+        if (section.items && section.items.length) {
+          section.items.forEach(function(item) {
+            body += '<div class="digest-block"><b>' + self.renderMarkdown(item.title) + '</b>';
+            if (item.details) body += '<br>' + self.renderMarkdown(item.details);
+            body += '</div>';
+          });
+        } else {
+          body += '<div class="digest-block">Нет данных</div>';
+        }
+        body += '</div></div></div>';
+        this.openDrawer(section.label, section.count + ' пунктов', body);
+      },
+      openFullDigestModal: function() {
+        if (!this.digest || !this.digest.full_markdown) {
+          this.showToast('Дайджест не загружен');
+          return;
+        }
+        var body = '<div class="digest-detail" style="font-size:13px;line-height:1.6">' + this.renderMarkdown(this.digest.full_markdown) + '</div>';
+        body += '<div class="modal-actions"><button class="today-btn" onclick="document.querySelector(\'[data-close-modal]\').click()">Закрыть</button></div>';
+        this.openModal('Morning Digest', body);
+      },
+      escapeHtml: function(text) {
+        var div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      },
+
+      // TODO
+      toggleTodo: function(todo) {
+        var self = this;
+        var newStatus = todo.status === 'done' ? 'todo' : 'done';
+        api.todoUpdate(todo.id, newStatus).then(function() {
+          self.showToast(newStatus === 'done' ? 'TODO закрыт' : 'TODO снова открыт');
+          self.loadTodos();
+        }).catch(function() {
+          self.showToast('Ошибка обновления TODO');
+        });
+      },
+      formatDueDate: function(dueDate) {
+        if (!dueDate) return '';
+        var parts = dueDate.split('-');
+        if (parts.length === 3) {
+          return parts[2] + '.' + parts[1];
+        }
+        return dueDate;
+      },
+      openAddTodoModal: function() {
+        this.addTodoTitle = '';
+        this.addTodoDueDate = '';
+        var self = this;
+        var body = '<div class="field"><label>Задача</label><input id="newTodoTitle" class="input" placeholder="Что нужно сделать?"></div>';
+        body += '<div class="field"><label>Срок</label><input id="newTodoDueDate" class="input" type="date"></div>';
+        body += '<div class="modal-actions"><button class="today-btn" onclick="document.querySelector(\'[data-close-modal]\').click()">Отмена</button>';
+        body += '<button class="today-btn primary" id="createTodoBtn">Создать</button></div>';
+        this.openModal('Новый TODO', body);
+        setTimeout(function() {
+          var btn = document.getElementById('createTodoBtn');
+          if (btn) {
+            btn.onclick = function() {
+              var titleEl = document.getElementById('newTodoTitle');
+              var dateEl = document.getElementById('newTodoDueDate');
+              var title = titleEl ? titleEl.value.trim() : '';
+              var dueDate = dateEl ? dateEl.value : '';
+              if (!title) {
+                self.showToast('Введите название задачи');
+                return;
+              }
+              api.todoCreate(title, dueDate || null, null).then(function(r) {
+                self.showToast('TODO ' + r.id + ' создан');
+                self.closeModal();
+                self.loadTodos();
+              }).catch(function() {
+                self.showToast('Ошибка создания TODO');
+              });
+            };
+          }
+        }, 100);
+      },
+
+      // Meetings
+      meetingStatusClass: function(status) {
+        if (status === 'done') return 'done';
+        if (status === 'next' || status === 'in_progress') return 'next';
+        if (status === 'upcoming') return 'prepare';
+        return 'none';
+      },
+      meetingStatusLabel: function(status) {
+        if (status === 'done') return 'Завершена';
+        if (status === 'in_progress') return 'Идёт сейчас';
+        if (status === 'next') return 'Следующая';
+        if (status === 'upcoming') return 'Предстоит';
+        return '';
+      },
+      openMeetingDrawer: function(m) {
+        var body = '';
+        body += '<div class="drawer-section"><div class="drawer-section-head">Время</div><div class="drawer-section-body">' + this.escapeHtml(m.start) + ' — ' + this.escapeHtml(m.end) + ' (' + m.duration_minutes + ' мин)</div></div>';
+        if (m.organizer) {
+          body += '<div class="drawer-section"><div class="drawer-section-head">Организатор</div><div class="drawer-section-body">' + this.escapeHtml(m.organizer) + '</div></div>';
+        }
+        if (m.location) {
+          body += '<div class="drawer-section"><div class="drawer-section-head">Место</div><div class="drawer-section-body">' + this.escapeHtml(m.location) + '</div></div>';
+        }
+        if (m.conference_url) {
+          body += '<div class="drawer-section"><div class="drawer-section-head">Конференция</div><div class="drawer-section-body"><a href="' + this.escapeHtml(m.conference_url) + '" target="_blank" rel="noopener" style="color:var(--p);text-decoration:underline;word-break:break-all">' + this.escapeHtml(m.conference_url) + '</a></div></div>';
+        }
+        if (m.attendees_count > 0) {
+          body += '<div class="drawer-section"><div class="drawer-section-head">Участники</div><div class="drawer-section-body">' + m.attendees_count + ' человек</div></div>';
+        }
+        if (m.description) {
+          var descHtml = this.escapeHtml(m.description).replace(
+            /(https?:\/\/[^\s<]+)/g,
+            '<a href="$1" target="_blank" rel="noopener" style="color:var(--p);word-break:break-all">$1</a>'
+          );
+          body += '<div class="drawer-section"><div class="drawer-section-head">Описание</div><div class="drawer-section-body" style="white-space:pre-wrap">' + descHtml + '</div></div>';
+        }
+        if (m.has_protocol) {
+          body += '<div class="drawer-section"><div class="drawer-section-head">Протокол</div><div class="drawer-section-body"><span style="color:var(--g)">&#x2713;</span> ' + this.escapeHtml(m.protocol_filename || 'Есть') + '</div></div>';
+        }
+        this.openDrawer('Встреча · ' + m.start + '—' + m.end, m.title, body);
+      },
+
+      // Report
+      formatReportDate: function(dateStr) {
+        if (!dateStr) return '';
+        var parts = dateStr.split('-');
+        if (parts.length === 3) return parts[2] + '.' + parts[1];
+        return dateStr;
+      },
+      openReport: function() {
+        var self = this;
+        if (!this.latestReport || !this.latestReport.filename) {
+          this.showToast('Отчёт недоступен');
+          return;
+        }
+        var title = this.latestReport.title || 'Отчёт';
+        api.reportByFilename(this.latestReport.filename).then(function(r) {
+          var content = r.content || r.body || '';
+          var body = '<div class="digest-detail" style="font-size:13px;line-height:1.6">' + self.renderMarkdown(content) + '</div>';
+          self.openModal(title, body, true);
+        }).catch(function(err) {
+          self.showToast('Не удалось загрузить отчёт');
+        });
+      },
+
+      // News
+      openNewsDrawer: function(item) {
+        var body = '';
+        body += '<div class="drawer-section"><div class="drawer-section-head">Кратко</div><div class="drawer-section-body">' + this.escapeHtml(item.summary || 'Нет описания') + '</div></div>';
+        body += '<div class="drawer-section"><div class="drawer-section-head">Источник</div><div class="drawer-section-body"><a href="' + this.escapeHtml(item.url || '#') + '" target="_blank" rel="noopener" style="color:var(--b)">' + this.escapeHtml(item.source || item.url || '') + '</a></div></div>';
+        this.openDrawer('Новость', item.title, body);
+      },
+
+      scrollTo: function(id) {
+        var el = document.getElementById(id);
+        if (el) el.scrollIntoView({behavior: 'smooth', block: 'center'});
+      },
+      onCaptureSaved: function() {
+        this.refreshAll(true);
+      }
+    }
+  });
+  registerComponents(app);
+  app.mount('#app');
+  </script>
+</body>
+</html>
