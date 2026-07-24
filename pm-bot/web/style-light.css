@@ -112,6 +112,14 @@
   --tier-cold:    #D85A30;
   --tier-archive: #888780;
   --tier-core:    #378ADD;
+
+  /* DS v2 accent tokens (TODAY page) */
+  --a: #C4923A; --as: #FBF7EE; --a-border: #EFD9A8;
+  --g: #7A8B6A; --gs: #E8EBD8;
+  --b: #506ECB; --bs: #EDF1FF;
+  --p: #7B6CB0; --ps: #EDE8F5;
+  --r: #C0392B; --rs: #FCEBEB;
+  --rad: 12px;
 }
 
 /* Base Overrides */

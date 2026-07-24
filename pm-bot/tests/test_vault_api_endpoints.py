@@ -548,6 +548,54 @@ class TestEpicsEndpoint:
 
 
 # ---------------------------------------------------------------------------
+# _extract_report_date  (unit tests)
+# ---------------------------------------------------------------------------
+
+
+class TestExtractReportDate:
+    """Unit tests for vault_api._extract_report_date."""
+
+    def test_frontmatter_date_takes_priority(self):
+        from app.vault_api import _extract_report_date
+
+        text = "---\ndate: 2026-07-22\ntitle: Test\n---\nBody"
+        assert _extract_report_date(text, "2026-05-01-old-name") == "2026-07-22"
+
+    def test_frontmatter_invalid_falls_to_filename(self):
+        from app.vault_api import _extract_report_date
+
+        text = "---\ntitle: Test\n---\nBody"
+        assert _extract_report_date(text, "2026-06-01-Daily_Dev_Report") == "2026-06-01"
+
+    def test_date_with_dots_prefix(self):
+        from app.vault_api import _extract_report_date
+
+        assert _extract_report_date("no frontmatter", "2026.05.29-Daily_Dev_Report") == "2026-05-29"
+
+    def test_date_after_prefix(self):
+        from app.vault_api import _extract_report_date
+
+        assert _extract_report_date("no frontmatter", "synthesis-2026-07-23") == "2026-07-23"
+
+    def test_invalid_filename_date_uses_frontmatter(self):
+        from app.vault_api import _extract_report_date
+
+        text = "---\ndate: 2026-05-30\n---\nBody"
+        assert _extract_report_date(text, "2026-30-05-Next_Week_Plan") == "2026-05-30"
+
+    def test_created_field_fallback(self):
+        from app.vault_api import _extract_report_date
+
+        text = "---\ncreated: 2026-05-22\ntitle: Test\n---\nBody"
+        assert _extract_report_date(text, "weekly-report-no-date") == "2026-05-22"
+
+    def test_no_date_returns_zero(self):
+        from app.vault_api import _extract_report_date
+
+        assert _extract_report_date("no frontmatter", "weekly-done-27apr-2may") == "0000-00-00"
+
+
+# ---------------------------------------------------------------------------
 # GET /api/v1/reports  (list all reports)
 # ---------------------------------------------------------------------------
 
@@ -561,13 +609,15 @@ class TestListReportsEndpoint:
         assert data["reports"] == []
 
     def test_returns_all_reports_sorted_descending(self, client, vault_dir):
-        """Should return all reports sorted by filename descending (newest first)."""
+        """Should return all reports sorted by date descending (newest first)."""
         reports = vault_dir / "wiki" / "reports"
         (reports / "2026-04-20-weekly.md").write_text(
-            "# Week 16\nOld report.", encoding="utf-8"
+            "---\ntype: weekly-status-report\ndate: 2026-04-20\n---\n# Week 16\nOld report.",
+            encoding="utf-8",
         )
         (reports / "2026-04-27-weekly.md").write_text(
-            "# Week 17\nLatest report.", encoding="utf-8"
+            "---\ntype: weekly-status-report\ndate: 2026-04-27\n---\n# Week 17\nLatest report.",
+            encoding="utf-8",
         )
 
         resp = client.get("/api/v1/reports")
@@ -585,7 +635,8 @@ class TestListReportsEndpoint:
         """Should exclude index.md and log.md from report list."""
         reports = vault_dir / "wiki" / "reports"
         (reports / "2026-04-27-weekly.md").write_text(
-            "# Week 17\nReport.", encoding="utf-8"
+            "---\ntype: weekly-status-report\ndate: 2026-04-27\n---\n# Week 17\nReport.",
+            encoding="utf-8",
         )
         (reports / "index.md").write_text("# Index\n", encoding="utf-8")
         (reports / "log.md").write_text("# Log\n", encoding="utf-8")
@@ -596,11 +647,50 @@ class TestListReportsEndpoint:
         assert len(data["reports"]) == 1
         assert data["reports"][0]["filename"] == "2026-04-27-weekly.md"
 
+    def test_type_filter_excludes_non_matching(self, client, vault_dir):
+        """Should exclude non-matching types when ?type= is passed."""
+        reports = vault_dir / "wiki" / "reports"
+        (reports / "2026-04-27-weekly.md").write_text(
+            "---\ntype: weekly-status-report\ndate: 2026-04-27\n---\n# Week 17",
+            encoding="utf-8",
+        )
+        (reports / "Competitor-Info-Test.md").write_text(
+            "---\ntype: competitor-info\n---\n# Test Competitor",
+            encoding="utf-8",
+        )
+        (reports / "Supplier-Info-Test.md").write_text(
+            "---\ntype: supplier-info\n---\n# Test Supplier",
+            encoding="utf-8",
+        )
+
+        resp = client.get("/api/v1/reports?type=weekly-status-report")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["reports"]) == 1
+        assert data["reports"][0]["filename"] == "2026-04-27-weekly.md"
+
+    def test_no_type_filter_returns_all(self, client, vault_dir):
+        """Without ?type=, all reports are returned."""
+        reports = vault_dir / "wiki" / "reports"
+        (reports / "2026-04-27-weekly.md").write_text(
+            "---\ntype: weekly-status-report\ndate: 2026-04-27\n---\n# Week 17",
+            encoding="utf-8",
+        )
+        (reports / "Competitor-Info-Test.md").write_text(
+            "---\ntype: competitor-info\ndate: 2026-04-20\n---\n# Competitor",
+            encoding="utf-8",
+        )
+
+        resp = client.get("/api/v1/reports")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["reports"]) == 2
+
     def test_title_from_heading(self, client, vault_dir):
         """Should extract title from the first # heading in the body."""
         reports = vault_dir / "wiki" / "reports"
         (reports / "2026-04-27-weekly.md").write_text(
-            "---\ndate: 2026-04-27\n---\n# Weekly Report 27 Apr\n\nBody text.",
+            "---\ntype: weekly-status-report\ndate: 2026-04-27\n---\n# Weekly Report 27 Apr\n\nBody text.",
             encoding="utf-8",
         )
 
@@ -613,7 +703,8 @@ class TestListReportsEndpoint:
         """Should use filename stem as title when no heading is found."""
         reports = vault_dir / "wiki" / "reports"
         (reports / "2026-04-27-weekly.md").write_text(
-            "No heading here, just text.", encoding="utf-8"
+            "---\ntype: weekly-status-report\ndate: 2026-04-27\n---\nNo heading here, just text.",
+            encoding="utf-8",
         )
 
         resp = client.get("/api/v1/reports")
@@ -621,28 +712,18 @@ class TestListReportsEndpoint:
         data = resp.json()
         assert data["reports"][0]["title"] == "2026-04-27-weekly"
 
-    def test_date_extracted_from_filename(self, client, vault_dir):
-        """Should extract date from first 10 chars of filename stem."""
+    def test_date_from_frontmatter_priority(self, client, vault_dir):
+        """Should use frontmatter date over filename date."""
         reports = vault_dir / "wiki" / "reports"
-        (reports / "2026-04-27-weekly.md").write_text(
-            "# Report\nContent.", encoding="utf-8"
+        (reports / "2026-04-20-weekly.md").write_text(
+            "---\ntype: weekly-status-report\ndate: 2026-04-27\n---\n# Report",
+            encoding="utf-8",
         )
 
         resp = client.get("/api/v1/reports")
         assert resp.status_code == 200
         data = resp.json()
         assert data["reports"][0]["date"] == "2026-04-27"
-
-    def test_short_filename_date(self, client, vault_dir):
-        """Should handle short filenames gracefully for date extraction."""
-        reports = vault_dir / "wiki" / "reports"
-        (reports / "short.md").write_text("# Short\nContent.", encoding="utf-8")
-
-        resp = client.get("/api/v1/reports")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["reports"][0]["date"] == "short"
-        assert data["reports"][0]["filename"] == "short.md"
 
 
 # ---------------------------------------------------------------------------
@@ -1342,3 +1423,183 @@ class TestPlaygroundProviders:
         assert openrouter["available"] is True
         assert len(openrouter["models"]) == 2
         assert openrouter["default_model"] == "qwen/qwen3-32b"
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/today/news
+# ---------------------------------------------------------------------------
+
+
+class TestTodayNewsEndpoint:
+
+    def test_no_news_files(self, client):
+        """Should return empty result when no news files exist."""
+        with patch("app.today_parsers.find_latest_file", return_value=(None, False)), \
+             patch("shared.vault_paths.wiki_daily_news", return_value=Path("/fake/news")):
+            resp = client.get("/api/v1/today/news")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["date"] is None
+        assert data["filename"] is None
+        assert data["is_today"] is False
+        assert data["categories"] == {"competitors": [], "ai_llm": []}
+
+    def test_news_found_today(self, vault_dir, client):
+        """Should parse and return news for today's file."""
+        from datetime import date
+
+        news_dir = vault_dir / "wiki" / "reports" / "daily-news"
+        news_dir.mkdir(parents=True, exist_ok=True)
+        today = date.today()
+        news_file = news_dir / f"{today.isoformat()}-news.md"
+        news_file.write_text(
+            "---\ntags: [news]\n---\n"
+            "## Конкуренты\n- Ostrovok launched new feature\n"
+            "## AI & LLM\n- Claude 5 released\n",
+            encoding="utf-8",
+        )
+
+        mock_categories = {
+            "categories": {
+                "competitors": [{"text": "Ostrovok launched new feature"}],
+                "ai_llm": [{"text": "Claude 5 released"}],
+            }
+        }
+
+        with patch("app.today_parsers.find_latest_file", return_value=(news_file, True)), \
+             patch("shared.vault_paths.wiki_daily_news", return_value=news_dir), \
+             patch("app.today_parsers.parse_news", return_value=mock_categories):
+            resp = client.get("/api/v1/today/news")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["date"] == today.isoformat()
+        assert data["filename"] == f"{today.isoformat()}-news.md"
+        assert data["is_today"] is True
+        assert len(data["categories"]["competitors"]) == 1
+        assert len(data["categories"]["ai_llm"]) == 1
+
+    def test_news_cached(self, client):
+        """Should return cached result on second call without refresh."""
+        cached_result = {
+            "date": "2026-07-21",
+            "filename": "2026-07-21-news.md",
+            "is_today": False,
+            "categories": {"competitors": [], "ai_llm": []},
+        }
+
+        from app.vault_api import _cache
+        _cache.set("today:news", cached_result)
+
+        resp = client.get("/api/v1/today/news")
+        assert resp.status_code == 200
+        assert resp.json() == cached_result
+
+    def test_news_refresh_invalidates_cache(self, vault_dir, client):
+        """Should invalidate cache when refresh=true."""
+        news_dir = vault_dir / "wiki" / "reports" / "daily-news"
+        news_dir.mkdir(parents=True, exist_ok=True)
+
+        from app.vault_api import _cache
+        _cache.set("today:news", {"date": "old", "filename": "old.md", "is_today": False, "categories": {}})
+
+        with patch("app.today_parsers.find_latest_file", return_value=(None, False)), \
+             patch("shared.vault_paths.wiki_daily_news", return_value=news_dir):
+            resp = client.get("/api/v1/today/news?refresh=true")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        # After refresh, should have re-fetched (no files found)
+        assert data["date"] is None
+
+    def test_news_error_returns_500(self, client):
+        """Should return 500 when an unexpected error occurs."""
+        from app.vault_api import _cache
+        _cache.invalidate("today:news")
+
+        with patch("shared.vault_paths.wiki_daily_news", side_effect=RuntimeError("disk error")):
+            resp = client.get("/api/v1/today/news")
+
+        assert resp.status_code == 500
+        assert "Failed to read daily news" in resp.json()["detail"]
+
+
+class TestTodayMeetings:
+    """Tests for GET /api/v1/today/meetings."""
+
+    def test_meetings_disabled(self, client):
+        """Should return source='disabled' when CalDAV is not enabled."""
+        with patch("app.vault_api.calendar_client") as mock_cal:
+            mock_cal.is_enabled.return_value = False
+            resp = client.get("/api/v1/today/meetings")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["source"] == "disabled"
+        assert data["count"] == 0
+        assert data["meetings"] == []
+        assert data["date"] is not None
+
+    def test_meetings_success(self, client):
+        """Should return meetings from CalDAV when enabled."""
+        sample_meetings = [
+            {"title": "Standup", "start": "09:00", "end": "09:30"},
+            {"title": "Sprint Review", "start": "14:00", "end": "15:00"},
+        ]
+        with patch("app.vault_api.calendar_client") as mock_cal:
+            mock_cal.is_enabled.return_value = True
+            mock_cal.get_today_meetings.return_value = sample_meetings
+            resp = client.get("/api/v1/today/meetings")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["source"] == "caldav"
+        assert data["count"] == 2
+        assert len(data["meetings"]) == 2
+        assert data["meetings"][0]["title"] == "Standup"
+
+    def test_meetings_caldav_error(self, client):
+        """Should return source='error' when CalDAV throws exception."""
+        with patch("app.vault_api.calendar_client") as mock_cal:
+            mock_cal.is_enabled.return_value = True
+            mock_cal.get_today_meetings.side_effect = ConnectionError("CalDAV unreachable")
+            resp = client.get("/api/v1/today/meetings")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["source"] == "error"
+        assert data["count"] == 0
+        assert data["meetings"] == []
+
+    def test_meetings_refresh_invalidates_cache(self, client):
+        """Should invalidate CalDAV cache when refresh=true."""
+        with patch("app.vault_api.calendar_client") as mock_cal:
+            mock_cal.is_enabled.return_value = True
+            mock_cal.get_today_meetings.return_value = []
+            resp = client.get("/api/v1/today/meetings?refresh=true")
+
+        assert resp.status_code == 200
+        mock_cal._calendar_cache.invalidate.assert_called_once()
+
+    def test_meetings_no_refresh_by_default(self, client):
+        """Should not invalidate cache when refresh is not specified."""
+        with patch("app.vault_api.calendar_client") as mock_cal:
+            mock_cal.is_enabled.return_value = True
+            mock_cal.get_today_meetings.return_value = []
+            resp = client.get("/api/v1/today/meetings")
+
+        assert resp.status_code == 200
+        mock_cal._calendar_cache.invalidate.assert_not_called()
+
+    def test_meetings_empty_list(self, client):
+        """Should handle empty meetings list gracefully."""
+        with patch("app.vault_api.calendar_client") as mock_cal:
+            mock_cal.is_enabled.return_value = True
+            mock_cal.get_today_meetings.return_value = []
+            resp = client.get("/api/v1/today/meetings")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["source"] == "caldav"
+        assert data["count"] == 0
+        assert data["meetings"] == []

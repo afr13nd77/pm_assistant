@@ -22,6 +22,7 @@ import re
 import threading
 import time as _time
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -43,7 +44,7 @@ from shared.vault_paths import (
     wiki_reports,
 )
 
-from . import ke_client
+from . import calendar_client, ke_client
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,8 @@ class _VaultCache:
 
 
 _cache = _VaultCache(ttl_seconds=30.0)
+
+_caldav_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="caldav")
 
 _jira_sync_lock = threading.Lock()
 
@@ -185,6 +188,17 @@ class IdeaStatusUpdateResponse(BaseModel):
     readiness: int
     updated: str
     filename: str
+
+
+class TodoCreateRequest(BaseModel):
+    title: str
+    due_date: str | None = None
+    context: str | None = None
+
+
+class TodoUpdateRequest(BaseModel):
+    status: str
+    result: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -1616,18 +1630,54 @@ def _extract_report_type(text: str) -> str:
     return "other"
 
 
+_DATE_IN_FILENAME_RE = re.compile(r"(\d{4})[.\-](\d{2})[.\-](\d{2})")
+
+
+def _extract_report_date(text: str, stem: str, path: Path | None = None) -> str:
+    """Extract report date. Priority: frontmatter ``date:``/``created:`` → filename."""
+    stripped = text.lstrip()
+    if stripped.startswith("---"):
+        end = stripped.find("---", 3)
+        if end != -1:
+            for field in ("date:", "created:"):
+                for line in stripped[3:end].splitlines():
+                    if line.strip().startswith(field):
+                        val = line.split(":", 1)[1].strip().strip("'\"")
+                        fm = _DATE_IN_FILENAME_RE.search(val)
+                        if fm:
+                            date_str = f"{fm.group(1)}-{fm.group(2)}-{fm.group(3)}"
+                            logger.debug(f"_extract_report_date — frontmatter {field} {date_str} for '{stem}'")
+                            return date_str
+
+    m = _DATE_IN_FILENAME_RE.search(stem)
+    if m:
+        year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if 1 <= month <= 12 and 1 <= day <= 31:
+            date_str = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+            logger.debug(f"_extract_report_date — filename date {date_str} for '{stem}'")
+            return date_str
+        logger.debug(f"_extract_report_date — invalid filename date {year}-{month}-{day} in '{stem}'")
+
+    logger.debug(f"_extract_report_date — no date found for '{stem}'")
+    return "0000-00-00"
+
+
 @app.get("/api/v1/reports")
-def list_reports():
+def list_reports(type: str | None = None):
     """Return a list of all available reports from wiki/reports/.
 
-    Each entry contains ``filename``, ``date`` (extracted from filename prefix
-    YYYY-MM-DD), and ``title`` (first ``# `` heading in the file body, or
+    Each entry contains ``filename``, ``date`` (extracted from frontmatter or
+    filename), and ``title`` (first ``# `` heading in the file body, or
     the filename stem when no heading is found).
 
-    Reports are sorted by filename descending (newest first).
+    Reports are sorted by date descending (newest first).
     Service files (index.md, log.md) are excluded.
+
+    Optional query parameter ``type`` filters by comma-separated report types,
+    e.g. ``?type=weekly-status-report,feature-analysis-report``.
     """
-    logger.info("GET /api/v1/reports — start")
+    type_filter = {t.strip() for t in type.split(",")} if type else None
+    logger.info(f"GET /api/v1/reports — start (type_filter={type_filter})")
     folder = wiki_reports()
 
     if not folder.exists():
@@ -1637,22 +1687,21 @@ def list_reports():
         return {"reports": []}
 
     try:
-        files = sorted(
-            (f for f in folder.glob("*.md") if not _is_service_file(f)),
-            reverse=True,
-        )
-        logger.info("GET /api/v1/reports — found %d report files", len(files))
+        files = [f for f in folder.glob("*.md") if not _is_service_file(f)]
+        logger.info(f"GET /api/v1/reports — found {len(files)} files total")
     except Exception as exc:
-        logger.error("GET /api/v1/reports — error listing files: %s", exc)
+        logger.error(f"GET /api/v1/reports — error listing files: {exc}")
         return {"reports": []}
 
     results: list[dict] = []
     for f in files:
         try:
             text = f.read_text(encoding="utf-8")
-            date = f.stem[:10] if len(f.stem) >= 10 else f.stem
-            title = _extract_report_title(text) or f.stem
             report_type = _extract_report_type(text)
+            if type_filter and report_type not in type_filter:
+                continue
+            date = _extract_report_date(text, f.stem, f)
+            title = _extract_report_title(text) or f.stem
             results.append(
                 {"filename": f.name, "date": date, "title": title, "type": report_type}
             )
@@ -1661,11 +1710,12 @@ def list_reports():
             )
         except Exception as exc:
             logger.error(
-                "GET /api/v1/reports — failed to parse %s: %s", f.name, exc
+                f"GET /api/v1/reports — failed to parse {f.name}: {exc}"
             )
             continue
 
-    logger.info("GET /api/v1/reports — returning %d reports", len(results))
+    results.sort(key=lambda r: r["date"], reverse=True)
+    logger.info(f"GET /api/v1/reports — returning {len(results)} reports (sorted by date)")
     return {"reports": results}
 
 
@@ -2657,6 +2707,7 @@ _VALID_LLM_PROVIDERS = frozenset({"claude", "ollama", "hybrid"})
 _VALID_TRANSCRIPTION_PROVIDERS = frozenset({"default", "openrouter"})
 _VALID_CAPTURE_MODES = frozenset({"simple", "extended"})
 _VALID_FALLBACK_PROVIDERS = frozenset({"claude", "ollama", "openrouter"})
+_CALDAV_PASSWORD_MASK = "••••••••"
 _DEFAULT_USER_PREFS = {
     "refresh_mode": "auto",
     "theme": "matrix",
@@ -2671,6 +2722,10 @@ _DEFAULT_USER_PREFS = {
     "transcription_fallback": ["claude"],
     "analysis_fallback": ["claude"],
     "pipeline_fallback": ["claude"],
+    "caldav_username": "",
+    "caldav_password": "",
+    "caldav_timezone": "Europe/Moscow",
+    "caldav_url": "https://caldav.yandex.ru/",
 }
 
 
@@ -2694,6 +2749,10 @@ class UserPrefs(BaseModel):
     transcription_fallback: list[Any] = ["claude"]
     analysis_fallback: list[Any] = ["claude"]
     pipeline_fallback: list[Any] = ["claude"]
+    caldav_username: str = ""
+    caldav_password: str = ""
+    caldav_timezone: str = "Europe/Moscow"
+    caldav_url: str = "https://caldav.yandex.ru/"
 
 
 def _read_user_prefs() -> dict:
@@ -2811,6 +2870,15 @@ def get_user_prefs():
         prefs["analysis_fallback"] = ["claude"]
     if "pipeline_fallback" not in prefs:
         prefs["pipeline_fallback"] = ["claude"]
+    # --- CalDAV ---
+    if "caldav_username" not in prefs:
+        prefs["caldav_username"] = ""
+    if "caldav_password" not in prefs:
+        prefs["caldav_password"] = ""
+    if "caldav_timezone" not in prefs:
+        prefs["caldav_timezone"] = "Europe/Moscow"
+    if "caldav_url" not in prefs:
+        prefs["caldav_url"] = "https://caldav.yandex.ru/"
     from shared.openrouter_client import DEFAULT_MODEL as _OR_DEFAULT_MODEL
     default_openrouter_model = prefs.get("openrouter_model") or _OR_DEFAULT_MODEL
     for key in ("capture_fallback", "transcription_fallback", "analysis_fallback", "pipeline_fallback"):
@@ -2837,13 +2905,26 @@ def get_user_prefs():
                     _normalize_fallback_step_for_read(el, default_openrouter_model)
                     for el in filtered
                 ]
-    logger.info("GET /api/v1/user-prefs — returning refresh_mode=%s theme=%s llm_provider=%s", prefs["refresh_mode"], prefs["theme"], prefs["llm_provider"])
+    # Mask CalDAV password before returning
+    if prefs.get("caldav_password"):
+        prefs["caldav_password"] = _CALDAV_PASSWORD_MASK
+    logger.info(
+        "GET /api/v1/user-prefs — returning refresh_mode=%s theme=%s"
+        " llm_provider=%s caldav_username=%s",
+        prefs["refresh_mode"], prefs["theme"],
+        prefs["llm_provider"], prefs.get("caldav_username", ""),
+    )
     return prefs
 
 
 @app.put("/api/v1/user-prefs")
 def put_user_prefs(body: UserPrefs):
-    logger.info("PUT /api/v1/user-prefs — start, refresh_mode=%s theme=%s capture_mode=%s", body.refresh_mode, body.theme, body.capture_mode)
+    logger.info(
+        "PUT /api/v1/user-prefs — start, refresh_mode=%s theme=%s"
+        " capture_mode=%s caldav_username=%s",
+        body.refresh_mode, body.theme,
+        body.capture_mode, body.caldav_username,
+    )
     if body.refresh_mode not in _VALID_REFRESH_MODES:
         logger.warning("PUT /api/v1/user-prefs — invalid refresh_mode: %s", body.refresh_mode)
         raise HTTPException(
@@ -2950,6 +3031,11 @@ def put_user_prefs(body: UserPrefs):
 
         setattr(body, key, deduped_chain)
         logger.info("PUT /api/v1/user-prefs — %s validated: %s", key, deduped_chain)
+    # CalDAV password sentinel: masked value means "keep current", empty means "clear"
+    if body.caldav_password == _CALDAV_PASSWORD_MASK:
+        current = _read_user_prefs()
+        body.caldav_password = current.get("caldav_password", "")
+        logger.info("PUT /api/v1/user-prefs — caldav_password sentinel detected, preserving current value")
     prefs = body.model_dump()
     try:
         _write_user_prefs(prefs)
@@ -2957,6 +3043,12 @@ def put_user_prefs(body: UserPrefs):
         logger.error("PUT /api/v1/user-prefs — write failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
     _cache.invalidate()
+    try:
+        from app.calendar_client import _calendar_cache
+        _calendar_cache.invalidate()
+        logger.info("PUT /api/v1/user-prefs — CalDAV cache invalidated")
+    except ImportError:
+        pass
     try:
         from shared.llm_client import invalidate_cache as _invalidate_llm_cache
         _invalidate_llm_cache()
@@ -2972,7 +3064,10 @@ def put_user_prefs(body: UserPrefs):
             "capture_fallback": body.capture_fallback,
             "transcription_fallback": body.transcription_fallback,
             "analysis_fallback": body.analysis_fallback,
-            "pipeline_fallback": body.pipeline_fallback}
+            "pipeline_fallback": body.pipeline_fallback,
+            "caldav_username": body.caldav_username,
+            "caldav_timezone": body.caldav_timezone,
+            "caldav_url": body.caldav_url}
 
 
 # ---------------------------------------------------------------------------
@@ -3063,6 +3158,69 @@ def openrouter_models():
         "GET /api/v1/openrouter-models — source=%s count=%d cached=%s",
         result.get("source"), result.get("count"), result.get("cached"),
     )
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Test CalDAV connectivity
+# ---------------------------------------------------------------------------
+
+
+class TestCaldavRequest(BaseModel):
+    url: str = "https://caldav.yandex.ru/"
+    username: str
+    password: str
+
+
+def _test_caldav_sync(url: str, username: str, password: str) -> dict:
+    """Test CalDAV connection synchronously (runs in executor)."""
+    import caldav
+
+    logger.info("_test_caldav_sync -- connecting to %s, username=%s", url, username)
+    try:
+        client = caldav.DAVClient(
+            url=url,
+            username=username,
+            password=password,
+        )
+        principal = client.principal()
+        logger.info("_test_caldav_sync -- authenticated successfully")
+
+        calendars = principal.calendars()
+        calendar_names = [getattr(c, "name", "") for c in calendars]
+        logger.info("_test_caldav_sync -- found %d calendars: %s", len(calendars), calendar_names)
+
+        return {
+            "status": "ok",
+            "calendars_count": len(calendars),
+            "calendar_names": calendar_names,
+        }
+    except Exception as exc:
+        exc_str = str(exc)
+        if "401" in exc_str or "unauthorized" in exc_str.lower() or "authorization" in exc_str.lower():
+            logger.warning("_test_caldav_sync -- authorization failed: %s", exc)
+            return {"status": "error", "detail": f"Authorization failed: {exc_str}"}
+        if "timeout" in exc_str.lower() or isinstance(exc, TimeoutError):
+            logger.warning("_test_caldav_sync -- timeout: %s", exc)
+            return {"status": "error", "detail": "Connection timeout"}
+        logger.error("_test_caldav_sync -- unexpected error: %s", exc)
+        return {"status": "error", "detail": exc_str}
+
+
+@app.post("/api/v1/test-caldav")
+async def test_caldav(body: TestCaldavRequest):
+    logger.info("POST /api/v1/test-caldav -- url=%s, username=%s", body.url, body.username)
+    import asyncio
+
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(
+        _caldav_executor,
+        _test_caldav_sync,
+        body.url,
+        body.username,
+        body.password,
+    )
+    logger.info("POST /api/v1/test-caldav -- result status=%s", result.get("status"))
     return result
 
 
@@ -4102,3 +4260,424 @@ async def get_system_log_stats():
     except Exception as exc:
         logger.error("GET /api/v1/system-log/stats — error: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Today — Morning Digest
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/v1/today/digest")
+async def get_today_digest(refresh: bool = False):
+    """Утренний дайджест: парсинг последнего morning-digest файла из vault."""
+    logger.info("GET /today/digest — start, refresh=%s", refresh)
+    try:
+        if refresh:
+            _cache.invalidate("today:digest")
+
+        cached = _cache.get("today:digest")
+        if cached is not None:
+            logger.info("GET /today/digest — returning cached")
+            return cached
+
+        from datetime import date
+
+        from shared.vault_paths import wiki_morning_digests
+
+        from .today_parsers import find_latest_file, parse_digest
+
+        digest_dir = wiki_morning_digests()
+        today = date.today()
+
+        file_path, is_today = find_latest_file(digest_dir, "morning-digest", today)
+
+        if file_path is None:
+            result = {
+                "date": None,
+                "filename": None,
+                "is_today": False,
+                "focus": None,
+                "sections": [],
+                "full_markdown": None,
+            }
+            _cache.set("today:digest", result)
+            logger.info("GET /today/digest — no digest files found")
+            return result
+
+        text = file_path.read_text(encoding="utf-8")
+        parsed = parse_digest(text)
+
+        # Extract date from filename (YYYY-MM-DD-morning-digest.md)
+        file_date = file_path.stem[:10]  # "2026-07-22"
+
+        result = {
+            "date": file_date,
+            "filename": file_path.name,
+            "is_today": is_today,
+            "focus": parsed["focus"],
+            "sections": parsed["sections"],
+            "full_markdown": parsed["full_markdown"],
+        }
+
+        _cache.set("today:digest", result)
+        logger.info("GET /today/digest — success, date=%s, is_today=%s", file_date, is_today)
+        return result
+    except Exception as e:
+        logger.error("GET /today/digest — error: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to read morning digest")
+
+
+# ---------------------------------------------------------------------------
+# TODO CRUD endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/v1/todos")
+async def get_todos(status: str = "open"):
+    """Получить список TODO-задач с фильтрацией по статусу."""
+    logger.info(f"GET /todos — start, status={status}")
+    try:
+        cache_key = f"todos:{status}"
+        cached = _cache.get(cache_key)
+        if cached is not None:
+            logger.info(f"GET /todos — returning cached, status={status}")
+            return cached
+
+        from .today_parsers import parse_todos
+
+        from shared.vault_paths import wiki_todos
+
+        todo_path = wiki_todos()
+        if not todo_path.exists():
+            result = {"count": 0, "todos": []}
+            _cache.set(cache_key, result)
+            logger.info(f"GET /todos — file not found, returning empty, status={status}")
+            return result
+
+        text = todo_path.read_text(encoding="utf-8")
+        logger.info(f"GET /todos — read {len(text)} chars from {todo_path.name}")
+        all_todos = parse_todos(text)
+
+        if status == "open":
+            filtered = [t for t in all_todos if t["status"] in ("todo", "in-progress")]
+        elif status == "done":
+            filtered = [t for t in all_todos if t["status"] in ("done", "cancelled")]
+        else:  # "all"
+            filtered = all_todos
+
+        result = {"count": len(filtered), "todos": filtered}
+        _cache.set(cache_key, result)
+        logger.info(f"GET /todos — success, count={len(filtered)}")
+        return result
+    except Exception as e:
+        logger.error(f"GET /todos — error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to read TODOs")
+
+
+@app.post("/api/v1/todos", status_code=201)
+async def create_todo(req: TodoCreateRequest):
+    """Создать новый TODO в vault."""
+    logger.info(f"POST /todos — start, title={req.title[:50]}")
+    try:
+        if not req.title.strip():
+            logger.warning("POST /todos — empty title rejected")
+            raise HTTPException(status_code=400, detail="Title is required")
+
+        from datetime import date
+        import re
+
+        from .today_parsers import format_todo_block, parse_todos
+
+        from shared.file_writer import atomic_write, file_lock
+        from shared.vault_paths import wiki_todos
+
+        todo_path = wiki_todos()
+
+        # Ensure parent dir exists
+        todo_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.info(f"POST /todos — todo_path={todo_path}")
+
+        if todo_path.exists():
+            text = todo_path.read_text(encoding="utf-8")
+            logger.info(f"POST /todos — read existing file, {len(text)} chars")
+        else:
+            text = "---\ntype: personal-todo\nowner: '@igor'\n---\n\n## Открытые задачи\n\n## Закрытые задачи\n"
+            logger.info("POST /todos — file not found, using template")
+
+        # Find max TODO-NNN
+        ids = [int(m) for m in re.findall(r"\[TODO-(\d+)\]", text)]
+        next_num = max(ids) + 1 if ids else 1
+        todo_id = f"TODO-{next_num:03d}"
+        logger.info(f"POST /todos — generated id={todo_id}")
+
+        # Format date for display
+        created = date.today().strftime("%d.%m.%Y")
+        due_display = None
+        if req.due_date:
+            # Input is ISO YYYY-MM-DD, display as DD.MM.YYYY
+            parts = req.due_date.split("-")
+            if len(parts) == 3:
+                due_display = f"{parts[2]}.{parts[1]}.{parts[0]}"
+
+        block = format_todo_block(
+            todo_id=todo_id,
+            title=req.title.strip(),
+            status="todo",
+            created=created,
+            due_date=due_display,
+            context=req.context,
+            result=None,
+        )
+        logger.info(f"POST /todos — formatted block for {todo_id}")
+
+        # Insert before "## Закрытые задачи" or at end
+        closed_marker = "## Закрытые задачи"
+        if closed_marker in text:
+            idx = text.index(closed_marker)
+            new_text = text[:idx] + block + "\n" + text[idx:]
+        else:
+            new_text = text + "\n" + block
+
+        with file_lock(todo_path):
+            atomic_write(todo_path, new_text)
+        logger.info(f"POST /todos — file written for {todo_id}")
+
+        _cache.invalidate("todos")
+
+        result = {
+            "id": todo_id,
+            "title": req.title.strip(),
+            "status": "todo",
+            "created": date.today().isoformat(),
+            "due_date": req.due_date,
+        }
+        logger.info(f"POST /todos — success, created {todo_id}")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"POST /todos — error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create TODO")
+
+
+@app.patch("/api/v1/todos/{todo_id}")
+async def update_todo(todo_id: str, req: TodoUpdateRequest):
+    """Обновить статус существующего TODO."""
+    logger.info(f"PATCH /todos/{todo_id} — start, status={req.status}")
+    try:
+        valid_statuses = {"todo", "in-progress", "done", "cancelled"}
+        if req.status not in valid_statuses:
+            logger.warning(f"PATCH /todos/{todo_id} — invalid status={req.status}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Status must be one of: {', '.join(sorted(valid_statuses))}",
+            )
+
+        from datetime import date
+        import re
+
+        from shared.file_writer import atomic_write, file_lock
+        from shared.vault_paths import wiki_todos
+
+        todo_path = wiki_todos()
+        if not todo_path.exists():
+            logger.warning(f"PATCH /todos/{todo_id} — file not found")
+            raise HTTPException(status_code=404, detail=f"{todo_id} not found")
+
+        text = todo_path.read_text(encoding="utf-8")
+        logger.info(f"PATCH /todos/{todo_id} — read {len(text)} chars")
+
+        # Find the section ### [TODO-NNN]
+        section_pattern = rf"(### \[{re.escape(todo_id)}\] .+?)(?=### \[TODO-|\Z)"
+        match = re.search(section_pattern, text, re.DOTALL)
+        if not match:
+            logger.warning(f"PATCH /todos/{todo_id} — section not found in file")
+            raise HTTPException(status_code=404, detail=f"{todo_id} not found")
+
+        section = match.group(1)
+        new_section = section
+
+        # Update status
+        new_section = re.sub(
+            r"\*\*Статус:\*\*\s*.+",
+            f"**Статус:** {req.status}",
+            new_section,
+        )
+        logger.info(f"PATCH /todos/{todo_id} — status updated to {req.status}")
+
+        # Add closed date if done/cancelled
+        if req.status in ("done", "cancelled"):
+            closed_date = date.today().strftime("%d.%m.%Y")
+            if "**Закрыто:**" not in new_section:
+                # Insert after **Статус:** line
+                new_section = re.sub(
+                    r"(\*\*Статус:\*\* .+)",
+                    rf"\1\n**Закрыто:** {closed_date}",
+                    new_section,
+                )
+                logger.info(f"PATCH /todos/{todo_id} — added closed date {closed_date}")
+            else:
+                new_section = re.sub(
+                    r"\*\*Закрыто:\*\*\s*.+",
+                    f"**Закрыто:** {closed_date}",
+                    new_section,
+                )
+                logger.info(f"PATCH /todos/{todo_id} — updated closed date {closed_date}")
+
+        # Add result if provided
+        if req.result:
+            if "**Результат:**" not in new_section:
+                new_section = new_section.rstrip() + f"\n**Результат:** {req.result}\n"
+                logger.info(f"PATCH /todos/{todo_id} — added result")
+            else:
+                new_section = re.sub(
+                    r"\*\*Результат:\*\*\s*.+",
+                    f"**Результат:** {req.result}",
+                    new_section,
+                )
+                logger.info(f"PATCH /todos/{todo_id} — updated result")
+
+        new_text = text.replace(section, new_section)
+
+        with file_lock(todo_path):
+            atomic_write(todo_path, new_text)
+        logger.info(f"PATCH /todos/{todo_id} — file written")
+
+        _cache.invalidate("todos")
+
+        result = {
+            "id": todo_id,
+            "status": req.status,
+            "closed": date.today().isoformat() if req.status in ("done", "cancelled") else None,
+        }
+        logger.info(f"PATCH /todos/{todo_id} — success")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"PATCH /todos/{todo_id} — error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update {todo_id}")
+
+
+# ---------------------------------------------------------------------------
+# Today — Daily News
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/v1/today/news")
+async def get_today_news(refresh: bool = False):
+    """Ежедневные новости: парсинг последнего daily-news файла из vault."""
+    logger.info(f"GET /today/news — start, refresh={refresh}")
+    try:
+        if refresh:
+            _cache.invalidate("today:news")
+
+        cached = _cache.get("today:news")
+        if cached is not None:
+            logger.info("GET /today/news — returning cached")
+            return cached
+
+        from datetime import date
+
+        from shared.vault_paths import wiki_daily_news
+
+        from .today_parsers import find_latest_file, parse_news
+
+        news_dir = wiki_daily_news()
+        today = date.today()
+
+        file_path, is_today = find_latest_file(news_dir, "news", today)
+
+        if file_path is None:
+            result = {
+                "date": None,
+                "filename": None,
+                "is_today": False,
+                "categories": {"competitors": [], "ai_llm": []},
+            }
+            _cache.set("today:news", result)
+            logger.info("GET /today/news — no news files found")
+            return result
+
+        text = file_path.read_text(encoding="utf-8")
+        parsed = parse_news(text)
+
+        # Extract date from filename (YYYY-MM-DD-news.md)
+        file_date = file_path.stem[:10]  # "2026-07-21"
+
+        result = {
+            "date": file_date,
+            "filename": file_path.name,
+            "is_today": is_today,
+            "categories": parsed["categories"],
+        }
+
+        _cache.set("today:news", result)
+        logger.info(f"GET /today/news — success, date={file_date}, is_today={is_today}")
+        return result
+    except Exception as e:
+        logger.error(f"GET /today/news — error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to read daily news")
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/today/meetings — CalDAV meetings for today
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/v1/today/meetings")
+async def get_today_meetings(refresh: bool = False):
+    """Return today's meetings from CalDAV calendar (graceful degradation)."""
+    logger.info(f"GET /today/meetings — start, refresh={refresh}")
+    try:
+        from datetime import date
+
+        import asyncio
+
+        today = date.today().isoformat()
+
+        if not calendar_client.is_enabled():
+            result = {
+                "date": today,
+                "count": 0,
+                "source": "disabled",
+                "meetings": [],
+            }
+            logger.info("GET /today/meetings — CalDAV disabled")
+            return result
+
+        if refresh:
+            calendar_client._calendar_cache.invalidate()
+
+        try:
+            # Run synchronous CalDAV in executor
+            loop = asyncio.get_event_loop()
+            meetings = await loop.run_in_executor(
+                _caldav_executor,
+                calendar_client.get_today_meetings,
+            )
+
+            result = {
+                "date": today,
+                "count": len(meetings),
+                "source": "caldav",
+                "meetings": meetings,
+            }
+            logger.info(f"GET /today/meetings — success, count={len(meetings)}")
+            return result
+        except Exception as caldav_err:
+            logger.error(f"GET /today/meetings — CalDAV error: {caldav_err}")
+            return {
+                "date": today,
+                "count": 0,
+                "source": "error",
+                "meetings": [],
+            }
+    except Exception as e:
+        logger.error(f"GET /today/meetings — error: {e}")
+        return {
+            "date": date.today().isoformat() if "date" in dir() else None,
+            "count": 0,
+            "source": "error",
+            "meetings": [],
+        }

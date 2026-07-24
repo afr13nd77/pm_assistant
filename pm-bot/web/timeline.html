@@ -20,7 +20,7 @@
 </head>
 <body>
   <div id="app" v-cloak>
-    <app-sidebar active="timeline" @search="searchOpen = true"></app-sidebar>
+    <app-sidebar active="" @search="searchOpen = true"></app-sidebar>
     <search-overlay :open="searchOpen" @close="searchOpen = false"></search-overlay>
     <main class="page-content" style="position: relative; overflow: hidden;">
       <div class="scan-line"></div>

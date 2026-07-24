@@ -435,6 +435,55 @@
           </div>
         </div>
 
+        <!-- Calendar (CalDAV) section -->
+        <div class="settings-section">
+          <div class="settings-section-title">// CALENDAR</div>
+          <div class="provider-config-block">
+            <div class="provider-config-header">YANDEX CALENDAR (CalDAV)</div>
+            <div class="field-group">
+              <div class="field-label">USERNAME</div>
+              <input class="field-input" v-model="caldavUsername"
+                     placeholder="user@yandex.ru"
+                     @change="saveProviderSettings">
+            </div>
+            <div class="field-group">
+              <div class="field-label">APP PASSWORD</div>
+              <input class="field-input" type="password" v-model="caldavPassword"
+                     placeholder="App password from Yandex ID"
+                     @change="saveProviderSettings">
+            </div>
+            <div class="field-group">
+              <div class="field-label">TIMEZONE</div>
+              <input class="field-input" v-model="caldavTimezone"
+                     placeholder="Europe/Moscow" style="width: 250px;"
+                     @change="saveProviderSettings">
+            </div>
+            <div class="field-group">
+              <div class="field-label">CALDAV URL</div>
+              <input class="field-input" v-model="caldavUrl"
+                     placeholder="https://caldav.yandex.ru/"
+                     @change="saveProviderSettings">
+              <div class="field-note">Yandex Calendar URL. Изменять только при использовании другого CalDAV-сервера</div>
+            </div>
+            <div class="ollama-test-row">
+              <button class="cmd-btn cmd-btn-cyan" :disabled="caldavTesting"
+                      @click="testCaldavConnection()">
+                {{ caldavTesting ? '...' : 'TEST CONNECTION' }}
+              </button>
+              <span v-if="caldavStatus && caldavStatus.status === 'ok'" class="ollama-status ok">
+                Connected &mdash; {{ caldavStatus.calendars_count }} calendars
+              </span>
+              <span v-if="caldavStatus && caldavStatus.status === 'error'" class="ollama-status err">
+                {{ caldavStatus.detail }}
+              </span>
+              <span v-if="!caldavTesting && !caldavStatus && !caldavUsername && !caldavPassword"
+                    class="ollama-status" style="opacity: 0.5;">
+                Disabled
+              </span>
+            </div>
+          </div>
+        </div>
+
         <!-- Email fetch section -->
         <div class="settings-section">
           <div class="settings-section-title">// EMAIL_FETCH</div>
@@ -574,6 +623,12 @@
       var ollamaModel = ref('qwen3.5:latest');
       var ollamaStatus = ref(null);
       var ollamaTesting = ref(false);
+      var caldavUsername = ref('');
+      var caldavPassword = ref('');
+      var caldavTimezone = ref('Europe/Moscow');
+      var caldavUrl = ref('https://caldav.yandex.ru/');
+      var caldavTesting = ref(false);
+      var caldavStatus = ref(null);
       var llmSaving = ref(false);
       var jiraSyncNotify = ref(true);
       var captureMode = ref('simple');
@@ -710,7 +765,11 @@
           capture_fallback: captureChain,
           transcription_fallback: transcriptionChain,
           analysis_fallback: analysisChain,
-          pipeline_fallback: pipelineChain
+          pipeline_fallback: pipelineChain,
+          caldav_username: caldavUsername.value,
+          caldav_password: caldavPassword.value,
+          caldav_timezone: caldavTimezone.value,
+          caldav_url: caldavUrl.value
         };
       }
 
@@ -1014,6 +1073,30 @@
         });
       }
 
+      function testCaldavConnection() {
+        console.log('[settings] testCaldavConnection called');
+        if (!caldavUsername.value || !caldavPassword.value) {
+          caldavStatus.value = { status: 'error', detail: 'Enter username and password first' };
+          return;
+        }
+        caldavTesting.value = true;
+        caldavStatus.value = null;
+        var params = {
+          url: caldavUrl.value || 'https://caldav.yandex.ru/',
+          username: caldavUsername.value,
+          password: caldavPassword.value
+        };
+        api.testCaldav(params).then(function(data) {
+          console.log('[settings] testCaldav result:', data);
+          caldavStatus.value = data;
+          caldavTesting.value = false;
+        }).catch(function(err) {
+          console.error('[settings] testCaldav error:', err.message);
+          caldavStatus.value = { status: 'error', detail: err.message || 'Unknown error' };
+          caldavTesting.value = false;
+        });
+      }
+
       function saveOllamaSettings() {
         console.log('[settings] saveOllamaSettings');
         saveProviderSettings();
@@ -1089,6 +1172,10 @@
           try { localStorage.setItem('pm_capture_mode', captureMode.value); } catch(e) {}
           transcriptionProvider.value = prefs.transcription_provider || 'default';
           openrouterModel.value = prefs.openrouter_model || 'qwen/qwen3-32b';
+          caldavUsername.value = prefs.caldav_username || '';
+          caldavPassword.value = prefs.caldav_password || '';
+          caldavTimezone.value = prefs.caldav_timezone || 'Europe/Moscow';
+          caldavUrl.value = prefs.caldav_url || 'https://caldav.yandex.ru/';
           // Load fallback chains. GET /api/v1/user-prefs (T-08) always returns canonical
           // {provider, model} objects, but normalizeChainStep() is kept as a defensive
           // safety net (also tolerates legacy string steps if ever encountered).
@@ -1113,6 +1200,9 @@
           // OpenRouter: load models and key always (provider may be in any group)
           loadOpenRouterKeyStatus();
           loadOpenRouterModels();
+          if (caldavUsername.value && caldavPassword.value === '••••••••') {
+            caldavStatus.value = { status: 'ok', calendars_count: '?', detail: 'Configured (click TEST to verify)' };
+          }
         }).catch(function(err) {
           console.error('[settings] getUserPrefs error:', err.message);
         });
@@ -1190,6 +1280,13 @@
         fetchingMeetings: fetchingMeetings,
         fetchMeetingsStatus: fetchMeetingsStatus,
         runFetchMeetings: runFetchMeetings,
+        caldavUsername: caldavUsername,
+        caldavPassword: caldavPassword,
+        caldavTimezone: caldavTimezone,
+        caldavUrl: caldavUrl,
+        caldavTesting: caldavTesting,
+        caldavStatus: caldavStatus,
+        testCaldavConnection: testCaldavConnection,
       };
     }
   });

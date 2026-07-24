@@ -278,6 +278,7 @@ SPA-дашборд на Vue 3 + vanilla JS. Статические HTML-стра
 
 | Страница | Назначение |
 |---|---|
+| today.html | Стартовая страница рабочего дня: Morning Digest, фокус дня, встречи CalDAV, TODO, готовые отчёты, новости/сигналы |
 | overview.html | Command center: system status, idea funnel, KPI-метрики, donut chart, today's queue, activity feed, quick capture |
 | ideas.html | Канбан идей: 4 колонки по статусам (Новая / Проверка гипотезы / Готова / Отсев), фильтр по доменам, drag-n-drop, readiness %, capture drawer |
 | board.html | Канбан-доска задач: классификация по jira_key, типы из frontmatter (BACKEND, FRONTEND, TESTING, RESEARCH, DESIGN) |
@@ -394,6 +395,9 @@ python -m app.main
 | OLLAMA_URL | нет | pm-bot, KE | URL Ollama-сервера |
 | OLLAMA_MODEL | нет | pm-bot, KE | Модель Ollama (default: qwen3.5:latest) |
 | OPENROUTER_API_KEY | нет | pm-bot, KE | Ключ OpenRouter API для транскрибаций |
+| YANDEX_CALENDAR_URL | нет | pm-bot | URL CalDAV-сервера Яндекс Календаря |
+| YANDEX_CALENDAR_USERNAME | нет | pm-bot | Логин Яндекс Календаря |
+| YANDEX_CALENDAR_PASSWORD | нет | pm-bot | Пароль приложения Яндекс Календаря |
 | STT_ENABLED | нет | pm-bot | Включить STT/Whisper (default: 1) |
 
 Полный список переменных — в index.md.

@@ -125,6 +125,14 @@
 
   /* Radius */
   --radius: 2px;
+
+  /* DS v2 accent tokens (TODAY page) — matrix mapping */
+  --a: #D6A85F; --as: rgba(214,168,95,0.10); --a-border: rgba(214,168,95,0.30);
+  --g: var(--green); --gs: rgba(52,211,153,0.10);
+  --b: var(--cyan); --bs: rgba(34,211,238,0.10);
+  --p: #A78BFA; --ps: rgba(167,139,250,0.10);
+  --r: #EF4444; --rs: rgba(239,68,68,0.10);
+  --rad: 2px;
 }
 
 /* ------------------------------------------------------------

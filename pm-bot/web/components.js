@@ -119,52 +119,91 @@ function registerComponents(app) {
   /* ========================================
      AppSidebar -- shared navigation sidebar
      Props:
-       active (string): overview | domains | ideas | roadmap | board | timeline | report | settings | about
+       active (string): today | meetings | my-work | actions | domains | report | decisions | roadmap | ideas | board | decay | playground | system-log | settings | about
+     Groups: РАБОЧИЙ ДЕНЬ, ЗНАНИЯ, МОНИТОРИНГ, СИСТЕМА (collapsible)
      ======================================== */
   app.component('app-sidebar', {
     props: {
       active: { type: String, default: '' }
     },
     emits: ['search'],
+    data: function() {
+      return {
+        systemCollapsed: true
+      };
+    },
     computed: {
-      links: function() {
+      groups: function() {
         return [
-          { name: 'overview', label: 'OVERVIEW', href: 'overview.html', icon: 'monitoring' },
-          { name: 'domains', label: 'DASHBOARD', href: 'dashboard.html', icon: 'space_dashboard' },
-          { name: 'ideas', label: 'IDEAS', href: 'ideas.html', icon: 'lightbulb' },
-          { name: 'roadmap', label: 'DEVELOPMENT', href: 'roadmap.html', icon: 'rocket_launch' },
-          { name: 'board', label: 'TASKS', href: 'board.html', icon: 'task_alt' },
-          { name: 'report', label: 'REPORTS', href: 'report.html', icon: 'summarize' },
-          { name: 'timeline', label: 'TIMELINE', href: 'timeline.html', icon: 'timeline' },
-          { name: 'decay', label: 'DECAY', href: 'decay.html', icon: 'psychology' },
-          { name: 'decisions', label: 'DECISIONS', href: 'decisions.html', icon: 'gavel' },
-          { name: 'playground', label: 'PLAYGROUND', href: 'playground.html', icon: 'smart_toy' },
-          { name: 'system-log', label: 'SYSTEM LOG', href: 'system-log.html', icon: 'terminal' },
-          { name: 'llm-traces', label: 'LLM TRACES', href: 'http://localhost:3100', icon: 'analytics', external: true }
+          {
+            key: 'workday',
+            caption: 'РАБОЧИЙ ДЕНЬ',
+            collapsible: false,
+            links: [
+              { name: 'today', label: 'TODAY', href: 'today.html', icon: 'wb_sunny' },
+              { name: 'meetings', label: 'MEETINGS', href: '#', icon: 'groups', disabled: true },
+              { name: 'my-work', label: 'MY WORK', href: '#', icon: 'person', disabled: true },
+              { name: 'actions', label: 'ACTION CENTER', href: '#', icon: 'notifications_active', disabled: true }
+            ]
+          },
+          {
+            key: 'knowledge',
+            caption: 'ЗНАНИЯ',
+            collapsible: false,
+            links: [
+              { name: 'domains', label: 'KNOWLEDGE OVERVIEW', href: 'dashboard.html', icon: 'space_dashboard' },
+              { name: 'report', label: 'REPORTS', href: 'report.html', icon: 'summarize' },
+              { name: 'decisions', label: 'DECISIONS', href: 'decisions.html', icon: 'gavel' }
+            ]
+          },
+          {
+            key: 'monitoring',
+            caption: 'МОНИТОРИНГ',
+            collapsible: false,
+            links: [
+              { name: 'roadmap', label: 'DEVELOPMENT', href: 'roadmap.html', icon: 'rocket_launch' },
+              { name: 'ideas', label: 'IDEAS', href: 'ideas.html', icon: 'lightbulb' },
+              { name: 'board', label: 'WORK QUEUE', href: 'board.html', icon: 'task_alt' }
+            ]
+          },
+          {
+            key: 'system',
+            caption: 'СИСТЕМА',
+            collapsible: true,
+            links: [
+              { name: 'decay', label: 'DECAY', href: 'decay.html', icon: 'psychology' },
+              { name: 'playground', label: 'PLAYGROUND', href: 'playground.html', icon: 'smart_toy' },
+              { name: 'system-log', label: 'DIAGNOSTICS', href: 'system-log.html', icon: 'terminal' },
+              { name: 'settings', label: 'SETTINGS', href: 'settings.html', icon: 'settings' },
+              { name: 'about', label: 'ABOUT', href: 'about.html', icon: 'info' }
+            ]
+          }
         ];
+      }
+    },
+    methods: {
+      toggleSystem: function() {
+        this.systemCollapsed = !this.systemCollapsed;
       }
     },
     template: '\
       <nav class="sidebar">\
         <div class="sidebar-logo">PM<span class="accent">_</span>BOARD</div>\
         <button class="nav-link search-trigger" @click="$emit(\'search\')"><span class="material-symbols-outlined">search</span>SEARCH<kbd class="sidebar-kbd">Ctrl+K</kbd></button>\
-        <a v-for="link in links"\
-           :key="link.name"\
-           :href="link.href"\
-           :target="link.external ? \'_blank\' : \'\'"\
-           :rel="link.external ? \'noopener\' : \'\'"\
-           class="nav-link"\
-           :class="{ active: active === link.name }"\
-        ><span class="material-symbols-outlined">{{ link.icon }}</span>{{ link.label }}</a>\
-        <div class="nav-divider"></div>\
-        <a href="settings.html"\
-           class="nav-link"\
-           :class="{ active: active === \'settings\' }"\
-        ><span class="material-symbols-outlined">settings</span>SETTINGS</a>\
-        <a href="about.html"\
-           class="nav-link"\
-           :class="{ active: active === \'about\' }"\
-        ><span class="material-symbols-outlined">info</span>ABOUT</a>\
+        <div v-for="group in groups" :key="group.key"\
+             class="sidebar-group"\
+             :class="{ collapsible: group.collapsible, collapsed: group.collapsible && systemCollapsed }">\
+          <div class="sidebar-caption"\
+               @click="group.collapsible ? toggleSystem() : null">{{ group.caption }}</div>\
+          <a v-for="link in group.links"\
+             :key="link.name"\
+             :href="link.disabled ? null : link.href"\
+             :target="link.external ? \'_blank\' : \'\'"\
+             :rel="link.external ? \'noopener\' : \'\'"\
+             class="nav-link"\
+             :class="{ active: active === link.name, disabled: link.disabled }"\
+          ><span class="material-symbols-outlined">{{ link.icon }}</span>{{ link.label }}</a>\
+        </div>\
       </nav>'
   });
 
@@ -1944,7 +1983,7 @@ function registerComponents(app) {
       }
     },
     template: `
-      <div>
+      <div v-if="open">
         <!-- ==================== SIMPLE MODE ==================== -->
 
         <!-- Simple mode: drawer layout -->

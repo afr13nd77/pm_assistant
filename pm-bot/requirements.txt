@@ -13,3 +13,6 @@ tiktoken>=0.7.0
 weasyprint>=62.0
 markdown-it-py>=3.0.0
 mdit-py-plugins>=0.4.0
+caldav>=3.2.1
+icalendar>=6.0.0
+recurring-ical-events>=3.8.0

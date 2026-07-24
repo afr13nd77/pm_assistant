@@ -15,7 +15,7 @@ pm_assistant/
 ├── docker-compose.yml              # оркестрация: pm-bot + knowledge-engine (:8001 API) + ke-cron + idea-pipeline
 ├── settings.yaml                   # централизованная runtime-конфигурация (timeouts, cooldowns, rate_limits)
 ├── CHANGELOG.md                    # журнал изменений по всем компонентам (от новых к старым)
-├── BACKLOG.md                      # бэклог: реализованные фичи (94, +BL-166), баги (26), идеи (35), итого (157)
+├── BACKLOG.md                      # бэклог: реализованные фичи (97, +BL-172), баги (26), идеи (36), итого (160)
 │
 ├── shared/                         # общий модуль — единый источник для pm-bot, KE, idea-pipeline
 │   ├── __init__.py                 # __version__ = "0.1.0"
@@ -85,9 +85,11 @@ pm_assistant/
 │       ├── enrichment_reminder.py  # ЖЦ идей: скан по доменам, readiness %, Telegram-напоминания
 │       ├── enrichment_db.py        # SQLite: дедупликация напоминаний (cooldown 24ч, cleanup 90д)
 │       ├── daily_alert.py          # Alert при отсутствии Daily-протокола (cron 18:00 МСК, пн-пт, weekend skip)
+│       ├── calendar_client.py      # CalDAV-клиент для Яндекс Календаря (caldav, recurring events)
+│       ├── today_parsers.py        # Парсеры для стартовой страницы: daily-протокол, задачи, события
 │       └── prompts/                # 5 промптов (idea, meeting, jira_ticket, daily, weekly_report)
 │   └── web/                        # SPA веб-дашборд (Vue 3 + vanilla JS)
-│       ├── index.html              # redirect → overview.html
+│       ├── index.html              # redirect → today.html
 │       ├── overview.html           # дашборд: system status, idea funnel, today's queue, activity feed, quick capture
 │       ├── board.html              # канбан-доска (auto-refresh 30s / manual + refresh icon)
 │       ├── ideas.html              # канбан идей по статусам + capture drawer (4 типа) + readiness %
@@ -104,6 +106,8 @@ pm_assistant/
 │       ├── processes.html          # каталог системных процессов
 │       ├── process.html            # детальная страница процесса
 │       ├── system-log.html         # Журнал системных операций — лог cron/pipeline/scheduler с фильтрацией
+│       ├── today.html              # Стартовая страница рабочего дня (TODAY): календарь, daily-протокол, задачи
+│       ├── style-today.css         # Стили для today.html
 │       ├── api.js                  # fetch-клиент к vault_api (cancellation, caching, user-prefs, decay snapshot)
 │       ├── components.js           # shared Vue 3 компоненты (sidebar, cards, drawer)
 │       ├── style.css               # базовая тема (flat)
@@ -191,10 +195,10 @@ pm_assistant/
 
 | Компонент | Версия | Последнее изменение | Описание |
 |---|---|---|---|
-| **pm-bot** | 1.18.2 | 2026-07-13 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py, 22 функции). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. context_assembler: waterfall сборка контекста из llm_wiki/ (kill switch DIGEST_CONTEXT_SOURCE), enrich_creative_recall (BL-147 Phase 2). Digest context injection в process_idea и weekly report. Мультимодельные OpenRouter fallback-цепочки с inline model selector + GET /openrouter-models (BL-155, BL-156). Playground providers: live-список моделей OpenRouter через list_models() (BL-158). Report search/filter: _extract_report_type + type в ответе /api/v1/reports, UI поиск + фильтр-чипы (BL-161). Epic body в drawer roadmap: SHOW_BODY/SHOW_TICKETS тогглер, body в ответе /api/v1/epics (BL-162). |
+| **pm-bot** | 1.19.0 | 2026-07-23 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py, 22 функции). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. context_assembler: waterfall сборка контекста из llm_wiki/ (kill switch DIGEST_CONTEXT_SOURCE), enrich_creative_recall (BL-147 Phase 2). Digest context injection в process_idea и weekly report. Мультимодельные OpenRouter fallback-цепочки с inline model selector + GET /openrouter-models (BL-155, BL-156). Playground providers: live-список моделей OpenRouter через list_models() (BL-158). Report search/filter: _extract_report_type + type в ответе /api/v1/reports, UI поиск + фильтр-чипы (BL-161). Epic body в drawer roadmap: SHOW_BODY/SHOW_TICKETS тогглер, body в ответе /api/v1/epics (BL-162). CalDAV Settings UI (BL-172). |
 | **knowledge-engine** | 1.15.2 | 2026-07-17 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (29 эндпоинтов). DigestHandler в watcher.py (DIGEST_ENABLED env, debounce 5s, body_hash check). 3 API endpoints: digest/generate, digest/bulk, digest/status (BL-147 Phase 2). cowork_context: _cowork-session.md для Cowork (BL-151). Jira sync fallback: поиск vault-файлов по jira_key в frontmatter для кастомных имён (BUG-023). Fix _CLOSED_STATUSES: задачи "Отменена" корректно распознаются как закрытые (BUG-025). |
 | **idea-pipeline** | 1.2.0 | 2026-07-22 | Orchestrator: Analyst → PM → Decomposer. LLM-вызовы через shared/llm_client с fallback-цепочками (pipeline_analyst, pipeline_pm, pipeline_decomposer). PipelineClaudeClient удалён. Импорты vault_paths и file_writer из shared/. |
-| **web-ui** | 1.26.3 | 2026-07-13 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141), LLM Playground (BL-142). Decision Journal (BL-24): decisions.html + meeting.html + overview виджет RECENT DECISIONS. Process Catalog (processes.html, process.html). Searchable dropdown для моделей OpenRouter в settings.html и playground.html, общий CSS в style.css (BL-158). Report search/filter: поиск по имени/заголовку + фильтр-чипы по типу (BL-161). Epic body toggle в drawer roadmap (BL-162). BUG-021/022: Jira Import direct key fix + ticket list filtering. |
+| **web-ui** | 1.27.0 | 2026-07-23 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141), LLM Playground (BL-142). Decision Journal (BL-24): decisions.html + meeting.html + overview виджет RECENT DECISIONS. Process Catalog (processes.html, process.html). Searchable dropdown для моделей OpenRouter в settings.html и playground.html, общий CSS в style.css (BL-158). Report search/filter: поиск по имени/заголовку + фильтр-чипы по типу (BL-161). Epic body toggle в drawer roadmap (BL-162). CalDAV Settings UI секция CALENDAR (BL-172). BUG-021/022: Jira Import direct key fix + ticket list filtering. |
 | **инфраструктура** | 1.1.0 | 2026-06-30 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120). KE-контейнер: процесс queue-watch (watchdog на pending/); ke-cron: process-queue каждые 10 мин — страховка/reclaim (BL-145). |
 | **shared** | 0.7.2 | 2026-07-22 | Общий модуль: llm_client (call с настраиваемыми fallback-цепочками, 4 группы операций: capture/transcription/analysis/pipeline, _normalize_step для мультимодельных цепочек {provider, model}, backoff 0.7s при 429, Ollama timeout ×5, call_transcription, call_detailed — additive, отдаёт provider_record + chain/used_model/used_step_index + автоматический LLM trace в system_log — BL-155, BL-167), langfuse_client (singleton с graceful degradation — BL-166), meeting_queue (enqueue-ядро файловой очереди: Unit, make_unit_id, build_meta, enqueue, path-хелперы — BL-145), openrouter_client (list_models с live API + TTL-кэш 1ч + fallback — BL-156; call() с детальным логированием raw-body при ошибке парсинга — BUG-020), system_log (13 process types, LoggedProcess, per-unit details), file_writer, vault_paths (26 функций, +llm_wiki_cowork_session), domain_config, frontmatter_utils, settings. Единый источник для всех компонентов. |
 
@@ -253,7 +257,8 @@ pm_assistant/
 
 | Страница | Назначение |
 |---|---|
-| index.html | Redirect → overview.html |
+| index.html | Redirect → today.html |
+| today.html | Стартовая страница рабочего дня (TODAY): календарь, daily-протокол, задачи на сегодня |
 | overview.html | Дашборд: system status, idea funnel, today's queue, activity feed, quick capture |
 | ideas.html | Канбан идей: 4 колонки по статусам, фильтр по доменам, capture drawer, readiness % |
 | meeting.html | Просмотр одного протокола встречи (markdown render, кнопка НАЗАД) |
@@ -342,6 +347,9 @@ pm_assistant/
 | LANGFUSE_SECRET_KEY | нет | pm-bot, knowledge-engine, idea-pipeline | Secret key проекта Langfuse |
 | LANGFUSE_HOST | нет | pm-bot, knowledge-engine, idea-pipeline | Внутренний URL Langfuse (default: http://langfuse:3000) |
 | LANGFUSE_ENABLED | нет | pm-bot, knowledge-engine, idea-pipeline | Включить/отключить Langfuse (default: true) |
+| YANDEX_CALENDAR_USERNAME | нет | pm-bot | Логин Яндекс Календаря (email) для CalDAV |
+| YANDEX_CALENDAR_APP_PASSWORD | нет | pm-bot | Пароль приложения Яндекс Календаря для CalDAV |
+| YANDEX_CALENDAR_TIMEZONE | нет | pm-bot | Часовой пояс календаря (default: Europe/Moscow) |
 
 ## Performance (vault_api.py)
 

@@ -199,6 +199,21 @@ html, body {
 }
 .sidebar-logo .accent { color: var(--magenta); }
 
+/* Sidebar groups */
+.sidebar-group { margin: 6px 0 14px; }
+.sidebar-caption {
+  font-size: 10px;
+  letter-spacing: 0.11em;
+  color: var(--muted);
+  text-transform: uppercase;
+  padding: 0 10px 6px;
+  font-weight: 800;
+  cursor: default;
+}
+.sidebar-group.collapsible .sidebar-caption { cursor: pointer; }
+.sidebar-group.collapsed .nav-link { display: none; }
+.nav-link.disabled { opacity: 0.4; pointer-events: none; }
+
 .nav-link {
   font-size: 11px;
   color: var(--text-muted);

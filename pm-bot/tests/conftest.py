@@ -7,6 +7,11 @@ app.handlers can be imported without requiring GPU/ML packages.
 import sys
 from unittest.mock import MagicMock
 
-# Stub faster_whisper before any app module is imported.
+# Stub heavy optional dependencies before any app module is imported.
 if "faster_whisper" not in sys.modules:
     sys.modules["faster_whisper"] = MagicMock()
+
+# Stub CalDAV dependencies — not installed locally, only in Docker.
+for _mod in ("caldav", "icalendar"):
+    if _mod not in sys.modules:
+        sys.modules[_mod] = MagicMock()

@@ -358,6 +358,15 @@ var api = {
     });
   },
 
+  /** POST /api/v1/test-caldav -- test CalDAV connection */
+  testCaldav: function(params) {
+    return apiFetch('/test-caldav', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+  },
+
   /** PATCH /api/v1/ideas/:filename/status -- update idea status via drag-drop */
   updateIdeaStatus: function(filename, status) {
     return apiFetch('/ideas/' + encodeURIComponent(filename) + '/status', {
@@ -478,6 +487,62 @@ var api = {
   /** GET /api/v1/system-log/stats -- system log aggregated statistics */
   systemLogStats: function() {
     return apiFetch('/system-log/stats');
+  },
+
+  /** GET /api/v1/today/digest -- morning digest for today page */
+  todayDigest: function(refresh) {
+    var path = '/today/digest';
+    if (refresh) path += '?refresh=true';
+    return apiFetch(path);
+  },
+
+  /** GET /api/v1/today/meetings -- CalDAV meetings for today */
+  todayMeetings: function(refresh) {
+    var path = '/today/meetings';
+    if (refresh) path += '?refresh=true';
+    return apiFetch(path);
+  },
+
+  /** GET /api/v1/today/news -- daily news digest */
+  todayNews: function(refresh) {
+    var path = '/today/news';
+    if (refresh) path += '?refresh=true';
+    return apiFetch(path);
+  },
+
+  /** GET /api/v1/todos -- personal TODO list */
+  todos: function(status) {
+    var path = '/todos';
+    if (status) path += '?status=' + encodeURIComponent(status);
+    return apiFetch(path);
+  },
+
+  /** POST /api/v1/todos -- create a new TODO */
+  todoCreate: function(title, dueDate, context) {
+    var body = { title: title };
+    if (dueDate) body.due_date = dueDate;
+    if (context) body.context = context;
+    return apiFetch('/todos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  },
+
+  /** PATCH /api/v1/todos/:id -- update TODO status */
+  todoUpdate: function(id, status, result) {
+    var body = { status: status };
+    if (result) body.result = result;
+    return apiFetch('/todos/' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  },
+
+  /** GET /api/v1/reports?type=... -- latest report for today page (filtered) */
+  todayLatestReport: function() {
+    return apiFetch('/reports?type=weekly-status-report,feature-analysis-report');
   }
 };
 

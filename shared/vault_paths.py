@@ -84,6 +84,18 @@ def wiki_reports() -> Path:
     return _ensure_dir(VAULT_PATH / "wiki" / "reports")
 
 
+def wiki_morning_digests() -> Path:
+    return _ensure_dir(VAULT_PATH / "wiki" / "reports" / "morning-digest")
+
+
+def wiki_daily_news() -> Path:
+    return _ensure_dir(VAULT_PATH / "wiki" / "reports" / "daily-news")
+
+
+def wiki_todos() -> Path:
+    return VAULT_PATH / "wiki" / "domains" / "general" / "tasks" / "todo.md"
+
+
 def llm_wiki_root() -> Path:
     return _ensure_dir(VAULT_PATH / "llm_wiki")
 
