@@ -5,6 +5,16 @@
 
 ---
 
+## 24.07.2026 — feat: TTL для уведомлений Meeting Fetcher (BL-173)
+
+- feat(knowledge-engine): Автоудаление summary-уведомления Meeting Fetcher через 5 минут
+  - `_notify()`: параметр `ttl: int | None` для opt-in автоудаления (backward compatible)
+  - `_delete_message()`: callback для `threading.Timer`, вызывает Telegram `deleteMessage` API
+  - Константа `_NOTIFY_TTL_SECONDS = 300`
+  - Callsite: только summary fetch (`"N писем поставлено в очередь"`)
+
+---
+
 ## 24.07.2026 — fix: Visual diff today.html (BL-168)
 
 - fix(web-ui): Разделение визуалов для «Идёт сейчас» (`meeting.current`) и «Следующая» (`meeting.active`) встреч в timeline

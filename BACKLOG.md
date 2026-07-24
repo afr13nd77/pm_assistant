@@ -1,8 +1,8 @@
 # Бэклог -- PM Assistant
 
 **Версии:** pm-bot 1.19.0 / knowledge-engine 1.15.2 / idea-pipeline 1.2.0 / web-ui 1.27.0 / shared 0.7.2
-**Обновлён:** 24.07.2026 (BL-173 added)
-**Бэклог:** реализованные фичи (97), баги (26), идеи (37), итого (161)
+**Обновлён:** 24.07.2026 (BL-173 done)
+**Бэклог:** реализованные фичи (98), баги (26), идеи (36), итого (161)
 
 ---
 
@@ -79,6 +79,7 @@
 | BL-27 | ✅ Jira create | knowledge-engine | Создание тикетов из vault. CLI + Telegram /jira_create |
 | BL-28 | ✅ Jira Sync UI | web-ui | Sync status card на dashboard, SYNC NOW на settings, overdue alert >3ч |
 | BL-29 | ✅ Email meeting fetcher | knowledge-engine | IMAP: fetch транскриптов из почты -> classify -> wiki -> enrich -> notify |
+| BL-173 | ✅ TTL для уведомлений Meeting Fetcher | knowledge-engine | Автоудаление summary-уведомления Meeting Fetcher через 5 минут. threading.Timer + deleteMessage API |
 
 ### 3.2 Идеи
 
@@ -86,7 +87,6 @@
 |---|:---|:---|:---|
 | BL-30 | Competitive Spy | knowledge-engine | Мониторинг App Store отзывов, changelogs конкурентов, вакансии -> сигналы в Inbox |
 | BL-150 | Jira sync из попапа задачи | web-ui, pm-bot | Кнопка синхронизации выбранной задачи с Jira прямо из попапа детальной информации (task-drawer). Обновление полей задачи из Jira или push изменений в Jира без перехода на другие страницы |
-| BL-173 | TTL для уведомлений Meeting Fetcher | pm-bot, knowledge-engine | Автоудаление Telegram-уведомлений Meeting Fetcher через 5 минут после отправки. Использовать message_id + scheduled deletion (asyncio / APScheduler) |
 
 ---
 
@@ -332,8 +332,8 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 97 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172 |
+| ✅ Реализовано | 98 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173 |
 | ✅ Баги исправлены | 26 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165 |
-| Идея | 37 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-173 |
+| Идея | 36 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171 |
 | ❌ Удалено | 1 | BL-121 |
 | **Итого** | **161** | |

@@ -17,6 +17,7 @@ are reused/migrated by the Process worker; only their CALLS were removed from
 import logging
 import os
 import re
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -29,12 +30,27 @@ from .state import State
 
 logger = logging.getLogger(__name__)
 
+_NOTIFY_TTL_SECONDS = 300
 
-def _notify(message: str) -> bool:
+
+def _delete_message(bot_token: str, chat_id: str, message_id: int) -> None:
+    """Delete a Telegram message after TTL expiry (called by threading.Timer)."""
+    url = f"https://api.telegram.org/bot{bot_token}/deleteMessage"
+    payload = {"chat_id": chat_id, "message_id": message_id}
+    try:
+        resp = requests.post(url, json=payload, timeout=10)
+        resp.raise_for_status()
+        logger.info("[BL-173] deleted notification message_id=%s", message_id)
+    except Exception as e:
+        logger.warning("[BL-173] failed to delete message_id=%s: %s", message_id, e)
+
+
+def _notify(message: str, *, ttl: int | None = None) -> bool:
     """Send plain-text Telegram notification (no parse_mode / no Markdown).
 
     Uses BOT_TOKEN and ALLOWED_CHAT_ID from environment variables.
     Returns True on success, False on failure (never raises).
+    When *ttl* is set (seconds), schedules automatic message deletion.
     """
 
     bot_token = os.getenv("BOT_TOKEN")
@@ -49,6 +65,20 @@ def _notify(message: str) -> bool:
         response = requests.post(url, json=payload, timeout=10)
         response.raise_for_status()
         logger.info("Notification sent OK")
+
+        if ttl:
+            msg_id = response.json().get("result", {}).get("message_id")
+            if msg_id:
+                timer = threading.Timer(
+                    ttl, _delete_message, args=[bot_token, chat_id, msg_id],
+                )
+                timer.daemon = True
+                timer.start()
+                logger.info(
+                    "[BL-173] scheduled delete for message_id=%s in %ds",
+                    msg_id, ttl,
+                )
+
         return True
     except Exception as e:
         logger.error("Notification failed: %s", e)
@@ -542,7 +572,7 @@ def fetch_new_meetings(
 
     if notify:
         logger.info("fetch_new_meetings: sending summary notification")
-        _notify(summary_msg)
+        _notify(summary_msg, ttl=_NOTIFY_TTL_SECONDS)
 
     # ------------------------------------------------------------------ #
     # Step 7: Return result
