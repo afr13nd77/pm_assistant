@@ -9,7 +9,7 @@ from __future__ import annotations
 import importlib
 import sys
 import time as _time
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
@@ -40,7 +40,7 @@ if isinstance(_saved, MagicMock):
 else:
     import icalendar as _real_icalendar  # noqa: E402
 
-from app.calendar_client import (  # noqa: E402
+from app.calendar_client import (  # noqa: E402, I001
     _CalendarCache,
     _assign_statuses,
     _ical_unescape,

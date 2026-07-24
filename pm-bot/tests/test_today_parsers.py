@@ -1,9 +1,7 @@
 """Tests for app.today_parsers — find_latest_file, parse_digest, parse_todos, parse_news, format_todo_block."""
 
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
-
-import pytest
 
 from app.today_parsers import (
     _extract_section,
@@ -16,7 +14,6 @@ from app.today_parsers import (
     parse_news,
     parse_todos,
 )
-
 
 # ===================================================================
 # _extract_wikilinks

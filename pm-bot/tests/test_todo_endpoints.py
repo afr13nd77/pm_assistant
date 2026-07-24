@@ -6,11 +6,9 @@ Uses TestClient with a temporary vault directory to test:
 - PATCH /api/v1/todos/{todo_id} to update status
 """
 
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 
 SAMPLE_TODO_MD = """\
 ---

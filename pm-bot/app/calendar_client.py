@@ -17,7 +17,6 @@ import time as _time
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
-
 from zoneinfo import ZoneInfo
 
 import caldav
@@ -415,7 +414,7 @@ def get_today_meetings() -> list[dict]:
 
     try:
         logger.info("get_today_meetings -- connecting to CalDAV server")
-        client = caldav.DAVClient(
+        client = caldav.DAVClient(  # type: ignore[operator]
             url=caldav_url,
             username=username,
             password=password,

@@ -15,7 +15,6 @@ from app.jira_fetcher.fetcher import (
     sync,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
@@ -323,7 +322,7 @@ class TestSyncClosedFallback:
         mock_vault_paths.wiki_domain_dir.side_effect = _wiki_domain_dir
 
         epics_dir = _wiki_domain_dir("general", "epics")
-        custom_file = _write_custom_file(
+        _write_custom_file(
             epics_dir, "E-15-retry-logic.md", "TMPL-16260", status="todo",
         )
 

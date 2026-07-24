@@ -3178,7 +3178,7 @@ def _test_caldav_sync(url: str, username: str, password: str) -> dict:
 
     logger.info("_test_caldav_sync -- connecting to %s, username=%s", url, username)
     try:
-        client = caldav.DAVClient(
+        client = caldav.DAVClient(  # type: ignore[operator]
             url=url,
             username=username,
             password=password,
@@ -4292,7 +4292,7 @@ async def get_today_digest(refresh: bool = False):
         file_path, is_today = find_latest_file(digest_dir, "morning-digest", today)
 
         if file_path is None:
-            result = {
+            result: dict[str, Any] = {
                 "date": None,
                 "filename": None,
                 "is_today": False,
@@ -4343,9 +4343,9 @@ async def get_todos(status: str = "open"):
             logger.info(f"GET /todos — returning cached, status={status}")
             return cached
 
-        from .today_parsers import parse_todos
-
         from shared.vault_paths import wiki_todos
+
+        from .today_parsers import parse_todos
 
         todo_path = wiki_todos()
         if not todo_path.exists():
@@ -4383,13 +4383,13 @@ async def create_todo(req: TodoCreateRequest):
             logger.warning("POST /todos — empty title rejected")
             raise HTTPException(status_code=400, detail="Title is required")
 
-        from datetime import date
         import re
-
-        from .today_parsers import format_todo_block, parse_todos
+        from datetime import date
 
         from shared.file_writer import atomic_write, file_lock
         from shared.vault_paths import wiki_todos
+
+        from .today_parsers import format_todo_block
 
         todo_path = wiki_todos()
 
@@ -4473,8 +4473,8 @@ async def update_todo(todo_id: str, req: TodoUpdateRequest):
                 detail=f"Status must be one of: {', '.join(sorted(valid_statuses))}",
             )
 
-        from datetime import date
         import re
+        from datetime import date
 
         from shared.file_writer import atomic_write, file_lock
         from shared.vault_paths import wiki_todos
@@ -4589,7 +4589,7 @@ async def get_today_news(refresh: bool = False):
         file_path, is_today = find_latest_file(news_dir, "news", today)
 
         if file_path is None:
-            result = {
+            result: dict[str, Any] = {
                 "date": None,
                 "filename": None,
                 "is_today": False,
@@ -4630,9 +4630,8 @@ async def get_today_meetings(refresh: bool = False):
     """Return today's meetings from CalDAV calendar (graceful degradation)."""
     logger.info(f"GET /today/meetings — start, refresh={refresh}")
     try:
-        from datetime import date
-
         import asyncio
+        from datetime import date
 
         today = date.today().isoformat()
 
