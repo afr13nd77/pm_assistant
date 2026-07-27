@@ -3,30 +3,17 @@ import os
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from .rate_limiter import TelegramRateLimiter
-
 logger = logging.getLogger(__name__)
-
-_rate_limiter = TelegramRateLimiter()
 
 scheduler = None
 
 
 def start_scheduler(bot, chat_id: int):
-    """Start APScheduler with weekly report job."""
+    """Start APScheduler with enrichment and daily alert jobs."""
     global scheduler
     logger.info("Starting scheduler, chat_id=%s", chat_id)
 
     scheduler = BackgroundScheduler()
-    scheduler.add_job(
-        func=lambda: _run_weekly_report(bot, chat_id),
-        trigger="cron",
-        day_of_week="mon",
-        hour=9,
-        minute=0,
-        id="weekly_report",
-        replace_existing=True,
-    )
 
     from .enrichment_reminder import run_enrichment_check_sync
 
@@ -65,61 +52,5 @@ def start_scheduler(bot, chat_id: int):
     )
 
     scheduler.start()
-    logger.info("Scheduler started: weekly_report job registered for Monday 09:00")
+    logger.info("Scheduler started")
     return scheduler
-
-
-async def _run_weekly_report_async(bot, chat_id: int):
-    """Async implementation of weekly report generation and notification."""
-    logger.info("Running scheduled weekly report")
-    try:
-        from shared.system_log import LoggedProcess
-
-        from .obsidian_writer import write_report
-        from .reporter import generate_weekly_report
-
-        with LoggedProcess(process_type="weekly-report", source="pm-bot") as lp:
-            report_md = generate_weekly_report()
-            logger.info("Weekly report generated, length=%d", len(report_md))
-
-            filepath = write_report(report_md)
-            logger.info("Weekly report saved to %s", filepath)
-
-            await _rate_limiter.acquire()
-            await bot.send_message(
-                chat_id=chat_id,
-                text=f"Еженедельный отчёт готов:\n`{filepath.name}`\n\nОткрой: http://localhost:8080/report.html",
-                parse_mode="Markdown",
-            )
-            logger.info("Weekly report notification sent to chat_id=%s", chat_id)
-
-            lp.summary = "Еженедельный отчёт сгенерирован и отправлен"
-            lp.details = {"report_path": str(filepath.name), "telegram_sent": True}
-    except Exception as e:
-        logger.error("Weekly report generation failed: %s", e, exc_info=True)
-        try:
-            await _rate_limiter.acquire()
-            await bot.send_message(
-                chat_id=chat_id,
-                text=f"Ошибка генерации отчёта: {e}",
-            )
-        except Exception as send_err:
-            logger.error("Failed to send error notification: %s", send_err)
-
-
-def _run_weekly_report(bot, chat_id: int):
-    """Sync wrapper that runs the async report in the bot's event loop."""
-    import asyncio
-
-    logger.info("Weekly report cron triggered")
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.ensure_future(_run_weekly_report_async(bot, chat_id))
-        else:
-            loop.run_until_complete(_run_weekly_report_async(bot, chat_id))
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(_run_weekly_report_async(bot, chat_id))
-    logger.info("Weekly report cron execution dispatched")

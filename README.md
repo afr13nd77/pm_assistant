@@ -203,7 +203,7 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 - transcript_watcher: локальные `.txt` кладёт в файловую очередь `raw/meeting-queue/pending/` (без локального LLM; обработку выполняет KE-воркер) — BL-145
 - Vault API (FastAPI, порт 8000) с in-memory TTL cache (30s)
 - Web UI static server (порт 8080)
-- APScheduler: weekly report (Mon 09:00), enrichment reminders (daily)
+- APScheduler: enrichment reminders (daily), daily alert (пн-пт 18:00)
 - SQLite: дедупликация enrichment-напоминаний (cooldown 24ч)
 
 ### knowledge-engine (v1.15.0)

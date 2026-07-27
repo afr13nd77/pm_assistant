@@ -2614,8 +2614,6 @@ def seed_domain_config():
 class SettingsModel(BaseModel):
     vault_path: str = ""
     transcripts_path: str = ""
-    report_time: str = "09:00"
-    report_day: str = "mon"
     prompts: dict = {}  # key: prompt name, value: prompt content
 
 
@@ -2627,8 +2625,6 @@ def get_settings():
     settings = {
         "vault_path": os.getenv("VAULT_PATH", "/vault"),
         "transcripts_path": os.getenv("TRANSCRIPTS_INBOX", "/transcripts/inbox"),
-        "report_time": "09:00",
-        "report_day": "mon",
         "prompts": {},
     }
 

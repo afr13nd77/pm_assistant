@@ -88,20 +88,6 @@ class TestGetSettings:
             assert data["vault_path"] == "/my/vault"
             assert data["transcripts_path"] == "/my/transcripts"
 
-    def test_returns_default_schedule(self, vault_dir):
-        """Should return default report_time and report_day."""
-        with patch("app.vault_api.VAULT_PATH", vault_dir):
-            from fastapi.testclient import TestClient
-
-            from app.vault_api import app
-            client = TestClient(app)
-
-            resp = client.get("/api/v1/settings")
-            assert resp.status_code == 200
-            data = resp.json()
-            assert data["report_time"] == "09:00"
-            assert data["report_day"] == "mon"
-
     @pytest.mark.xfail(reason="roadmap_*_label keys removed from settings")
     def test_returns_empty_roadmap_labels(self, vault_dir):
         """Should return empty roadmap labels by default."""
@@ -162,8 +148,8 @@ class TestGetSettings:
             assert resp.status_code == 200
             data = resp.json()
             expected_keys = {
-                "vault_path", "transcripts_path", "report_time",
-                "report_day", "roadmap_now_label", "roadmap_next_label",
+                "vault_path", "transcripts_path",
+                "roadmap_now_label", "roadmap_next_label",
                 "roadmap_later_label", "prompts"
             }
             assert set(data.keys()) == expected_keys
@@ -201,8 +187,6 @@ class TestSaveSettings:
                 json={
                     "vault_path": "/vault",
                     "transcripts_path": "/transcripts",
-                    "report_time": "09:00",
-                    "report_day": "mon",
                     "roadmap_now_label": "",
                     "roadmap_next_label": "",
                     "roadmap_later_label": "",
@@ -330,8 +314,6 @@ class TestSaveSettings:
                 json={
                     "vault_path": "/vault",
                     "transcripts_path": "/transcripts",
-                    "report_time": "10:00",
-                    "report_day": "fri",
                     "roadmap_now_label": "Sprint 42",
                     "roadmap_next_label": "Sprint 43",
                     "roadmap_later_label": "Backlog",

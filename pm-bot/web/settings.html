@@ -530,25 +530,6 @@
           </div>
         </div>
 
-        <!-- Report section -->
-        <div class="settings-section">
-          <div class="settings-section-title">// REPORT</div>
-          <div class="field-group">
-            <div class="field-label">REPORT_TIME</div>
-            <input class="field-input" v-model="settings.report_time" style="width: 120px;">
-          </div>
-          <div class="field-group">
-            <div class="field-label">REPORT_DAY</div>
-            <select class="field-select" v-model="settings.report_day">
-              <option value="mon">Monday</option>
-              <option value="tue">Tuesday</option>
-              <option value="wed">Wednesday</option>
-              <option value="thu">Thursday</option>
-              <option value="fri">Friday</option>
-            </select>
-          </div>
-        </div>
-
         <!-- Roadmap labels -->
         <div class="settings-section">
           <div class="settings-section-title">// ROADMAP LABELS</div>
@@ -599,8 +580,6 @@
       var settings = reactive({
         vault_path: '',
         transcripts_path: '',
-        report_time: '09:00',
-        report_day: 'mon',
         roadmap_now_label: '',
         roadmap_next_label: '',
         roadmap_later_label: '',
