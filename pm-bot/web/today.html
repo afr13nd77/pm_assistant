@@ -326,7 +326,10 @@
         // Toast
         toastVisible: false,
         toastText: '',
-        toastTimer: null
+        toastTimer: null,
+
+        // Auto-refresh
+        _meetingsRefreshInterval: null
       };
     },
     computed: {
@@ -360,12 +363,22 @@
     mounted: function() {
       this.refreshAll();
       var self = this;
+      this._meetingsRefreshInterval = setInterval(function() {
+        console.log('[today] auto-refresh meetings — 15min interval');
+        self.loadMeetings(true);
+      }, 900000);
       document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
           if (self.modalOpen) self.closeModal();
           else if (self.drawerOpen) self.closeDrawer();
         }
       });
+    },
+    beforeUnmount: function() {
+      if (this._meetingsRefreshInterval) {
+        clearInterval(this._meetingsRefreshInterval);
+        this._meetingsRefreshInterval = null;
+      }
     },
     methods: {
       refreshAll: function(isRefresh) {

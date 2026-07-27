@@ -5,6 +5,13 @@
 
 ---
 
+## 27.07.2026 — refactor: Удаление cron weekly_report
+
+- refactor(pm-bot): Удалён автоматический cron-джоб генерации еженедельного отчёта (scheduler.py). Настройки report_time/report_day убраны из Settings. Ручная генерация через UI (кнопка REGENERATE) по-прежнему доступна.
+- feat(web-ui): Auto-refresh блока «Встречи сегодня» на today.html каждые 15 минут (BL-188)
+
+---
+
 ## 24.07.2026 — feat: TTL для уведомлений Meeting Fetcher (BL-173)
 
 - feat(knowledge-engine): Автоудаление summary-уведомления Meeting Fetcher через 5 минут

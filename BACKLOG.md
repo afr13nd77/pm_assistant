@@ -1,8 +1,8 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.19.0 / knowledge-engine 1.15.2 / idea-pipeline 1.2.0 / web-ui 1.27.0 / shared 0.7.2
-**Обновлён:** 24.07.2026 (BL-173 done)
-**Бэклог:** реализованные фичи (98), баги (26), идеи (36), итого (161)
+**Версии:** pm-bot 1.19.0 / knowledge-engine 1.15.2 / idea-pipeline 1.2.0 / web-ui 1.27.1 / shared 0.7.2
+**Обновлён:** 27.07.2026 (BL-188 — реализовано)
+**Бэклог:** реализованные фичи (99), баги (26), идеи (50), итого (176)
 
 ---
 
@@ -151,6 +151,7 @@
 | BL-162 | ✅ Roadmap: просмотр тела эпика в popup | web-ui, pm-bot | roadmap.html: кнопка-тогглер SHOW_BODY / SHOW_TICKETS в drawer эпика. Полный markdown body рендерится через marked.js. Бэкенд: поле `body` добавлено в ответ GET /api/v1/epics. Сброс режима при смене эпика. Спека: docs/roadmap-epic-body/ |
 | BL-168 | ✅ Реорганизация меню + страница TODAY | web-ui, pm-bot | Реорганизация sidebar-навигации: 4 группы (Рабочий день, Знания, Мониторинг, Система), collapse группы «Система». Новая страница TODAY — стартовая страница рабочего дня (Morning Digest, фокус дня, встречи, TODO, отчёты, новости). CalDAV-интеграция Яндекс Календаря. Парсеры vault-файлов. API для TODO CRUD и TODAY-данных. DS v2 CSS-токены. Спека: docs/BL-168_menu-reorganization/ |
 | BL-172 | ✅ Настройка CalDAV в Settings UI | web-ui, pm-bot | Секция «CALENDAR» на settings.html: username, app password, timezone, URL. Сохранение через user-prefs API. TEST CONNECTION → POST /api/v1/test-caldav. Статус подключения (connected/disabled/error). calendar_client.py: динамические credentials из user-prefs с fallback на env. Маскировка пароля в GET. Спека: docs/BL-172_caldav-settings-ui/ |
+| BL-188 | ✅ Auto-refresh встреч на TODAY | web-ui | today.html: автоматическое обновление блока встреч (CalDAV) каждые 15 минут через setInterval. loadMeetings(true) с инвалидацией CalDAV-кэша. cleanup в beforeUnmount. Безусловный (без проверки refreshMode). Спека: docs/BL-188_today-meetings-autorefresh/ |
 
 ### 5.2 Идеи
 
@@ -220,7 +221,7 @@
 | # | Название | Компонент | Описание |
 |---|:---|:---|:---|
 | BL-81 | Мониторинг и алерты по доступности Ollama | pm-bot | Health check, uptime tracking (упомянуто в Out of Scope ollama-hybrid) |
-| BL-152 | Рефакторинг vault_api.py — разбивка на роутеры | pm-bot | 3883-строчный God File (51 эндпоинт) разбить на 9 FastAPI APIRouter-модулей: `routers/{jira,config,system,meetings,tasks,epics,reports,ideas,vault,playground}.py`. Параллельно вынести вспомогательные слои: `cache.py` (_VaultCache), `parsers.py` (parse_note, _calculate_readiness и др.), `scanner.py` (_scan_domain_folders), `search_index.py` (_SearchIndex). Порядок: сначала cache/parsers/scanner (чистый перенос без изменения логики), затем роутеры от простых к сложным (jira → config → system → meetings → tasks → epics → reports → ideas → vault). Каждый шаг атомарен и не ломает API. Репозиторный слой и сервисные абстракции не вводить — избыточны для однопользовательской системы. |
+| BL-152 | Рефакторинг vault_api.py — разбивка на роутеры | pm-bot | 4682-строчный God File (59 эндпоинтов, 120+ except-блоков) разбить на 9 FastAPI APIRouter-модулей: `routers/{jira,config,system,meetings,tasks,epics,reports,ideas,vault,playground}.py`. Параллельно вынести вспомогательные слои: `cache.py` (_VaultCache), `parsers.py` (parse_note, _calculate_readiness и др.), `scanner.py` (_scan_domain_folders), `search_index.py` (_SearchIndex). Порядок: сначала cache/parsers/scanner (чистый перенос без изменения логики), затем роутеры от простых к сложным (jira → config → system → meetings → tasks → epics → reports → ideas → vault). Каждый шаг атомарен и не ломает API. Репозиторный слой и сервисные абстракции не вводить — избыточны для однопользовательской системы. Обновлено 24.07.2026: рост с 3883 до 4682 строк, с 51 до 59 endpoints. |
 | BL-144 | Pipeline Monitor — интерактивная визуализация обработки | web-ui, pm-bot, knowledge-engine | Расширение system-log (BL-143) до realtime pipeline view: текущий этап обработки для каждого элемента (fetch → parse → LLM call → write), elapsed time, provider chain, retry counts. Мотивация: BL-143 покрывает журнал завершённых операций, BL-144 — визуализацию процесса в реальном времени |
 | BL-163 | Jira sync: partial update вместо full rewrite | knowledge-engine | `update_frontmatter()` в mapper.py делает полный rewrite через `to_markdown()`, затирая vault-only поля (access_count, tier, relevance, digest, last_accessed, epic_key если Jira вернула null). Заменить на partial update: обновлять только поля, которые Jira реально возвращает (status, assignee, priority, labels, updated_at, synced_at), сохраняя остальные. Обнаружено на GO-181: raw имел `epic_key: TMPL-15408`, wiki — `epic_key: null` после re-sync. Связано с BL-160 (partial update для custom-named files уже реализован через frontmatter_utils) |
 | BL-157 | Пересмотреть место хранения пользовательских настроек | pm-bot, shared, инфраструктура | Открытый вопрос для повторного анализа: сейчас ВСЕ пользовательские настройки (fallback-цепочки провайдеров, тема, refresh-mode, openrouter_model и т.д., см. BL-76) хранятся в `VAULT_PATH/.pm-user-prefs.json` — том же смонтированном томе, что и контент vault (идеи, встречи, decision journal). Обоснование текущего выбора: vault — единственный durable-том проекта, персистентный между пересборками контейнеров (`docker-compose.yml`: `${VAULT_PATH}:/vault` монтируется во все сервисы), в отличие от файловой системы самого контейнера. Вопрос к пересмотру: стоит ли отделить app-конфигурацию от пользовательского контента — в проекте уже существует отдельный персистентный Docker-том `pm-bot-data:/data` (используется для SQLite: enrichment_db, system_log), который мог бы быть более подходящим местом для настроек приложения, не смешивая служебный JSON-файл с личным Obsidian-vault пользователя. Требует явного архитектурного решения (миграция формата хранения, обратная совместимость с уже существующим `.pm-user-prefs.json`) — не реализовывать без отдельного анализа. |
@@ -328,12 +329,48 @@
 
 ---
 
-## 11. Сводка
+## 11. Задачи из аудита (24.07.2026)
+
+> Источник: `docs/audit/executive-summary-2026-07-24.md`, `docs/audit/technical-audit-2026-07-24.md`, `docs/audit/architectural-audit-2026-07-24.md`.
+> Порядок — по убыванию приоритета. Связи с существующими задачами указаны.
+
+### 11.1 P0 — быстрые победы (1-2 дня каждая)
+
+| # | Название | Компонент | Описание |
+|---|:---|:---|:---|
+| BL-174 | .dockerignore для всех сервисов | инфраструктура | Build context 468 MB вместо ~20-30 MB. Каждый `docker build` копирует .git/, docs/, тесты, web assets, CLAUDE.md. Создать `.dockerignore` в корне: `.git`, `docs/`, `*.md` (кроме requirements), `__pycache__`, `.pytest_cache`, `.claude/`, `.idea/`, `test-results/`, `*.pyc`. Ускорение сборки в 10-20x |
+| BL-175 | Docker HEALTHCHECK для кастомных сервисов | инфраструктура | pm-bot, knowledge-engine, idea-pipeline имеют HTTP health endpoints, но не подключены к Docker HEALTHCHECK. Docker/orchestrator не может автоматически перезапустить зависший сервис. Добавить `HEALTHCHECK CMD curl -f http://localhost:<port>/health \|\| exit 1` в каждый Dockerfile. Обновить `depends_on` на `condition: service_healthy` |
+| BL-176 | Исправить молчаливое проглатывание ошибок | pm-bot, knowledge-engine, shared | 28 блоков `except Exception:` без алиаса (ошибка теряется) + 17 блоков `except: pass` (полное подавление). Потенциально скрывают production-баги. Очаги: vault_api.py (5), handlers.py (3), health_scorer.py (4), digest/generator.py (4), ingest.py (4), llm_client.py (3). Заменить на `except Exception as e: logger.warning(...)` или `logger.debug(...)` где подавление осознанное |
+| BL-177 | Ужесточить mypy до реальной проверки | инфраструктура | Текущая конфигурация: `check_untyped_defs=false`, `ignore_missing_imports=true`, `warn_return_any=false`, CI `continue-on-error: true`. Mypy фактически ничего не ловит. Шаги: (1) `check_untyped_defs = true`, (2) убрать `continue-on-error` из CI, (3) пометить `# type: ignore` только осознанные места. Ожидаются ошибки — фиксировать итеративно |
+
+### 11.2 P1 — среднесрочные (1-2 недели)
+
+| # | Название | Компонент | Описание |
+|---|:---|:---|:---|
+| BL-178 | Тестовое покрытие idea-pipeline | idea-pipeline | Покрытие 17% (2 тестовых файла на 12 source). Нет тестов для: api.py (5 endpoints), orchestrator.py (pipeline flow), state.py (PipelineStore), auth.py (ApiKeyMiddleware), config.py, models.py, agents/* (3 агента). Минимум: api + orchestrator + state + auth. Довести до 60%+ |
+| BL-179 | Устранить прямой импорт idea-pipeline → knowledge-engine | idea-pipeline, shared | `orchestrator.py` содержит lazy-импорты `from knowledge_engine.matcher import find_links`, `from knowledge_engine.vault_index import build_index`, `from knowledge_engine.notifier import send_telegram`. Нарушает изоляцию сервисов. Варианты: (1) вынести `matcher`, `vault_index` в shared/, (2) вызывать через HTTP API knowledge-engine. Предпочтительно вариант 2 — matcher и vault_index специфичны для KE |
+| BL-180 | Глобальный exception handler для FastAPI | pm-bot, knowledge-engine, idea-pipeline | Каждый endpoint — индивидуальный try/except. KE отдаёт `str(exc)` в 500 ответах — утечка внутренних деталей (stack traces, пути файлов). Добавить `@app.exception_handler(Exception)` во все 3 сервиса: логировать exc, возвращать sanitized `{"error": "Internal server error", "request_id": ...}`. Связано с BL-176 (обработка ошибок) |
+| BL-181 | Версионирование API в idea-pipeline | idea-pipeline | Endpoints используют `/pipeline/...` и `/health` без версии, тогда как pm-bot и KE — `/api/v1/`. Привести к единому стандарту `/api/v1/pipeline/...`. Обновить pipeline_client.py в pm-bot |
+
+### 11.3 P2 — стратегические (при расширении)
+
+| # | Название | Компонент | Описание |
+|---|:---|:---|:---|
+| BL-182 | Централизация env через Pydantic BaseSettings | shared, pm-bot, knowledge-engine, idea-pipeline | `os.getenv()` вызывается напрямую в 15+ файлах без централизованной валидации. Сервис узнает об отсутствующем ключе только при первом обращении к функции. Создать `shared/config.py` на базе Pydantic BaseSettings: fail-fast валидация при старте, типизация, .env поддержка, defaults. Дублирование `.env` (корень + pm-bot/) — консолидировать |
+| BL-183 | API аутентификация (при выходе за локальную сеть) | pm-bot, knowledge-engine | Vault API (59 endpoints) и KE API (29 endpoints) без аутентификации. CORS `allow_origins=["*"]`. Текущая митигация — сетевая (Docker + 192.168.0.6). При расширении доступа (VPN, cloud, multi-user) необходимо: API key middleware или JWT, ограничение CORS до конкретных origins. **Не реализовывать до изменения scope доступа** — для однопользовательской локальной системы текущий trade-off осознанный |
+| BL-184 | async HTTP-клиент для межсервисного взаимодействия | pm-bot | ke_client.py и pipeline_client.py используют sync `requests` — блокируют event loop FastAPI при каждом проксированном запросе. Перейти на `httpx.AsyncClient` с connection pooling. Триггер: заметные задержки API при параллельных запросах к KE |
+| BL-185 | Rate limiting на HTTP endpoints | pm-bot, knowledge-engine | Только Telegram имеет rate limiter (token bucket). HTTP endpoints без ограничений — один клиент может перегрузить API. Добавить `slowapi` или custom middleware с лимитами per-IP/per-endpoint. Триггер: при расширении доступа за пределы localhost |
+| BL-186 | Pre-commit расширение | инфраструктура | Текущий pre-commit: только `ruff --fix`. Добавить: `ruff format` (форматирование), `check-yaml`, `check-json`, `trailing-whitespace`, `end-of-file-fixer`. Опционально: `detect-secrets`, `no-commit-to-branch` (main). Не добавлять mypy в pre-commit — слишком медленный для hook, оставить в CI |
+| BL-187 | CD pipeline (автоматический деплой) | инфраструктура | CI есть (lint + typecheck + test), CD отсутствует. Деплой ручной. При увеличении частоты деплоев: добавить workflow для Docker build/push + deploy на целевой сервер (SSH или Docker registry). Триггер: регулярные деплои чаще 1 раза в неделю |
+
+---
+
+## 12. Сводка
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 98 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173 |
+| ✅ Реализовано | 99 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188 |
 | ✅ Баги исправлены | 26 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165 |
-| Идея | 36 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171 |
+| Идея | 50 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-187 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **161** | |
+| **Итого** | **176** | |
