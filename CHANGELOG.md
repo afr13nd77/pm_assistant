@@ -5,6 +5,32 @@
 
 ---
 
+## 03.08.2026 — feat: Agent Observability — мониторинг и аналитика агентной цепочки (BL-190)
+
+- feat(knowledge-engine): Langfuse e2e trace для Signal Moderator
+  - `_safe_span()` / `_safe_end_span()` — graceful degradation при недоступности Langfuse
+  - Trace `signal-moderator/{run_id}` с session_id linkage
+  - Spans: item, score, analyze, gate, dispatch — полная иерархия flow
+- feat(knowledge-engine): Persistence решений агентов в RunState
+  - `iterations_history` — attempt, quality_score, critique, escalated, operation
+  - `gate_results` — quality, dedup gates с passed/score/details
+  - `reaction` — skip/idea/report per item
+  - `completed_at` — точное время завершения прогона
+- feat(knowledge-engine): 3 HTTP-endpoints диагностики (AC-13..AC-17)
+  - `GET /api/v1/signals/runs` — список прогонов с per-item breakdown
+  - `GET /api/v1/signals/runs/{run_id}` — полный RunState прогона
+  - `GET /api/v1/signals/stats` — агрегированная статистика (avg quality, escalation rate, top entities)
+- feat(knowledge-engine): CLI `signal-status` (AC-18..AC-21)
+  - `--last N` — таблица последних N прогонов
+  - `--run ID` — per-item detail с iterations и gate results
+  - `--format json|table` — выбор формата вывода
+- feat(knowledge-engine): LoopIteration расширен полями `escalated`, `critique_text`
+- feat(knowledge-engine): RunState backward/forward compatibility через field filtering
+- test: 47 новых тестов (6 agent_loop + 15 orchestrator + 14 API + 8 CLI + 4 hotfix)
+- fix(api): status override в signals_run_detail — RunState.status → run_status
+
+---
+
 ## 02.08.2026 — feat: News Moderator — агентная цепочка анализа новостей (BL-189)
 
 - feat(knowledge-engine): Агентная цепочка автоматического анализа новостей

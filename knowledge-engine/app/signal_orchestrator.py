@@ -29,6 +29,32 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Langfuse helpers (BL-190)
+# ---------------------------------------------------------------------------
+
+
+def _safe_span(trace, name: str, **kwargs):
+    """Create Langfuse span, return None if unavailable."""
+    if trace is None:
+        return None
+    try:
+        return trace.span(name=name, **kwargs)
+    except Exception as e:
+        logger.warning(f"Langfuse span creation failed: {e}")
+        return None
+
+
+def _safe_end_span(span, **kwargs):
+    """End Langfuse span, silently ignore errors."""
+    if span is None:
+        return
+    try:
+        span.end(**kwargs)
+    except Exception as e:
+        logger.warning(f"Langfuse span end failed: {e}")
+
+
+# ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 
@@ -97,6 +123,9 @@ class ItemState:
     quality_warnings: list[str] = field(default_factory=list)
     started_at: str | None = None
     completed_at: str | None = None
+    iterations_history: list[dict] = field(default_factory=list)
+    gate_results: list[dict] = field(default_factory=list)
+    reaction: str | None = None
 
 
 @dataclass
@@ -120,6 +149,7 @@ class RunState:
     digest_path: str
     started_at: str
     status: str = "running"  # 'running' | 'completed' | 'failed'
+    completed_at: str | None = None
     items: dict[str, ItemState] = field(default_factory=dict)
     summary: RunSummary | None = None
 
@@ -140,7 +170,11 @@ class RunState:
         data = json.loads(run_file.read_text(encoding="utf-8"))
         items: dict[str, ItemState] = {}
         for key, item_data in data.get("items", {}).items():
-            items[key] = ItemState(**item_data)
+            known_fields = {
+                k: v for k, v in item_data.items()
+                if k in ItemState.__dataclass_fields__
+            }
+            items[key] = ItemState(**known_fields)
         summary = None
         if data.get("summary"):
             summary = RunSummary(**data["summary"])
@@ -149,6 +183,7 @@ class RunState:
             digest_path=data["digest_path"],
             started_at=data["started_at"],
             status=data.get("status", "running"),
+            completed_at=data.get("completed_at"),
             items=items,
             summary=summary,
         )
@@ -183,6 +218,7 @@ class SignalOrchestrator:
         self.gate = QualityGate(vault_path, config)
         self.run_state: RunState | None = None
         self._business_context: str | None = None
+        self._trace = None  # Langfuse trace (BL-190)
         logger.info(f"SignalOrchestrator initialized, vault={vault_path}")
 
     # ------------------------------------------------------------------
@@ -247,6 +283,36 @@ class SignalOrchestrator:
             self.run_state = RunState.new(str(path))
             logger.info(f"process_digest: created new run {self.run_state.run_id}")
 
+        # BL-190: Langfuse trace
+        from shared.langfuse_client import get_langfuse
+
+        lf = get_langfuse()
+        trace = None
+        if lf:
+            try:
+                trace = lf.trace(
+                    name=f"signal-moderator/{self.run_state.run_id}",
+                    session_id=self.run_state.run_id,
+                    metadata={
+                        "run_id": self.run_state.run_id,
+                        "digest_path": str(path),
+                        "total_items": len(items),
+                    },
+                    tags=["signal-moderator"],
+                )
+                logger.info(
+                    f"Langfuse trace created: "
+                    f"signal-moderator/{self.run_state.run_id}"
+                )
+            except Exception:
+                logger.warning(
+                    "Langfuse trace creation failed, "
+                    "continuing without tracing"
+                )
+        else:
+            logger.info("Langfuse unavailable, tracing disabled")
+        self._trace = trace
+
         # Register items (limited by max_items_per_run)
         capped_items = items[: self.config.max_items_per_run]
         for item in capped_items:
@@ -283,6 +349,7 @@ class SignalOrchestrator:
                 self._process_item(
                     item, item_key, notify, dry_run,
                     processed_items, skipped_items,
+                    trace=trace,
                 )
             except Exception as e:
                 logger.error(
@@ -326,12 +393,18 @@ class SignalOrchestrator:
         dry_run: bool,
         processed_items: list[dict],
         skipped_items: list[dict],
+        trace=None,
     ) -> None:
         """Обработка одного item через полный pipeline."""
         item_state = self.run_state.items[item_key]
         item_state.started_at = datetime.now().isoformat()
         title = item.get("title", "")[:50]
         logger.info(f"Processing item: {title}")
+
+        # BL-190: Item-level span
+        item_span = _safe_span(
+            trace, f"item:{item_key}", metadata={"title": title}
+        )
 
         # --- Step 1: Scoring (AC-01..AC-03) ---
         item_state.status = "scoring"
@@ -340,14 +413,24 @@ class SignalOrchestrator:
         business_context = self._load_business_context()
         memory_context = ""
 
+        score_span = _safe_span(item_span, f"score:{item_key}")
         scoring = score_signal(
             item, business_context, memory_context, self.config
         )
+        _safe_end_span(score_span, metadata={
+            "relevance": scoring.relevance,
+            "decision": (
+                "continue"
+                if scoring.relevance >= self.config.relevance_threshold
+                else "skip"
+            ),
+        })
         logger.info(f"Item '{title}': relevance={scoring.relevance}")
 
         # --- Step 2: Threshold check ---
         if scoring.relevance < self.config.relevance_threshold:
             item_state.status = "skipped"
+            item_state.reaction = "skip"  # BL-190
             item_state.completed_at = datetime.now().isoformat()
             skipped_items.append({
                 "title": item.get("title", ""),
@@ -368,6 +451,10 @@ class SignalOrchestrator:
                 f"Item '{title}': skipped (relevance "
                 f"{scoring.relevance} < {self.config.relevance_threshold})"
             )
+            _safe_end_span(item_span, metadata={
+                "status": item_state.status,
+                "reaction": item_state.reaction,
+            })
             return
 
         # --- Step 3: Analysis with AgentLoop (AC-17..AC-19) ---
@@ -404,11 +491,56 @@ class SignalOrchestrator:
             )
             return result.__dict__
 
+        analyze_span = _safe_span(item_span, f"analyze:{item_key}")
         analysis_dict, loop_history = loop.run(
             step_fn=step_fn,
             quality_fn=self.gate.check_analysis_quality,
             escalation_group=self.config.escalation_group,
         )
+        _safe_end_span(analyze_span, metadata={
+            "iterations": len(loop_history),
+            "quality_score": (
+                loop_history[-1].quality.score
+                if loop_history
+                and hasattr(loop_history[-1].quality, "score")
+                else 0
+            ),
+            "escalated": any(it.escalated for it in loop_history),
+        })
+
+        # BL-190: Record iterations_history
+        for iteration in loop_history:
+            item_state.iterations_history.append({
+                "attempt": iteration.attempt,
+                "quality_score": (
+                    iteration.quality.score
+                    if hasattr(iteration.quality, "score")
+                    else 0
+                ),
+                "critique": iteration.critique_text,
+                "escalated": iteration.escalated,
+                "operation": (
+                    "signal_analyze_escalation"
+                    if iteration.escalated
+                    else "signal_analyze"
+                ),
+            })
+
+        # BL-190: Record quality gate result from last iteration
+        if loop_history:
+            last_q = loop_history[-1].quality
+            item_state.gate_results.append({
+                "gate": "quality",
+                "passed": (
+                    last_q.passed if hasattr(last_q, "passed") else False
+                ),
+                "score": (
+                    last_q.score if hasattr(last_q, "score") else 0
+                ),
+                "failed_criteria": (
+                    last_q.issues if hasattr(last_q, "issues") else []
+                ),
+            })
 
         # Reconstruct AnalysisResult from dict (filter private keys for ctor)
         ctor_keys = {
@@ -426,6 +558,9 @@ class SignalOrchestrator:
         analysis._attempts = len(loop_history)
         item_state.iterations = len(loop_history)
 
+        # BL-190: Record reaction
+        item_state.reaction = analysis.reaction
+
         # --- Step 4: Domain auto-correction (AC-23) ---
         if analysis.idea_draft:
             is_correct, suggested = self.gate.check_domain(analysis.idea_draft)
@@ -440,10 +575,27 @@ class SignalOrchestrator:
         item_state.status = "dispatching"
         item_state.current_step = f"dispatch_{analysis.reaction}"
 
+        # BL-190: Gate span wraps dispatch decisions
+        gate_span = _safe_span(item_span, f"gate:{item_key}")
+
         if analysis.reaction == "idea":
             self._handle_idea(item, analysis, item_state, notify, dry_run)
         elif analysis.reaction == "report":
             self._handle_report(item, analysis, item_state, notify, dry_run)
+
+        _safe_end_span(gate_span, metadata={
+            "gates": [g["gate"] for g in item_state.gate_results],
+            "all_passed": all(
+                g["passed"] for g in item_state.gate_results
+            ),
+        })
+
+        # BL-190: Dispatch span
+        dispatch_span = _safe_span(item_span, f"dispatch:{item_key}", metadata={
+            "reaction": item_state.reaction,
+            "result_ref": item_state.result_ref,
+        })
+        _safe_end_span(dispatch_span)
 
         # --- Step 6: Record in memory ---
         quality_scores = [
@@ -479,6 +631,12 @@ class SignalOrchestrator:
             "quality_score": best_quality,
         })
 
+        # BL-190: End item span
+        _safe_end_span(item_span, metadata={
+            "status": item_state.status,
+            "reaction": item_state.reaction,
+        })
+
         logger.info(
             f"Item '{title}': {analysis.reaction}, "
             f"ref={item_state.result_ref}"
@@ -503,6 +661,15 @@ class SignalOrchestrator:
 
         # 1. Dedup check (AC-20)
         dedup_result = self.gate.check_dedup(analysis.idea_draft)
+
+        # BL-190: Record dedup gate result
+        item_state.gate_results.append({
+            "gate": "dedup",
+            "passed": not dedup_result.is_duplicate,
+            "similarity": dedup_result.similarity,
+            "compared_with": dedup_result.similar_to,
+        })
+
         if dedup_result.is_duplicate:
             logger.info(
                 f"Idea duplicate detected: similar_to={dedup_result.similar_to}, "
@@ -721,6 +888,24 @@ class SignalOrchestrator:
         )
         self.run_state.summary = summary
         self.run_state.status = "completed"
+        self.run_state.completed_at = datetime.now().isoformat()  # BL-190
+
+        # BL-190: Finalize Langfuse trace
+        if hasattr(self, "_trace") and self._trace:
+            try:
+                summary_data = (
+                    asdict(self.run_state.summary)
+                    if self.run_state.summary
+                    else {}
+                )
+                self._trace.update(
+                    output={
+                        "status": self.run_state.status,
+                        **summary_data,
+                    },
+                )
+            except Exception:
+                logger.warning("Langfuse trace finalize failed")
 
         logger.info(
             f"Run {self.run_state.run_id} finalized: "

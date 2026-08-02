@@ -59,6 +59,7 @@ pm_assistant/
 │   ├── openrouter-model-selection/  # BL-155+BL-156 DONE: requirements.md, design.md, tasks.md (13 задач)
 │   ├── openrouter-model-filter/    # BL-158 DONE: requirements.md, design.md, tasks.md (4 задачи)
 │   ├── BL-166_langfuse-observability/  # BL-166: спека Langfuse LLM Observability (requirements, design, tasks)
+│   ├── BL-190_agent-observability/    # BL-190: Agent Observability — Langfuse e2e trace, HTTP-диагностика, CLI signal-status (requirements, design, tasks)
 │   └── architecture/adr/           # 5 ADR (решения по архитектуре)
 │
 ├── pm-bot/                         # Telegram-бот (capture)
@@ -127,8 +128,8 @@ pm_assistant/
 │   ├── app/                        # исходный код (28 модулей + 4 подпакета + prompts/)
 │       ├── __init__.py
 │       ├── __main__.py             # точка входа: python -m app
-│       ├── cli.py                  # CLI: jira-sync, jira-import, jira-create, jira-projects, jira-epics, jira-issue-types, enrich, synthesize, watch, index, lint, status, digest, digest-bulk, digest-index, digest-audit, digest-status, cowork-context
-│       ├── api.py                  # FastAPI HTTP API (29 эндпоинтов, порт 8001) — +digest/generate, digest/bulk, digest/status (BL-147), +cowork-context (BL-151)
+│       ├── cli.py                  # CLI: jira-sync, jira-import, jira-create, jira-projects, jira-epics, jira-issue-types, enrich, synthesize, watch, index, lint, status, digest, digest-bulk, digest-index, digest-audit, digest-status, cowork-context, signal-status
+│       ├── api.py                  # FastAPI HTTP API (32 эндпоинта, порт 8001) — +digest/generate, digest/bulk, digest/status (BL-147), +cowork-context (BL-151), +signals/runs, signals/runs/{id}, signals/stats (BL-190)
 │       ├── enricher.py             # обогащение идеи связями из vault
 │       ├── synthesizer.py          # синтез: кластеризация + сводка
 │       ├── vault_index.py          # сканирование vault, in-memory индекс
@@ -171,7 +172,7 @@ pm_assistant/
 │       │   └── validator.py        # validate: token budgets, required fields, key-value format
 │       ├── cowork_context.py       # генерация _cowork-session.md для Cowork (BL-151): 5 коллекторов, детерминированная сборка
 │       └── prompts/                # 22 промпта (enrich, synthesize, meeting_protocol, digest + 12 type-specific, signal_score, signal_analyze, quality_check, dedup_check, completeness_check, report_to_ideas)
-│   └── tests/                      # unit-тесты для knowledge-engine (44 файла)
+│   └── tests/                      # unit-тесты для knowledge-engine (45 файлов)
 │       ├── test_agent_loop.py      # тесты AgentLoop
 │       ├── test_signal_memory.py   # тесты SignalMemory
 │       ├── test_quality_gate.py    # тесты QualityGate
@@ -179,6 +180,8 @@ pm_assistant/
 │       ├── test_signal_orchestrator.py # тесты SignalOrchestrator
 │       ├── test_idea_extractor.py  # тесты idea_extractor
 │       ├── test_cli_trend_detect.py    # тесты CLI trend-detect
+│       ├── test_api_signals.py     # тесты API endpoints сигналов (14 тестов, BL-190)
+│       ├── test_cli_signal_status.py   # тесты CLI signal-status (8 тестов, BL-190)
 │       └── ...                     # + 37 существующих тестов (enricher, synthesizer, vault_index, jira, digest, health, decay, meeting_fetcher/ и др.)
 │
 └── idea-pipeline/                  # сервис проработки идей (orchestrator)
@@ -211,7 +214,7 @@ pm_assistant/
 | Компонент | Версия | Последнее изменение | Описание |
 |---|---|---|---|
 | **pm-bot** | 1.19.0 | 2026-07-23 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py, 22 функции). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. context_assembler: waterfall сборка контекста из llm_wiki/ (kill switch DIGEST_CONTEXT_SOURCE), enrich_creative_recall (BL-147 Phase 2). Digest context injection в process_idea и weekly report. Мультимодельные OpenRouter fallback-цепочки с inline model selector + GET /openrouter-models (BL-155, BL-156). Playground providers: live-список моделей OpenRouter через list_models() (BL-158). Report search/filter: _extract_report_type + type в ответе /api/v1/reports, UI поиск + фильтр-чипы (BL-161). Epic body в drawer roadmap: SHOW_BODY/SHOW_TICKETS тогглер, body в ответе /api/v1/epics (BL-162). CalDAV Settings UI (BL-172). |
-| **knowledge-engine** | 1.16.0 | 2026-08-02 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (29 эндпоинтов). DigestHandler в watcher.py (DIGEST_ENABLED env, debounce 5s, body_hash check). 3 API endpoints: digest/generate, digest/bulk, digest/status (BL-147 Phase 2). cowork_context: _cowork-session.md для Cowork (BL-151). Jira sync fallback: поиск vault-файлов по jira_key в frontmatter для кастомных имён (BUG-023). Fix _CLOSED_STATUSES: задачи "Отменена" корректно распознаются как закрытые (BUG-025). News Moderator (BL-189): агентная цепочка анализа новостей — signal_orchestrator, signal_moderator, signal_memory (SQLite), quality_gate, agent_loop, idea_extractor. 6 промптов, 3 LLM operation group, CLI moderate-news/trend-detect, cron Пн-Пт 08:00 / Пн 06:00. |
+| **knowledge-engine** | 1.17.0 | 2026-08-03 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (32 эндпоинта). DigestHandler в watcher.py (DIGEST_ENABLED env, debounce 5s, body_hash check). 3 API endpoints: digest/generate, digest/bulk, digest/status (BL-147 Phase 2). cowork_context: _cowork-session.md для Cowork (BL-151). Jira sync fallback: поиск vault-файлов по jira_key в frontmatter для кастомных имён (BUG-023). Fix _CLOSED_STATUSES: задачи "Отменена" корректно распознаются как закрытые (BUG-025). News Moderator (BL-189): агентная цепочка анализа новостей — signal_orchestrator, signal_moderator, signal_memory (SQLite), quality_gate, agent_loop, idea_extractor. 6 промптов, 3 LLM operation group, CLI moderate-news/trend-detect, cron Пн-Пт 08:00 / Пн 06:00. Agent Observability (BL-190): Langfuse e2e trace для Signal Moderator, 3 HTTP-endpoints диагностики (signals/runs, signals/runs/{id}, signals/stats), CLI signal-status, persistence решений агентов (iterations_history, gate_results). |
 | **idea-pipeline** | 1.2.0 | 2026-07-22 | Orchestrator: Analyst → PM → Decomposer. LLM-вызовы через shared/llm_client с fallback-цепочками (pipeline_analyst, pipeline_pm, pipeline_decomposer). PipelineClaudeClient удалён. Импорты vault_paths и file_writer из shared/. |
 | **web-ui** | 1.27.1 | 2026-07-27 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141), LLM Playground (BL-142). Decision Journal (BL-24): decisions.html + meeting.html + overview виджет RECENT DECISIONS. Process Catalog (processes.html, process.html). Searchable dropdown для моделей OpenRouter в settings.html и playground.html, общий CSS в style.css (BL-158). Report search/filter: поиск по имени/заголовку + фильтр-чипы по типу (BL-161). Epic body toggle в drawer roadmap (BL-162). CalDAV Settings UI секция CALENDAR (BL-172). Auto-refresh встреч на TODAY (BL-188). BUG-021/022: Jira Import direct key fix + ticket list filtering. |
 | **инфраструктура** | 1.1.0 | 2026-06-30 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120). KE-контейнер: процесс queue-watch (watchdog на pending/); ke-cron: process-queue каждые 10 мин — страховка/reclaim (BL-145). ke-data volume для signal_memory.db. Cron: ke-moderate (Пн-Пт 08:00), ke-trends (Пн 06:00). Build: pull: false для всех сервисов (BL-189). |
@@ -327,6 +330,7 @@ pm_assistant/
 | CLI digest-index | `python -m app digest-index` | knowledge-engine/ |
 | CLI digest-audit | `python -m app digest-audit` | knowledge-engine/ |
 | CLI digest-status | `python -m app digest-status` | knowledge-engine/ |
+| CLI signal-status | `python -m app signal-status [--last N] [--run ID] [--format json\|table]` | knowledge-engine/ |
 | Запуск pipeline сервера | `python -m idea_pipeline serve` | idea-pipeline/ |
 | CLI запуск pipeline | `python -m idea_pipeline run --text "..."` | idea-pipeline/ |
 | CLI статус pipeline | `python -m idea_pipeline status <id>` | idea-pipeline/ |

@@ -233,6 +233,18 @@ def main():
     trend_parser.add_argument("--notify", action="store_true",
                                help="Send Telegram alerts for detected trends")
 
+    signal_status_parser = subparsers.add_parser(
+        "signal-status",
+        help="Show signal moderator run history and per-item details"
+    )
+    signal_status_parser.add_argument("--vault", default=None, help="Vault root path")
+    signal_status_parser.add_argument("--last", type=int, default=5,
+                                      help="Show last N runs (default: 5)")
+    signal_status_parser.add_argument("--run", type=str, default=None,
+                                      help="Show details for specific run_id")
+    signal_status_parser.add_argument("--format", choices=["json", "table"], default="table",
+                                      help="Output format (default: table)")
+
     serve_parser = subparsers.add_parser("serve", help="Start HTTP API server")
     serve_parser.add_argument("--vault", default=None, help="Vault root path")
     serve_parser.add_argument("--host", default="0.0.0.0")
@@ -1103,6 +1115,51 @@ def main():
         })
         sys.exit(0)
 
+    elif args.command == "signal-status":
+        import dataclasses
+        import pathlib
+
+        from shared import vault_paths as _vp
+        _vp.VAULT_PATH = pathlib.Path(vault_path)
+        runs_dir = _vp.VAULT_PATH / "wiki" / "signals" / "runs"
+
+        if args.run:
+            # Detail view
+            run_file = runs_dir / f"{args.run}.json"
+            if not run_file.exists():
+                print(f"Run not found: {args.run}", file=sys.stderr)
+                sys.exit(1)
+            from .signal_orchestrator import RunState
+            state = RunState.load(run_file)
+            logger.info(f"signal-status: loaded run {args.run}, status={state.status}")
+            if args.format == "json":
+                _output_json(dataclasses.asdict(state))
+            else:
+                _print_run_detail(state)
+        else:
+            # List view
+            if not runs_dir.exists():
+                logger.info("signal-status: runs_dir does not exist")
+                print("No runs found")
+                sys.exit(0)
+            run_files = sorted(runs_dir.glob("*.json"), reverse=True)[:args.last]
+            if not run_files:
+                logger.info("signal-status: no run files found")
+                print("No runs found")
+                sys.exit(0)
+            from .signal_orchestrator import RunState
+            runs = []
+            for f in run_files:
+                try:
+                    runs.append(RunState.load(f))
+                except Exception as e:
+                    logger.warning(f"signal-status: skip corrupted {f}: {e}")
+            if args.format == "json":
+                _output_json([dataclasses.asdict(r) for r in runs])
+            else:
+                _print_runs_table(runs)
+        sys.exit(0)
+
 
 def _collect_queue_units(vault_path: str) -> list:
     """Collect queue units (with meta) from all 4 folders (mirrors api.py contract)."""
@@ -1177,6 +1234,100 @@ def _print_queue_status_table(counts: dict, units: list) -> None:
             f"{str(u.get('source') or ''):<8} {att_str:>3}  {subject}"
         )
     print(f"\nTotal: {len(units)} unit(s)")
+
+
+def _print_runs_table(runs):
+    """Print summary table for multiple runs (AC-18)."""
+    header = f"{'RUN':<20} {'STATUS':<12} {'TOTAL':>5} {'REL':>4} {'IDEAS':>5} {'REPORTS':>7} {'ERRORS':>6} {'DURATION':>10}"
+    print(header)
+    print("-" * len(header))
+    for run in runs:
+        duration = _format_duration(run.started_at, run.completed_at)
+        s = run.summary
+        if s:
+            print(
+                f"{run.run_id:<20} {run.status:<12} "
+                f"{s.total:>5} {s.relevant:>4} {s.ideas:>5} "
+                f"{s.reports:>7} {s.errors:>6} {duration:>10}"
+            )
+        else:
+            print(f"{run.run_id:<20} {run.status:<12} {'?':>5} {'?':>4} {'?':>5} {'?':>7} {'?':>6} {duration:>10}")
+
+
+def _print_run_detail(state):
+    """Print detailed view of a single run (AC-19)."""
+    duration = _format_duration(state.started_at, state.completed_at)
+    print(f"Run: {state.run_id}")
+    print(f"Status: {state.status}")
+    print(f"Duration: {duration}")
+    print(f"Digest: {state.digest_path}")
+    print()
+
+    if not state.items:
+        print("No items.")
+        return
+
+    # Per-item table
+    header = f"  {'KEY':<10} {'TITLE':<40} {'STATUS':<12} {'REACTION':<10} {'ITER':>4} {'QUALITY':>7}"
+    print(header)
+    print("  " + "-" * (len(header) - 2))
+    for key, item in state.items.items():
+        # Get best quality score from gate_results
+        quality_score = "-"
+        for g in item.gate_results:
+            if g.get("gate") == "quality":
+                quality_score = str(g.get("score", "-"))
+        title_short = item.title[:38] + ".." if len(item.title) > 40 else item.title
+        reaction = item.reaction or "-"
+        print(
+            f"  {key:<10} {title_short:<40} {item.status:<12} "
+            f"{reaction:<10} {item.iterations:>4} {quality_score:>7}"
+        )
+
+    # Iteration details for items with iterations > 1
+    multi_iter_items = [(k, i) for k, i in state.items.items() if i.iterations > 1]
+    if multi_iter_items:
+        print()
+        print("Iteration details:")
+        for key, item in multi_iter_items:
+            print(f"  {key} ({item.title[:30]}):")
+            for hist in item.iterations_history:
+                esc = " [ESCALATED]" if hist.get("escalated") else ""
+                critique = f' — "{hist["critique"][:60]}"' if hist.get("critique") else ""
+                print(f"    Attempt {hist['attempt']}: score={hist['quality_score']}{esc}{critique}")
+
+    # Gate results
+    items_with_gates = [(k, i) for k, i in state.items.items() if i.gate_results]
+    if items_with_gates:
+        print()
+        print("Gate results:")
+        for key, item in items_with_gates:
+            for g in item.gate_results:
+                passed = "PASS" if g.get("passed") else "FAIL"
+                extra = ""
+                if g["gate"] == "quality":
+                    extra = f", score={g.get('score', '?')}"
+                elif g["gate"] == "dedup":
+                    extra = f", similarity={g.get('similarity', '?')}"
+                print(f"  {key}: {g['gate']} [{passed}]{extra}")
+
+
+def _format_duration(started_at, completed_at):
+    """Format duration from ISO timestamps."""
+    if not started_at or not completed_at:
+        return "-"
+    try:
+        from datetime import datetime
+        started = datetime.fromisoformat(started_at)
+        completed = datetime.fromisoformat(completed_at)
+        seconds = int((completed - started).total_seconds())
+        if seconds < 60:
+            return f"{seconds}s"
+        minutes = seconds // 60
+        secs = seconds % 60
+        return f"{minutes}m {secs}s"
+    except Exception:
+        return "-"
 
 
 def _output_json(data):

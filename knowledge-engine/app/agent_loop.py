@@ -18,6 +18,8 @@ class LoopIteration:
     result: dict
     quality: Any  # QualityResult at runtime
     context_additions: str = ""
+    escalated: bool = False
+    critique_text: str | None = None
 
 
 class AgentLoop:
@@ -73,6 +75,9 @@ class AgentLoop:
                     attempt=attempt,
                     result={},
                     quality=_make_failed_quality(str(e)),
+                    escalated="operation_group" in kwargs
+                        and kwargs["operation_group"] == escalation_group,
+                    critique_text=kwargs.get("critique"),
                 )
                 self.history.append(iteration)
                 kwargs["critique"] = self._build_critique(iteration)
@@ -88,6 +93,9 @@ class AgentLoop:
                 attempt=attempt,
                 result=result,
                 quality=quality,
+                escalated="operation_group" in kwargs
+                    and kwargs["operation_group"] == escalation_group,
+                critique_text=kwargs.get("critique"),
             )
             self.history.append(iteration)
 

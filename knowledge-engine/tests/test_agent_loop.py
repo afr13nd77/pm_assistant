@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import pytest
 
+from unittest.mock import MagicMock
+
 from app.agent_loop import AgentLoop, LoopIteration, _make_failed_quality
 
 
@@ -266,3 +268,74 @@ class TestLoopIteration:
             quality=None,
         )
         assert iteration.context_additions == ""
+
+
+class TestLoopIterationFields:
+    """BL-190: escalated and critique_text fields."""
+
+    def test_loop_iteration_has_escalated_field(self):
+        it = LoopIteration(attempt=1, result={}, quality=None)
+        assert it.escalated is False
+
+    def test_loop_iteration_has_critique_text_field(self):
+        it = LoopIteration(attempt=1, result={}, quality=None)
+        assert it.critique_text is None
+
+    def test_run_records_escalated_false_for_normal_iteration(self):
+        # quality passes on first try -> no escalation
+        quality = MagicMock(passed=True, score=8)
+        step_fn = MagicMock(return_value={"key": "val"})
+        loop = AgentLoop(max_iterations=3)
+        result, history = loop.run(step_fn, lambda r: quality)
+        assert len(history) == 1
+        assert history[0].escalated is False
+
+    def test_run_records_critique_text_none_on_first_iteration(self):
+        quality = MagicMock(passed=True, score=8)
+        step_fn = MagicMock(return_value={"key": "val"})
+        loop = AgentLoop(max_iterations=3)
+        result, history = loop.run(step_fn, lambda r: quality)
+        assert history[0].critique_text is None
+
+    def test_run_records_escalated_true_on_last_iteration(self):
+        # quality fails twice, passes on 3rd (with escalation)
+        qualities = [
+            MagicMock(passed=False, score=4, issues=["issue1"], suggestions=["fix1"]),
+            MagicMock(passed=False, score=5, issues=["issue2"], suggestions=["fix2"]),
+            MagicMock(passed=True, score=7, issues=[], suggestions=[]),
+        ]
+        call_count = [0]
+
+        def quality_fn(r):
+            idx = min(call_count[0], len(qualities) - 1)
+            call_count[0] += 1
+            return qualities[idx]
+
+        step_fn = MagicMock(return_value={"key": "val"})
+        loop = AgentLoop(max_iterations=3)
+        result, history = loop.run(step_fn, quality_fn, escalation_group="signal_escalation")
+        assert len(history) == 3
+        assert history[0].escalated is False
+        assert history[1].escalated is False  # escalation SET on iter 2 (penultimate), but kwargs applied to iter 3
+        assert history[2].escalated is True  # iter 3 runs WITH escalation_group in kwargs
+
+    def test_run_records_critique_text_from_previous_iteration(self):
+        # quality fails first, passes second
+        qualities = [
+            MagicMock(passed=False, score=4, issues=["missing data"], suggestions=["add numbers"]),
+            MagicMock(passed=True, score=7, issues=[], suggestions=[]),
+        ]
+        call_count = [0]
+
+        def quality_fn(r):
+            idx = min(call_count[0], len(qualities) - 1)
+            call_count[0] += 1
+            return qualities[idx]
+
+        step_fn = MagicMock(return_value={"key": "val"})
+        loop = AgentLoop(max_iterations=3)
+        result, history = loop.run(step_fn, quality_fn)
+        assert len(history) == 2
+        assert history[0].critique_text is None  # first iteration: no critique yet
+        assert history[1].critique_text is not None  # second iteration: critique injected
+        assert "missing data" in history[1].critique_text or "score=4" in str(history[1].critique_text)

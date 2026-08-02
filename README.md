@@ -206,7 +206,7 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 - APScheduler: enrichment reminders (daily), daily alert (пн-пт 18:00)
 - SQLite: дедупликация enrichment-напоминаний (cooldown 24ч)
 
-### knowledge-engine (v1.16.0)
+### knowledge-engine (v1.17.0)
 
 Сервис обогащения и синтеза знаний.
 
@@ -231,6 +231,7 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 - Domain manager: scaffold, index, activity log
 - Watchdog: auto-enrichment при появлении файлов в raw/inbound/
 - **News Moderator (BL-189)**: агентная цепочка анализа новостей — скоринг релевантности → содержательный анализ (AgentLoop + QualityGate) → dispatch идея/отчёт → извлечение идей → persistent SQLite memory → weekly trend detection
+- **Agent Observability (BL-190)**: мониторинг и аналитика агентной цепочки — Langfuse e2e trace, persistence решений агентов (iterations_history, gate_results), 3 HTTP-endpoints диагностики (signals/runs, signals/stats), CLI `signal-status`
 
 ### idea-pipeline (v1.1.2)
 

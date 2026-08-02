@@ -1072,3 +1072,194 @@ def cowork_context():
     except Exception as exc:
         logger.error(f"API cowork-context error: {exc}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Signals diagnostics (BL-190)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/v1/signals/runs")
+def signals_runs(limit: int = Query(default=10, ge=1, le=100)):
+    logger.info(f"API signals_runs: limit={limit}")
+    try:
+        from dataclasses import asdict
+        from datetime import datetime
+
+        from .signal_orchestrator import RunState
+
+        runs_dir = pathlib.Path(_vault_path_str()) / "wiki" / "signals" / "runs"
+        if not runs_dir.exists():
+            return {"status": "ok", "runs": []}
+
+        run_files = sorted(runs_dir.glob("*.json"), reverse=True)[:limit]
+        runs = []
+        for f in run_files:
+            try:
+                state = RunState.load(f)
+                # Calculate duration_ms
+                duration_ms = None
+                if state.completed_at and state.started_at:
+                    try:
+                        started = datetime.fromisoformat(state.started_at)
+                        completed = datetime.fromisoformat(state.completed_at)
+                        duration_ms = int(
+                            (completed - started).total_seconds() * 1000
+                        )
+                    except Exception:
+                        pass
+
+                # Items summary
+                items_summary = []
+                for key, item in state.items.items():
+                    items_summary.append({
+                        "key": key,
+                        "title": item.title,
+                        "status": item.status,
+                        "reaction": item.reaction,
+                        "iterations": item.iterations,
+                        "errors": len(item.errors),
+                    })
+
+                summary = asdict(state.summary) if state.summary else {}
+                runs.append({
+                    "run_id": state.run_id,
+                    "status": state.status,
+                    "started_at": state.started_at,
+                    "completed_at": state.completed_at,
+                    "duration_ms": duration_ms,
+                    "summary": summary,
+                    "items": items_summary,
+                })
+            except Exception as e:
+                logger.warning(f"signals_runs: skip corrupted {f.name}: {e}")
+
+        return {"status": "ok", "runs": runs}
+    except Exception as exc:
+        logger.error(f"API signals_runs error: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/v1/signals/runs/{run_id}")
+def signals_run_detail(run_id: str):
+    logger.info(f"API signals_run_detail: run_id={run_id}")
+    try:
+        from dataclasses import asdict
+
+        from .signal_orchestrator import RunState
+
+        run_file = (
+            pathlib.Path(_vault_path_str())
+            / "wiki" / "signals" / "runs" / f"{run_id}.json"
+        )
+        if not run_file.exists():
+            raise HTTPException(
+                status_code=404, detail=f"Run not found: {run_id}"
+            )
+
+        try:
+            state = RunState.load(run_file)
+        except Exception as e:
+            logger.error(
+                f"signals_run_detail: corrupted file {run_id}: {e}"
+            )
+            raise HTTPException(
+                status_code=500, detail=f"Corrupted run file: {run_id}"
+            )
+
+        data = asdict(state)
+        run_status = data.pop("status", "unknown")
+        return {"status": "ok", "run_status": run_status, **data}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(
+            f"API signals_run_detail error: {exc}", exc_info=True
+        )
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/v1/signals/stats")
+def signals_stats(days: int = Query(default=30, ge=1, le=365)):
+    logger.info(f"API signals_stats: days={days}")
+    try:
+        from datetime import datetime, timedelta
+
+        from .signal_memory import SignalMemory
+        from .signal_orchestrator import load_config_from_settings
+
+        config = load_config_from_settings()
+        db_path = config.memory_db_path
+
+        # Check if DB exists
+        if not pathlib.Path(db_path).exists():
+            return {
+                "status": "ok",
+                "runs_count": 0,
+                "avg_quality_score": None,
+                "escalation_rate": 0.0,
+                "total_signals": 0,
+                "top_entities": [],
+            }
+
+        memory = SignalMemory(db_path)
+        conn = memory._get_conn()
+        cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+
+        # total_signals + avg_quality
+        row = conn.execute(
+            "SELECT COUNT(*), AVG(quality_score) FROM signals WHERE date >= ?",
+            (cutoff,),
+        ).fetchone()
+        total_signals = row[0] if row else 0
+        avg_quality = (
+            round(row[1], 2) if row and row[1] is not None else None
+        )
+
+        # escalation_rate (attempts > 1 / total) — SUM(CASE) for SQLite
+        esc_row = conn.execute(
+            "SELECT SUM(CASE WHEN attempts > 1 THEN 1 ELSE 0 END), "
+            "COUNT(*) FROM signals WHERE date >= ?",
+            (cutoff,),
+        ).fetchone()
+        escalation_rate = (
+            round(esc_row[0] / esc_row[1], 4)
+            if esc_row and esc_row[1] > 0
+            else 0.0
+        )
+
+        # runs_count — scan run files
+        runs_dir = (
+            pathlib.Path(_vault_path_str()) / "wiki" / "signals" / "runs"
+        )
+        runs_count = 0
+        if runs_dir.exists():
+            cutoff_date = (
+                datetime.now() - timedelta(days=days)
+            ).strftime("%Y-%m-%d")
+            for f in runs_dir.glob("*.json"):
+                # run_id format: YYYY-MM-DD-HHMM
+                file_date = f.stem[:10]  # "2026-08-03"
+                if file_date >= cutoff_date:
+                    runs_count += 1
+
+        # top_entities
+        entity_rows = conn.execute(
+            "SELECT entity, SUM(mention_count) as total FROM entity_trends "
+            "GROUP BY entity ORDER BY total DESC LIMIT 10"
+        ).fetchall()
+        top_entities = [
+            {"entity": r[0], "mention_count": r[1]} for r in entity_rows
+        ]
+
+        return {
+            "status": "ok",
+            "runs_count": runs_count,
+            "avg_quality_score": avg_quality,
+            "escalation_rate": escalation_rate,
+            "total_signals": total_signals,
+            "top_entities": top_entities,
+        }
+    except Exception as exc:
+        logger.error(f"API signals_stats error: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
