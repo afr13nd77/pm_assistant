@@ -213,6 +213,26 @@ def main():
     )
     cowork_parser.add_argument("--vault", default=None, help="Vault root path")
 
+    moderate_parser = subparsers.add_parser(
+        "moderate-news",
+        help="Process news signals: score, analyze, create ideas/reports"
+    )
+    moderate_parser.add_argument("--vault", default=None, help="Vault root path")
+    moderate_parser.add_argument("--notify", action="store_true",
+                                 help="Send Telegram notifications")
+    moderate_parser.add_argument("--dry-run", action="store_true",
+                                 help="Score and analyze without writing to vault")
+    moderate_parser.add_argument("--threshold", type=int, default=None,
+                                 help="Override relevance threshold (default from settings)")
+
+    trend_parser = subparsers.add_parser(
+        "trend-detect",
+        help="Run weekly trend detection on signal memory"
+    )
+    trend_parser.add_argument("--vault", default=None, help="Vault root path")
+    trend_parser.add_argument("--notify", action="store_true",
+                               help="Send Telegram alerts for detected trends")
+
     serve_parser = subparsers.add_parser("serve", help="Start HTTP API server")
     serve_parser.add_argument("--vault", default=None, help="Vault root path")
     serve_parser.add_argument("--host", default="0.0.0.0")
@@ -970,6 +990,118 @@ def main():
         }
         _output_json(result)
         sys.exit(0 if result["status"] == "ok" else 1)
+
+    elif args.command == "moderate-news":
+        from shared import vault_paths as _vp
+        _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
+        from shared.system_log import LoggedProcess
+
+        from .signal_orchestrator import SignalOrchestrator, load_config_from_settings
+        logger.info(f"moderate-news: starting, vault={vault_path}, notify={args.notify}, dry_run={args.dry_run}, threshold={args.threshold}")
+
+        config = load_config_from_settings()
+        if args.threshold is not None:
+            config.relevance_threshold = args.threshold
+
+        with LoggedProcess("signal-moderator", source="ke-cron") as lp:
+            orchestrator = SignalOrchestrator(vault_path, config)
+            result = orchestrator.process_digest(
+                digest_path=None,
+                notify=args.notify,
+                dry_run=args.dry_run,
+            )
+            if result.summary:
+                lp.summary = (
+                    f"Items: {result.summary.total}, "
+                    f"relevant: {result.summary.relevant}, "
+                    f"ideas: {result.summary.ideas}, "
+                    f"reports: {result.summary.reports}"
+                )
+                lp.details = {
+                    "run_id": result.run_id,
+                    "total": result.summary.total,
+                    "relevant": result.summary.relevant,
+                    "ideas": result.summary.ideas,
+                    "reports": result.summary.reports,
+                    "retries": result.summary.retries,
+                    "errors": result.summary.errors,
+                }
+
+        output = {"status": "ok", "run_id": result.run_id}
+        if result.summary:
+            output.update({
+                "total": result.summary.total,
+                "relevant": result.summary.relevant,
+                "ideas": result.summary.ideas,
+                "reports": result.summary.reports,
+            })
+        _output_json(output)
+        sys.exit(0)
+
+    elif args.command == "trend-detect":
+        from shared import vault_paths as _vp
+        _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
+        from shared.system_log import LoggedProcess
+
+        from .signal_memory import SignalMemory
+        from .signal_orchestrator import load_config_from_settings
+        logger.info(f"trend-detect: starting, vault={vault_path}, notify={args.notify}")
+
+        config = load_config_from_settings()
+        memory = SignalMemory(config.memory_db_path)
+        deleted = 0
+
+        with LoggedProcess("trend-detect", source="ke-cron") as lp:
+            trends = memory.detect_trends(
+                lookback_weeks=config.trend_detection_lookback_weeks,
+                spike_threshold=config.trend_spike_threshold,
+            )
+            lp.summary = f"Detected {len(trends)} trends"
+            lp.details = {"trends_count": len(trends), "trends": [
+                {"entity": t.entity, "type": t.trend_type} for t in trends
+            ]}
+
+            if args.notify and trends:
+                from .notifier import send_telegram
+                # detect_trends() inserts alerts into DB; fetch their ids
+                conn = memory._get_conn()
+                for trend in trends:
+                    # Resolve alert_id from DB (detect_trends inserts with notified=0)
+                    row = conn.execute(
+                        "SELECT id FROM trend_alerts "
+                        "WHERE entity = ? AND trend_type = ? AND notified = 0 "
+                        "ORDER BY detected_at DESC LIMIT 1",
+                        (trend.entity, trend.trend_type),
+                    ).fetchone()
+                    alert_id = row["id"] if row else None
+
+                    if trend.trend_type != "new_entrant":
+                        try:
+                            msg = (f"Trend: {trend.entity}\n"
+                                   f"Type: {trend.trend_type}\n"
+                                   f"{trend.description}")
+                            send_telegram(msg)
+                            logger.info(f"trend-detect: Telegram alert sent for {trend.entity} ({trend.trend_type})")
+                        except Exception as e:
+                            logger.warning(f"trend-detect: Telegram alert failed for {trend.entity}: {e}")
+
+                    if alert_id is not None:
+                        memory.mark_trend_notified(alert_id)
+                        logger.info(f"trend-detect: marked alert_id={alert_id} as notified")
+
+            # Cleanup old signals
+            deleted = memory.cleanup(keep_days=config.memory_cleanup_days)
+            if deleted:
+                logger.info(f"trend-detect: cleaned up {deleted} old signals")
+
+        _output_json({
+            "status": "ok",
+            "trends_detected": len(trends),
+            "trends": [{"entity": t.entity, "type": t.trend_type, "description": t.description}
+                       for t in trends],
+            "cleaned_up": deleted,
+        })
+        sys.exit(0)
 
 
 def _collect_queue_units(vault_path: str) -> list:

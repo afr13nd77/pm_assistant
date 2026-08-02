@@ -57,6 +57,28 @@ DEFAULTS: dict[str, Any] = {
         "process_timeout": 180,
         "batch_limit": 0,
     },
+    "moderator": {
+        "relevance_threshold": 7,
+        "max_items_per_run": 20,
+        "report_auto_launch": True,
+        "report_method": "cowork",
+        "idea_auto_create": True,
+        "cooldown_hours": 24,
+        "max_retries": 3,
+        "escalation_group": "signal_escalation",
+        "quality_threshold": 6,
+        "memory_db_path": "/data/signal_memory.db",
+        "memory_cleanup_days": 180,
+        "trend_detection_lookback_weeks": 4,
+        "trend_spike_threshold": 3,
+        "dedup_similarity_threshold": 8,
+        "dedup_related_threshold": 6,
+        "completeness_threshold": 6,
+        "domain_auto_correct": True,
+        "report_wait_timeout_minutes": 30,
+        "pending_report_poll_interval": 5,
+        "persist_run_state": True,
+    },
 }
 
 _settings_cache: dict[str, Any] | None = None

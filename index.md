@@ -124,7 +124,7 @@ pm_assistant/
 ├── knowledge-engine/               # сервис обогащения и синтеза
 │   ├── Dockerfile                  # образ Python 3.12-slim
 │   ├── requirements.txt            # 9 зависимостей (+ tiktoken для BL-147)
-│   └── app/                        # исходный код
+│   ├── app/                        # исходный код (28 модулей + 4 подпакета + prompts/)
 │       ├── __init__.py
 │       ├── __main__.py             # точка входа: python -m app
 │       ├── cli.py                  # CLI: jira-sync, jira-import, jira-create, jira-projects, jira-epics, jira-issue-types, enrich, synthesize, watch, index, lint, status, digest, digest-bulk, digest-index, digest-audit, digest-status, cowork-context
@@ -141,6 +141,12 @@ pm_assistant/
 │       ├── linter.py               # линтер vault-файлов
 │       ├── status_migrator.py          # миграция статусов идей: STATUS_MAP + VALID_STATUSES + migrate_statuses()
 │       ├── process_one.py          # обработка одного файла
+│       ├── signal_orchestrator.py  # координатор цепочки News Moderator (RunState, делегация)
+│       ├── signal_moderator.py     # ядро: скоринг + анализ + dispatch
+│       ├── signal_memory.py        # SQLite хранилище сигналов + trend detection
+│       ├── quality_gate.py         # self-reflection: dedup, quality, completeness, domain
+│       ├── agent_loop.py           # retry-with-critique обёртка с escalation
+│       ├── idea_extractor.py       # извлечение идей из отчётов
 │       ├── jira_fetcher/           # модуль синхронизации с Jira
 │       │   ├── __init__.py
 │       │   ├── client.py           # Jira REST API v2 client (Bearer PAT auth): get_projects, get_project_issue_types, get_project_epics, create_issue, search
@@ -164,7 +170,16 @@ pm_assistant/
 │       │   ├── token_counter.py    # count_tokens, count_sections (tiktoken cl100k_base)
 │       │   └── validator.py        # validate: token budgets, required fields, key-value format
 │       ├── cowork_context.py       # генерация _cowork-session.md для Cowork (BL-151): 5 коллекторов, детерминированная сборка
-│       └── prompts/                # 16 промптов (enrich, synthesize, meeting_protocol, digest + 12 type-specific)
+│       └── prompts/                # 22 промпта (enrich, synthesize, meeting_protocol, digest + 12 type-specific, signal_score, signal_analyze, quality_check, dedup_check, completeness_check, report_to_ideas)
+│   └── tests/                      # unit-тесты для knowledge-engine (44 файла)
+│       ├── test_agent_loop.py      # тесты AgentLoop
+│       ├── test_signal_memory.py   # тесты SignalMemory
+│       ├── test_quality_gate.py    # тесты QualityGate
+│       ├── test_signal_moderator.py    # тесты signal_moderator
+│       ├── test_signal_orchestrator.py # тесты SignalOrchestrator
+│       ├── test_idea_extractor.py  # тесты idea_extractor
+│       ├── test_cli_trend_detect.py    # тесты CLI trend-detect
+│       └── ...                     # + 37 существующих тестов (enricher, synthesizer, vault_index, jira, digest, health, decay, meeting_fetcher/ и др.)
 │
 └── idea-pipeline/                  # сервис проработки идей (orchestrator)
     ├── Dockerfile                  # образ Python 3.12-slim + knowledge-engine
@@ -246,9 +261,20 @@ pm_assistant/
 | pm-bot | Telegram polling + capture + vault API (8000) + web UI (8080) | python -m http.server 8080 --directory /web & python -m app.main |
 | knowledge-engine | HTTP API (:8001) + Watchdog на Inbox/ | sh -c "python -m knowledge_engine serve & python -m knowledge_engine watch" |
 | idea-pipeline | Orchestrator: Analyst → PM → Decomposer | python -m idea_pipeline serve |
-| ke-cron | Синтез (09:00) + Cowork-context (01:00) + Jira sync (каждые 3ч) | crond |
+| ke-cron | Синтез (09:00) + Cowork-context (01:00) + Jira sync (каждые 3ч) + ke-moderate (08:00 Пн-Пт) + ke-trends (06:00 Пн) | crond |
 | langfuse-db | PostgreSQL 15, хранилище Langfuse | — |
 | langfuse | Langfuse v2 (LLM observability UI), порт 3100 | — |
+
+**Volumes:**
+| Volume | Назначение |
+|---|---|
+| ke-data | Persistent SQLite для signal_memory.db (knowledge-engine + ke-cron) |
+
+**Cron-задачи (ke-cron):**
+| Cron | Расписание | Описание |
+|---|---|---|
+| ke-moderate | `0 8 * * 1-5` (08:00 Пн-Пт) | Ежедневный прогон News Moderator (moderate-news --notify) |
+| ke-trends | `0 6 * * 1` (06:00 Пн) | Еженедельный trend detection (trend-detect --notify) |
 
 ## Web UI
 

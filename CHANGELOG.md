@@ -5,6 +5,26 @@
 
 ---
 
+## 02.08.2026 — feat: News Moderator — агентная цепочка анализа новостей (BL-189)
+
+- feat(knowledge-engine): Агентная цепочка автоматического анализа новостей
+  - `signal_orchestrator.py` (~440 LOC): оркестратор с persisted RunState (JSON), resume after crash, async report tracking
+  - `signal_moderator.py` (~370 LOC): скоринг релевантности, содержательный анализ, dispatch идея/отчёт
+  - `signal_memory.py` (~280 LOC): persistent SQLite memory (signals, entity_trends, trend_alerts), weekly trend detection (4 типа: spike, sustained, new_entrant, escalation)
+  - `quality_gate.py` (~308 LOC): 4 quality gates — dedup (LLM similarity ≥8), quality check (5 критериев, score<6 → agent loop), report completeness, domain correctness (rule-based)
+  - `agent_loop.py` (~171 LOC): retry с critique injection, escalation к Opus-class на последней итерации
+  - `idea_extractor.py` (~155 LOC): извлечение идей из research-отчётов
+  - 6 промптов: signal_score, signal_analyze, quality_check, dedup_check, completeness_check, report_to_ideas
+- feat(shared): 3 новых LLM operation group (`signal_triage`, `signal_analysis`, `signal_escalation`), 8 операций с fallback chains
+- feat(shared): 2 новых process type в system_log: `signal-moderator`, `trend-detect`
+- feat(shared): 20 параметров moderator в settings.py + settings.yaml
+- feat(docker): ke-data volume, cron moderate-news (08:00 Пн-Пт), trend-detect (06:00 Пн)
+- feat(knowledge-engine): CLI-команды `moderate-news` и `trend-detect` с --notify
+- test: 194 юнит-теста для всех новых модулей
+- docs: vault-структура (wiki/signals/, raw/inbound/news/), business-context-brief.md
+
+---
+
 ## 27.07.2026 — refactor: Удаление cron weekly_report
 
 - refactor(pm-bot): Удалён автоматический cron-джоб генерации еженедельного отчёта (scheduler.py). Настройки report_time/report_day убраны из Settings. Ручная генерация через UI (кнопка REGENERATE) по-прежнему доступна.

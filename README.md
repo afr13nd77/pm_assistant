@@ -206,7 +206,7 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 - APScheduler: enrichment reminders (daily), daily alert (пн-пт 18:00)
 - SQLite: дедупликация enrichment-напоминаний (cooldown 24ч)
 
-### knowledge-engine (v1.15.0)
+### knowledge-engine (v1.16.0)
 
 Сервис обогащения и синтеза знаний.
 
@@ -230,6 +230,7 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 - Pipeline metrics: ingest ratio, avg lag raw→wiki, raw counts по типам
 - Domain manager: scaffold, index, activity log
 - Watchdog: auto-enrichment при появлении файлов в raw/inbound/
+- **News Moderator (BL-189)**: агентная цепочка анализа новостей — скоринг релевантности → содержательный анализ (AgentLoop + QualityGate) → dispatch идея/отчёт → извлечение идей → persistent SQLite memory → weekly trend detection
 
 ### idea-pipeline (v1.1.2)
 
@@ -256,6 +257,8 @@ Cron-контейнер для периодических задач:
 - Rebuild index: ежедневно 02:00
 - Lint: ежедневно 03:00
 - Vault health: ежедневно 04:00
+- News Moderator: Пн-Пт 08:00
+- Trend detect: Пн 06:00
 
 ### shared (v0.7.0)
 
@@ -309,6 +312,8 @@ Drag-n-drop правила: readiness 100% для перехода в «Гото
 7. **Idea Pipeline**: Telegram /pipeline или API -> Analyst -> PM -> Decomposer -> `Pipeline/<date>-<slug>/`
 8. **Enrichment Reminders** (daily cron): scan ideas -> filter by readiness < 100% -> SQLite cooldown -> Telegram notify
 9. **Synthesis** (cron 09:00 или /synthesize): кластеризация + сводка -> `wiki/reports/synthesis-*.md`
+10. **News Moderator** (cron Пн-Пт 08:00 или /moderate-news): digest JSON -> scoring -> analysis (AgentLoop) -> dispatch идея/отчёт -> idea_extractor -> `wiki/signals/` + `raw/inbound/ideas/`
+11. **Trend Detect** (cron Пн 06:00 или /trend-detect): SQLite signal_memory -> entity_trends -> spike/sustained/new_entrant/escalation -> Telegram notify
 
 ---
 
@@ -343,7 +348,7 @@ Drag-n-drop правила: readiness 100% для перехода в «Гото
 | pm-bot | Telegram polling + Vault API + Web UI | 8000 (API), 8080 (Web) |
 | knowledge-engine | HTTP API (:8001) + Watchdog на raw/inbound/ (auto-enrichment) + queue-watch на meeting-queue/pending/ (BL-145) | 8001 (API) |
 | idea-pipeline | Оркестратор AI-агентов | 8100 |
-| ke-cron | Синтез (09:00) + Cowork-context (01:00) + Meeting fetch (:15) + Process queue (/10мин) + Jira sync (каждые 3ч) | — |
+| ke-cron | Синтез (09:00) + Cowork-context (01:00) + Meeting fetch (:15) + Process queue (/10мин) + Jira sync (каждые 3ч) + News Moderator (08:00 Пн-Пт) + Trend detect (06:00 Пн) | — |
 | langfuse-db | PostgreSQL 15 — хранилище Langfuse | — |
 | langfuse | Langfuse v2 — LLM observability UI | 3100 (Web) |
 
@@ -497,7 +502,7 @@ API возвращает `trend_7d` и `trend_30d` — история score за
 - 27 идей в бэклоге
 - 139 пунктов бэклога всего
 
-Разработка ведется с 07.05.2026. Текущие версии: pm-bot 1.17.0, knowledge-engine 1.15.0, idea-pipeline 1.1.2, web-ui 1.25.0, shared 0.7.0.
+Разработка ведется с 07.05.2026. Текущие версии: pm-bot 1.17.0, knowledge-engine 1.16.0, idea-pipeline 1.1.2, web-ui 1.25.0, shared 0.7.3.
 
 ---
 

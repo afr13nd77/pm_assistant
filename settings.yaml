@@ -46,3 +46,30 @@ queue:
   stuck_threshold_seconds: 1800
   process_timeout: 180
   batch_limit: 0
+
+moderator:
+  # Основные
+  relevance_threshold: 7         # порог скоринга (0-10)
+  max_items_per_run: 20          # максимум items за прогон
+  report_auto_launch: true       # автозапуск deep research
+  report_method: cowork          # "cowork" | "internal"
+  idea_auto_create: true         # false = только Telegram без записи
+  cooldown_hours: 24             # не обрабатывать ту же новость повторно
+  # Agent Loop
+  max_retries: 3                 # максимум итераций AgentLoop
+  escalation_group: signal_escalation
+  quality_threshold: 6           # минимальный quality score
+  # Persistent Memory
+  memory_db_path: /data/signal_memory.db
+  memory_cleanup_days: 180
+  trend_detection_lookback_weeks: 4
+  trend_spike_threshold: 3
+  # Self-Reflection
+  dedup_similarity_threshold: 8
+  dedup_related_threshold: 6
+  completeness_threshold: 6
+  domain_auto_correct: true
+  # Orchestrator
+  report_wait_timeout_minutes: 30
+  pending_report_poll_interval: 5
+  persist_run_state: true

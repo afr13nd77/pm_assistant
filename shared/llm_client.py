@@ -29,6 +29,18 @@ _OPERATION_GROUPS: dict[str, str] = {
     "pipeline_analyst": "pipeline",
     "pipeline_pm": "pipeline",
     "pipeline_decomposer": "pipeline",
+
+    # Signal Moderator: triage operations (cheap, many per run)
+    "signal_score":                "signal_triage",
+    "quality_check":               "signal_triage",
+    "dedup_check":                 "signal_triage",
+    "completeness_check":          "signal_triage",
+    # Signal Moderator: analysis operations (medium, 1-3 per run)
+    "signal_analyze":              "signal_analysis",
+    "report_to_ideas":             "signal_analysis",
+    "trend_detect":                "signal_analysis",
+    # Signal Moderator: escalation (agent loop last iteration)
+    "signal_analyze_escalation":   "signal_escalation",
 }
 
 _DEFAULT_FALLBACK: dict[str, list[str]] = {
@@ -36,6 +48,9 @@ _DEFAULT_FALLBACK: dict[str, list[str]] = {
     "transcription": ["claude"],
     "analysis": ["claude"],
     "pipeline": ["claude"],
+    "signal_triage": ["claude"],
+    "signal_analysis": ["claude"],
+    "signal_escalation": ["claude"],
 }
 
 _DEFAULT_LLM_PREFS = {

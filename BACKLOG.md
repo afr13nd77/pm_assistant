@@ -1,8 +1,8 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.19.0 / knowledge-engine 1.15.2 / idea-pipeline 1.2.0 / web-ui 1.27.1 / shared 0.7.2
-**Обновлён:** 27.07.2026 (BL-188 — реализовано)
-**Бэклог:** реализованные фичи (99), баги (26), идеи (50), итого (176)
+**Версии:** pm-bot 1.19.0 / knowledge-engine 1.16.0 / idea-pipeline 1.2.0 / web-ui 1.27.1 / shared 0.7.3
+**Обновлён:** 02.08.2026 (BL-189 — реализовано)
+**Бэклог:** реализованные фичи (100), баги (26), идеи (50), итого (177)
 
 ---
 
@@ -80,6 +80,7 @@
 | BL-28 | ✅ Jira Sync UI | web-ui | Sync status card на dashboard, SYNC NOW на settings, overdue alert >3ч |
 | BL-29 | ✅ Email meeting fetcher | knowledge-engine | IMAP: fetch транскриптов из почты -> classify -> wiki -> enrich -> notify |
 | BL-173 | ✅ TTL для уведомлений Meeting Fetcher | knowledge-engine | Автоудаление summary-уведомления Meeting Fetcher через 5 минут. threading.Timer + deleteMessage API |
+| BL-189 | ✅ News Moderator — агентная цепочка анализа новостей | knowledge-engine, shared | Агентная цепочка: digest JSON → скоринг → анализ (AgentLoop + QualityGate) → dispatch идея/отчёт → извлечение идей из отчётов → persistent memory (SQLite) → weekly trend detection. 6 модулей (~2400 LOC), 6 промптов, 3 LLM operation group, 194 теста |
 
 ### 3.2 Идеи
 
@@ -369,8 +370,8 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 99 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188 |
+| ✅ Реализовано | 100 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-189 |
 | ✅ Баги исправлены | 26 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165 |
-| Идея | 50 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-187 |
+| Идея | 50 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-188 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **176** | |
+| **Итого** | **177** | |

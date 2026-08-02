@@ -23,6 +23,7 @@ VALID_PROCESS_TYPES = {
     "synthesis", "fetch-meetings", "process-queue", "rebuild-index",
     "weekly-report", "enrichment-reminder", "daily-alert", "llm-call",
     "cowork-context",
+    "signal-moderator", "trend-detect",
 }
 
 VALID_STATUSES = {"success", "warning", "error", "info"}
