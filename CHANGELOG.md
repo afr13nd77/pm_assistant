@@ -22,6 +22,8 @@
 - feat(knowledge-engine): CLI-команды `moderate-news` и `trend-detect` с --notify
 - test: 194 юнит-теста для всех новых модулей
 - docs: vault-структура (wiki/signals/, raw/inbound/news/), business-context-brief.md
+- fix(docker): `pull: false` в build-секциях — BuildKit не обращается к Docker Hub при наличии локального образа
+- fix(knowledge-engine): относительные импорты в signal_orchestrator.py (from app.* → from .*)
 
 ---
 
