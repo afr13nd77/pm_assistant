@@ -9,11 +9,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from app.agent_loop import AgentLoop
-from app.idea_extractor import extract_ideas
-from app.quality_gate import QualityGate
-from app.signal_memory import SignalMemory, SignalRecord
-from app.signal_moderator import (
+from .agent_loop import AgentLoop
+from .idea_extractor import extract_ideas
+from .quality_gate import QualityGate
+from .signal_memory import SignalMemory, SignalRecord
+from .signal_moderator import (
     AnalysisResult,
     ScoringResult,
     _write_processed_md,
