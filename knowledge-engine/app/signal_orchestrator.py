@@ -249,6 +249,16 @@ class SignalOrchestrator:
         # 1. Auto-detect or use provided path
         if digest_path is None:
             digest_path = self._auto_detect_digest()
+        if digest_path is None:
+            logger.info("process_digest: no digest available, nothing to process")
+            self.run_state = RunState.new("none")
+            self.run_state.status = "completed"
+            self.run_state.completed_at = datetime.now().isoformat()
+            self.run_state.summary = RunSummary(
+                total=0, relevant=0, ideas=0,
+                reports=0, retries=0, errors=0, quality_warnings=0,
+            )
+            return self.run_state
 
         # 2. Load and validate (AC-43)
         path = Path(digest_path)
@@ -999,11 +1009,13 @@ class SignalOrchestrator:
         logger.info("_auto_detect_digest: scanning raw/inbound/news/")
         news_dir = Path(self.vault_path) / "raw" / "inbound" / "news"
         if not news_dir.exists():
-            raise FileNotFoundError(f"News directory not found: {news_dir}")
+            logger.info(f"_auto_detect_digest: news directory not found: {news_dir}")
+            return None
 
         json_files = sorted(news_dir.glob("*.json"), reverse=True)
         if not json_files:
-            raise FileNotFoundError(f"No digest files in {news_dir}")
+            logger.info(f"_auto_detect_digest: no digest files in {news_dir}")
+            return None
 
         logger.info(f"Auto-detected digest: {json_files[0]}")
         return str(json_files[0])

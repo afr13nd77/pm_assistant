@@ -220,14 +220,28 @@ class TestSignalOrchestrator:
 
     def test_auto_detect_digest_no_files(self, tmp_vault, config):
         orch = SignalOrchestrator(str(tmp_vault), config)
-        # Remove all files from news dir
-        with pytest.raises(FileNotFoundError, match="No digest files"):
-            orch._auto_detect_digest()
+        # Remove all files from news dir — should return None, not raise
+        result = orch._auto_detect_digest()
+        assert result is None
 
     def test_auto_detect_digest_no_dir(self, config):
         orch = SignalOrchestrator("/nonexistent/vault", config)
-        with pytest.raises(FileNotFoundError, match="News directory"):
-            orch._auto_detect_digest()
+        # Missing news directory — should return None, not raise
+        result = orch._auto_detect_digest()
+        assert result is None
+
+    def test_process_digest_no_digest_returns_empty_run(self, tmp_vault, config):
+        """When no digest files exist, process_digest returns completed RunState with zero totals."""
+        # Ensure news dir is empty (no JSON files)
+        orch = SignalOrchestrator(str(tmp_vault), config)
+        result = orch.process_digest(digest_path=None)
+        assert result.status == "completed"
+        assert result.completed_at is not None
+        assert result.digest_path == "none"
+        assert result.summary is not None
+        assert result.summary.total == 0
+        assert result.summary.relevant == 0
+        assert result.summary.ideas == 0
 
     def test_load_business_context(self, tmp_vault, config):
         orch = SignalOrchestrator(str(tmp_vault), config)
