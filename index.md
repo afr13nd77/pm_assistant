@@ -15,7 +15,7 @@ pm_assistant/
 ├── docker-compose.yml              # оркестрация: pm-bot + knowledge-engine (:8001 API) + ke-cron + idea-pipeline
 ├── settings.yaml                   # централизованная runtime-конфигурация (timeouts, cooldowns, rate_limits)
 ├── CHANGELOG.md                    # журнал изменений по всем компонентам (от новых к старым)
-├── BACKLOG.md                      # бэклог: реализованные фичи (99), баги (26), идеи (50), итого (176)
+├── BACKLOG.md                      # бэклог: реализованные фичи (101), баги (26), идеи (50), итого (178)
 │
 ├── shared/                         # общий модуль — единый источник для pm-bot, KE, idea-pipeline
 │   ├── __init__.py                 # __version__ = "0.1.0"
@@ -128,7 +128,7 @@ pm_assistant/
 │   ├── app/                        # исходный код (28 модулей + 4 подпакета + prompts/)
 │       ├── __init__.py
 │       ├── __main__.py             # точка входа: python -m app
-│       ├── cli.py                  # CLI: jira-sync, jira-import, jira-create, jira-projects, jira-epics, jira-issue-types, enrich, synthesize, watch, index, lint, status, digest, digest-bulk, digest-index, digest-audit, digest-status, cowork-context, signal-status
+│       ├── cli.py                  # CLI: jira-sync, jira-import, jira-create, jira-projects, jira-epics, jira-issue-types, enrich, synthesize, watch, index, lint, status, digest, digest-bulk, digest-index, digest-audit, digest-status, cowork-context, moderate-news, trend-detect, signal-status
 │       ├── api.py                  # FastAPI HTTP API (32 эндпоинта, порт 8001) — +digest/generate, digest/bulk, digest/status (BL-147), +cowork-context (BL-151), +signals/runs, signals/runs/{id}, signals/stats (BL-190)
 │       ├── enricher.py             # обогащение идеи связями из vault
 │       ├── synthesizer.py          # синтез: кластеризация + сводка
@@ -330,7 +330,7 @@ pm_assistant/
 | CLI digest-index | `python -m app digest-index` | knowledge-engine/ |
 | CLI digest-audit | `python -m app digest-audit` | knowledge-engine/ |
 | CLI digest-status | `python -m app digest-status` | knowledge-engine/ |
-| CLI signal-status | `python -m app signal-status [--last N] [--run ID] [--format json\|table]` | knowledge-engine/ |
+| CLI signal-status | `python -m knowledge_engine signal-status [--last N] [--run ID] [--format json\|table]` | knowledge-engine/ |
 | Запуск pipeline сервера | `python -m idea_pipeline serve` | idea-pipeline/ |
 | CLI запуск pipeline | `python -m idea_pipeline run --text "..."` | idea-pipeline/ |
 | CLI статус pipeline | `python -m idea_pipeline status <id>` | idea-pipeline/ |

@@ -28,6 +28,7 @@
 - feat(knowledge-engine): RunState backward/forward compatibility через field filtering
 - test: 47 новых тестов (6 agent_loop + 15 orchestrator + 14 API + 8 CLI + 4 hotfix)
 - fix(api): status override в signals_run_detail — RunState.status → run_status
+- fix(knowledge-engine): graceful handling при отсутствии дайджеста — `_auto_detect_digest()` возвращает None вместо crash, `process_digest()` завершается с пустым RunState (BL-189 hotfix)
 
 ---
 
