@@ -27,6 +27,9 @@
 - **feat:** BL-199 extract_ideas нод активен — кликабельный, с бейджем количества идей
 - **feat:** BL-199 Карточки идей: domain/priority бейджи, ссылка на исходный отчёт
 - **feat:** BL-199 Drawer идеи: проблема, решение, анализ, Obsidian links на идею и отчёт
+- **improve:** Ссылка "Открыть в Obsidian" в drawer Processed и Reports заменена на "Открыть отчет" — переход на report.html с автовыбором отчёта
+- **improve:** report.html поддерживает URL-параметр `?file=filename` для прямого открытия отчёта
+- **improve:** Поиск (search overlay): клик по найденному отчёту переходит на report.html?file= вместо report.html?highlight=
 
 ### web-ui 1.30.0
 - **feat:** BL-198 Reports нод кликабельный — список research-отчётов с outcome-бейджами

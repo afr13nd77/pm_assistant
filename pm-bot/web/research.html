@@ -80,9 +80,9 @@
           </div>
           <div class="rq-drawer__field" v-if="drawerTask.report_path">
             <label>Report</label>
-            <a :href="'obsidian://open?vault=pm-vault&file=' + encodeURIComponent(drawerTask.report_path)"
-               class="rq-report-link" target="_blank">
-              {{ drawerTask.report_path }}
+            <a :href="'report.html?file=' + encodeURIComponent((drawerTask.report_path || '').replace('wiki/reports/', ''))"
+               class="rq-report-link">
+              Открыть отчет
             </a>
           </div>
         </template>
@@ -131,9 +131,9 @@
           </div>
           <div class="rq-drawer__field" v-if="drawerTask.filename">
             <label>Report</label>
-            <a :href="'obsidian://open?vault=pm-vault&file=wiki/reports/' + encodeURIComponent(drawerTask.filename)"
-               class="rq-report-link" target="_blank">
-              Открыть в Obsidian
+            <a :href="'report.html?file=' + encodeURIComponent(drawerTask.filename)"
+               class="rq-report-link">
+              Открыть отчет
             </a>
           </div>
         </template>

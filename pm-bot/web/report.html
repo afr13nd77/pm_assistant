@@ -530,10 +530,16 @@
             var list = (data && data.reports) ? data.reports : [];
             reports.value = list;
             loading.value = false;
-            // Auto-select first report if nothing selected and list is non-empty
-            if (list.length > 0 && !selectedFilename.value) {
-              console.log('[report] auto-selecting first report:', list[0].filename);
-              selectReport(list[0].filename);
+            if (!selectedFilename.value) {
+              var params = new URLSearchParams(window.location.search);
+              var fileParam = params.get('file');
+              if (fileParam && list.some(function(r) { return r.filename === fileParam; })) {
+                console.log('[report] auto-selecting from URL param:', fileParam);
+                selectReport(fileParam);
+              } else if (list.length > 0) {
+                console.log('[report] auto-selecting first report:', list[0].filename);
+                selectReport(list[0].filename);
+              }
             }
           }).catch(function(err) {
             if (err.name === 'AbortError') return;

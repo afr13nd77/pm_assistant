@@ -1554,7 +1554,8 @@ function registerComponents(app) {
         var filename = result.path.split('/').pop();
         console.log('[search] navigate to', result.url, 'highlight:', filename);
         var sep = result.url.indexOf('?') === -1 ? '?' : '&';
-        window.location.href = result.url + sep + 'highlight=' + encodeURIComponent(filename);
+        var param = result.category === 'report' ? 'file' : 'highlight';
+        window.location.href = result.url + sep + param + '=' + encodeURIComponent(filename);
         this.$emit('close');
       },
       setFilter: function(filter) {
