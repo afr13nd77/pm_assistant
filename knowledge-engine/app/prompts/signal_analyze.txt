@@ -34,7 +34,8 @@
   "report_brief": {
     "topic": "<тема отчёта>",
     "questions": ["<что выяснить 1>", "<что выяснить 2>"],
-    "scope": "<границы исследования>"
+    "scope": "<границы исследования>",
+    "competitor": "<имя конкурента из новости или пустая строка>"
   }
 }
 Заполни idea_draft если reaction="idea", report_brief если reaction="report".

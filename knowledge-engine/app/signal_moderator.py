@@ -509,6 +509,7 @@ def dispatch_report(
     vault_path: str,
     notify: bool,
     dry_run: bool,
+    competitor: str = "",
 ) -> str | None:
     """Create research queue JSON for deep research (AC-07, AC-31).
 
@@ -532,8 +533,11 @@ def dispatch_report(
         "scope": analysis.report_brief.get("scope", ""),
         "signal_source": item.get("source_url", item.get("source", "")),
         "signal_date": item.get("date", today),
-        "competitor": item.get("source", ""),
+        "competitor": analysis.report_brief.get("competitor") or competitor,
     }
+    logger.info(
+        f"dispatch_report: competitor='{report_data['competitor']}' for topic '{topic[:60]}'"
+    )
 
     if dry_run:
         logger.info(f"dispatch_report: dry_run=True, skipping vault write for '{topic[:60]}'")

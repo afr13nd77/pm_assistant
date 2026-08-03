@@ -7,6 +7,15 @@
 
 ## 03.08.2026
 
+### knowledge-engine 1.20.1
+- **fix:** BUG-027 `dispatch_report` записывал домен источника новости (skift.com, TechCrunch) в поле `competitor` research-queue JSON вместо реального конкурента
+- **fix:** промпт `signal_analyze.txt` — LLM теперь извлекает `competitor` в `report_brief`; `signal_orchestrator._process_item` передаёт entity из `scoring.matched_entities` как fallback в `_handle_report`/`dispatch_report`
+- **test:** 3 новых теста в `test_signal_moderator.py` (competitor из параметра, приоритет LLM report_brief, пустое значение при отсутствии конкурента)
+
+---
+
+## 03.08.2026
+
 ### web-ui 1.29.0
 - **feat:** BL-195 Research Queue UI — pipeline graph страница `research.html` (388 строк HTML + 585 строк CSS)
 - **feat:** Pipeline graph в стиле n8n: 7 узлов (Signal Moderator, Queue, Processing, Processed, Reports, extract_ideas, Failed), SVG edges с dash-offset анимацией

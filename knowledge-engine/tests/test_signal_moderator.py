@@ -701,6 +701,49 @@ class TestDispatchReport:
 
         assert "signal_source" in data
         assert "signal_date" in data
+        assert data["competitor"] != SAMPLE_ITEM["source"]
+
+    def test_competitor_from_parameter(self, tmp_path: Path):
+        """BUG-027: competitor should come from scoring, not item source."""
+        analysis = self._make_analysis()
+        dispatch_report(
+            SAMPLE_ITEM, analysis, str(tmp_path), notify=False, dry_run=False,
+            competitor="Booking.com",
+        )
+
+        queue_dir = tmp_path / "raw" / "inbound" / "research-queue"
+        files = list(queue_dir.glob("*.json"))
+        data = json.loads(files[0].read_text(encoding="utf-8"))
+
+        assert data["competitor"] == "Booking.com"
+
+    def test_competitor_from_report_brief_takes_priority(self, tmp_path: Path):
+        """BUG-027: LLM competitor in report_brief overrides scoring competitor."""
+        analysis = self._make_analysis()
+        analysis.report_brief["competitor"] = "Kayak"
+        dispatch_report(
+            SAMPLE_ITEM, analysis, str(tmp_path), notify=False, dry_run=False,
+            competitor="Booking.com",
+        )
+
+        queue_dir = tmp_path / "raw" / "inbound" / "research-queue"
+        files = list(queue_dir.glob("*.json"))
+        data = json.loads(files[0].read_text(encoding="utf-8"))
+
+        assert data["competitor"] == "Kayak"
+
+    def test_competitor_empty_when_none_identified(self, tmp_path: Path):
+        """BUG-027: competitor should be empty when no competitor identified."""
+        analysis = self._make_analysis()
+        dispatch_report(
+            SAMPLE_ITEM, analysis, str(tmp_path), notify=False, dry_run=False,
+        )
+
+        queue_dir = tmp_path / "raw" / "inbound" / "research-queue"
+        files = list(queue_dir.glob("*.json"))
+        data = json.loads(files[0].read_text(encoding="utf-8"))
+
+        assert data["competitor"] == ""
 
 
 # ---------------------------------------------------------------------------

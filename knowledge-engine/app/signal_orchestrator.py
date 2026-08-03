@@ -472,10 +472,12 @@ class SignalOrchestrator:
         item_state.current_step = "analyze_signal"
 
         competitor_profile = None
+        competitor_name = ""
         for entity in scoring.matched_entities:
             profile = self._load_competitor_profile(entity)
             if profile:
                 competitor_profile = profile
+                competitor_name = entity
                 break
 
         memory_history = ""
@@ -591,7 +593,10 @@ class SignalOrchestrator:
         if analysis.reaction == "idea":
             self._handle_idea(item, analysis, item_state, notify, dry_run)
         elif analysis.reaction == "report":
-            self._handle_report(item, analysis, item_state, notify, dry_run)
+            self._handle_report(
+                item, analysis, item_state, notify, dry_run,
+                competitor=competitor_name,
+            )
 
         _safe_end_span(gate_span, metadata={
             "gates": [g["gate"] for g in item_state.gate_results],
@@ -731,6 +736,7 @@ class SignalOrchestrator:
         item_state: ItemState,
         notify: bool,
         dry_run: bool,
+        competitor: str = "",
     ) -> None:
         """FLOW-04: create research queue JSON (AC-07, AC-31)."""
         if self.config.report_auto_launch:
@@ -740,6 +746,7 @@ class SignalOrchestrator:
                 vault_path=self.vault_path,
                 notify=notify,
                 dry_run=dry_run,
+                competitor=competitor,
             )
             item_state.result_ref = ref
             logger.info(f"_handle_report: dispatched, ref={ref}")

@@ -300,6 +300,7 @@
 | BL-160 | ✅ BUG-023 (jira-sync custom-named files) | knowledge-engine | Jira sync не обновлял статус vault-файлов с кастомными именами (E-*.md). Fix: fallback-поиск по jira_key в frontmatter в секциях UPDATED, CLOSED и import_single_issue. Partial update через frontmatter_utils вместо полного rewrite |
 | BL-165 | ✅ BUG-025 (_CLOSED_STATUSES raw values) | knowledge-engine | _CLOSED_STATUSES содержал сырые Jira-статусы вместо нормализованных — задачи со статусом "Отменена" не распознавались как закрытые. Fix: замена на нормализованные значения (done, deploy, staging, cancelled) |
 | BL-193 | ✅ BUG-026 (quality_gate report_brief crash) | knowledge-engine | `_extract_fields` падал на `reaction=report`: проверка `"idea_draft" in analysis` всегда True (dataclass key). Fix: truthiness check `analysis.get("idea_draft")` |
+| — | ✅ BUG-027 (signal_moderator competitor misclassification) | knowledge-engine | `dispatch_report` записывал домен источника новости (skift.com, TechCrunch) в поле `competitor` research-queue JSON вместо реального конкурента. Fix: LLM извлекает `competitor` в `report_brief` (промпт `signal_analyze.txt`), `_process_item` в `signal_orchestrator.py` передаёт entity из `scoring.matched_entities` как fallback через `_handle_report(..., competitor=...)` → `dispatch_report(..., competitor=...)` |
 
 ---
 
