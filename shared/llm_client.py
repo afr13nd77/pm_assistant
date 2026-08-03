@@ -39,6 +39,7 @@ _OPERATION_GROUPS: dict[str, str] = {
     "signal_analyze":              "signal_analysis",
     "report_to_ideas":             "signal_analysis",
     "trend_detect":                "signal_analysis",
+    "research_report":             "signal_analysis",
     # Signal Moderator: escalation (agent loop last iteration)
     "signal_analyze_escalation":   "signal_escalation",
 }

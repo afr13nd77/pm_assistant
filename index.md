@@ -15,7 +15,7 @@ pm_assistant/
 ├── docker-compose.yml              # оркестрация: pm-bot + knowledge-engine (:8001 API) + ke-cron + idea-pipeline
 ├── settings.yaml                   # централизованная runtime-конфигурация (timeouts, cooldowns, rate_limits)
 ├── CHANGELOG.md                    # журнал изменений по всем компонентам (от новых к старым)
-├── BACKLOG.md                      # бэклог: реализованные фичи (103), баги (26), идеи (50), итого (180)
+├── BACKLOG.md                      # бэклог: реализованные фичи (104), баги (27), идеи (52), итого (184)
 │
 ├── shared/                         # общий модуль — единый источник для pm-bot, KE, idea-pipeline
 │   ├── __init__.py                 # __version__ = "0.1.0"
@@ -23,11 +23,11 @@ pm_assistant/
 │   ├── llm_client.py               # _load_llm_prefs, get_client, call (unified fallback chain), call_detailed (отдаёт provider_record, BL-145), мультимодельные fallback-цепочки с нормализацией шага {provider, model} (BL-155), backoff 429 между openrouter-шагами, deprecated: call_with_fallback, call_transcription
 │   ├── meeting_queue.py            # enqueue-ядро файловой очереди: Unit, make_unit_id, build_meta, enqueue, path-хелперы (BL-145)
 │   ├── openrouter_client.py        # HTTP client for OpenRouter API (list_models с live-запросом и TTL-кэшем, call, test_connection, BL-156)
-│   ├── vault_paths.py              # superset путей vault (26 функций, +llm_wiki_cowork_session)
+│   ├── vault_paths.py              # superset путей vault (29 функций, +llm_wiki_cowork_session, +raw_research_queue/processed/failed)
 │   ├── domain_config.py            # загрузка/сохранение domain-config.yaml (13 функций)
 │   ├── frontmatter_utils.py        # read_frontmatter, update_frontmatter
 │   ├── settings.py                 # загрузка settings.yaml, dot-notation доступ, singleton
-│   ├── system_log.py               # Централизованный журнал системных операций (SQLite, 13 process types вкл. cowork-context)
+│   ├── system_log.py               # Централизованный журнал системных операций (SQLite, 14 process types вкл. cowork-context)
 │   ├── langfuse_client.py          # Singleton Langfuse client с graceful degradation (BL-166)
 │   └── tests/                      # unit-тесты для shared/
 │       ├── test_settings.py        # 14 тестов
@@ -62,6 +62,7 @@ pm_assistant/
 │   ├── BL-190_agent-observability/    # BL-190: Agent Observability — Langfuse e2e trace, HTTP-диагностика, CLI signal-status (requirements, design, tasks)
 │   ├── BL-191_news-digest-converter/ # BL-191: News Digest Converter — парсинг daily-news markdown → JSON-дайджест (requirements, tasks)
 │   ├── BL-192_signal-chain-settings/ # BL-192: Signal Chain Settings — UI настройка LLM-цепочек для News Moderator (requirements, tasks)
+│   ├── BL-194_research-runner/      # BL-194: Research Runner — обработчик research-queue, генерация аналитических отчётов (requirements, design, tasks)
 │   └── architecture/adr/           # 5 ADR (решения по архитектуре)
 │
 ├── pm-bot/                         # Telegram-бот (capture)
@@ -151,6 +152,7 @@ pm_assistant/
 │       ├── quality_gate.py         # self-reflection: dedup, quality, completeness, domain
 │       ├── agent_loop.py           # retry-with-critique обёртка с escalation
 │       ├── idea_extractor.py       # извлечение идей из отчётов
+│       ├── research_runner.py     # подхват research-queue, генерация аналитических отчётов через LLM (BL-194)
 │       ├── jira_fetcher/           # модуль синхронизации с Jira
 │       │   ├── __init__.py
 │       │   ├── client.py           # Jira REST API v2 client (Bearer PAT auth): get_projects, get_project_issue_types, get_project_epics, create_issue, search
@@ -186,6 +188,7 @@ pm_assistant/
 │       ├── test_api_signals.py     # тесты API endpoints сигналов (14 тестов, BL-190)
 │       ├── test_cli_signal_status.py   # тесты CLI signal-status (8 тестов, BL-190)
 │       ├── test_news_digest_converter.py  # тесты news_digest_converter (13 тестов, BL-191)
+│       ├── test_research_runner.py       # тесты research_runner (48 тестов, BL-194)
 │       └── ...                     # + 37 существующих тестов (enricher, synthesizer, vault_index, jira, digest, health, decay, meeting_fetcher/ и др.)
 │
 └── idea-pipeline/                  # сервис проработки идей (orchestrator)
@@ -218,11 +221,11 @@ pm_assistant/
 | Компонент | Версия | Последнее изменение | Описание |
 |---|---|---|---|
 | **pm-bot** | 1.20.0 | 2026-08-03 | Telegram-бот + Web UI + Vault API. Гибридная LLM-архитектура. KE через HTTP API (ke_client.py, 22 функции). Rate limiter для Telegram. SQLite volume (pm-bot-data). Импорты из shared/. context_assembler: waterfall сборка контекста из llm_wiki/ (kill switch DIGEST_CONTEXT_SOURCE), enrich_creative_recall (BL-147 Phase 2). Digest context injection в process_idea и weekly report. Мультимодельные OpenRouter fallback-цепочки с inline model selector + GET /openrouter-models (BL-155, BL-156). Playground providers: live-список моделей OpenRouter через list_models() (BL-158). Report search/filter: _extract_report_type + type в ответе /api/v1/reports, UI поиск + фильтр-чипы (BL-161). Epic body в drawer roadmap: SHOW_BODY/SHOW_TICKETS тогглер, body в ответе /api/v1/epics (BL-162). CalDAV Settings UI (BL-172). |
-| **knowledge-engine** | 1.18.1 | 2026-08-03 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (32 эндпоинта). DigestHandler в watcher.py (DIGEST_ENABLED env, debounce 5s, body_hash check). 3 API endpoints: digest/generate, digest/bulk, digest/status (BL-147 Phase 2). cowork_context: _cowork-session.md для Cowork (BL-151). Jira sync fallback: поиск vault-файлов по jira_key в frontmatter для кастомных имён (BUG-023). Fix _CLOSED_STATUSES: задачи "Отменена" корректно распознаются как закрытые (BUG-025). News Moderator (BL-189): агентная цепочка анализа новостей — signal_orchestrator, signal_moderator, signal_memory (SQLite), quality_gate, agent_loop, idea_extractor. 6 промптов, 3 LLM operation group, CLI moderate-news/trend-detect, cron Пн-Пт 08:00 / Пн 06:00. Agent Observability (BL-190): Langfuse e2e trace для Signal Moderator, 3 HTTP-endpoints диагностики (signals/runs, signals/runs/{id}, signals/stats), CLI signal-status, persistence решений агентов (iterations_history, gate_results). News Digest Converter (BL-191): парсинг daily-news markdown → JSON-дайджест, CLI convert-news-digest, cron 07:55 Пн-Пт. Fix quality_gate._extract_fields crash на reaction=report (BUG-026). |
+| **knowledge-engine** | 1.19.0 | 2026-08-03 | Enrichment, synthesis, Jira sync, meeting fetch. HTTP API на порту 8001 (32 эндпоинта). DigestHandler в watcher.py (DIGEST_ENABLED env, debounce 5s, body_hash check). 3 API endpoints: digest/generate, digest/bulk, digest/status (BL-147 Phase 2). cowork_context: _cowork-session.md для Cowork (BL-151). Jira sync fallback: поиск vault-файлов по jira_key в frontmatter для кастомных имён (BUG-023). Fix _CLOSED_STATUSES: задачи "Отменена" корректно распознаются как закрытые (BUG-025). News Moderator (BL-189): агентная цепочка анализа новостей — signal_orchestrator, signal_moderator, signal_memory (SQLite), quality_gate, agent_loop, idea_extractor. 6 промптов, 3 LLM operation group, CLI moderate-news/trend-detect, cron Пн-Пт 08:00 / Пн 06:00. Agent Observability (BL-190): Langfuse e2e trace для Signal Moderator, 3 HTTP-endpoints диагностики (signals/runs, signals/runs/{id}, signals/stats), CLI signal-status, persistence решений агентов (iterations_history, gate_results). News Digest Converter (BL-191): парсинг daily-news markdown → JSON-дайджест, CLI convert-news-digest, cron 07:55 Пн-Пт. Fix quality_gate._extract_fields crash на reaction=report (BUG-026). Research Runner (BL-194): подхват research-queue, генерация аналитических отчётов через LLM (Variant B — internal), completeness check, CLI research-run, cron 08:05 Пн-Пт, 48 тестов. |
 | **idea-pipeline** | 1.2.0 | 2026-07-22 | Orchestrator: Analyst → PM → Decomposer. LLM-вызовы через shared/llm_client с fallback-цепочками (pipeline_analyst, pipeline_pm, pipeline_decomposer). PipelineClaudeClient удалён. Импорты vault_paths и file_writer из shared/. |
 | **web-ui** | 1.28.0 | 2026-08-03 | Dual-theme SPA дашборд. Inline Editing (BL-61): click-to-edit полей + body editor split view. Keyword Search (BL-60), Scroll-to-Card (BL-64), Forgotten Gems popup (BL-135), Capture Terminal Redesign (BL-137), Drag-and-drop fallback chains в Settings (BL-140, BL-141), LLM Playground (BL-142). Decision Journal (BL-24): decisions.html + meeting.html + overview виджет RECENT DECISIONS. Process Catalog (processes.html, process.html). Searchable dropdown для моделей OpenRouter в settings.html и playground.html, общий CSS в style.css (BL-158). Report search/filter: поиск по имени/заголовку + фильтр-чипы по типу (BL-161). Epic body toggle в drawer roadmap (BL-162). CalDAV Settings UI секция CALENDAR (BL-172). Auto-refresh встреч на TODAY (BL-188). BUG-021/022: Jira Import direct key fix + ticket list filtering. |
 | **инфраструктура** | 1.1.0 | 2026-06-30 | CI pipeline: GitHub Actions (ruff + mypy + pytest, matrix strategy), pre-commit hook, pyproject.toml, requirements-dev.txt (BL-120). KE-контейнер: процесс queue-watch (watchdog на pending/); ke-cron: process-queue каждые 10 мин — страховка/reclaim (BL-145). ke-data volume для signal_memory.db. Cron: ke-moderate (Пн-Пт 08:00), ke-trends (Пн 06:00). Build: pull: false для всех сервисов (BL-189). |
-| **shared** | 0.7.3 | 2026-08-02 | Общий модуль: llm_client (call с настраиваемыми fallback-цепочками, 4 группы операций: capture/transcription/analysis/pipeline, _normalize_step для мультимодельных цепочек {provider, model}, backoff 0.7s при 429, Ollama timeout ×5, call_transcription, call_detailed — additive, отдаёт provider_record + chain/used_model/used_step_index + автоматический LLM trace в system_log — BL-155, BL-167), langfuse_client (singleton с graceful degradation — BL-166), meeting_queue (enqueue-ядро файловой очереди: Unit, make_unit_id, build_meta, enqueue, path-хелперы — BL-145), openrouter_client (list_models с live API + TTL-кэш 1ч + fallback — BL-156; call() с детальным логированием raw-body при ошибке парсинга — BUG-020), system_log (13 process types, LoggedProcess, per-unit details), file_writer, vault_paths (26 функций, +llm_wiki_cowork_session), domain_config, frontmatter_utils, settings, signal_triage/signal_analysis/signal_escalation operation groups (8 операций, 3 fallback chains — BL-189), 2 новых process type: signal-moderator, trend-detect. Единый источник для всех компонентов. |
+| **shared** | 0.7.4 | 2026-08-03 | Общий модуль: llm_client (call с настраиваемыми fallback-цепочками, 4 группы операций: capture/transcription/analysis/pipeline, _normalize_step для мультимодельных цепочек {provider, model}, backoff 0.7s при 429, Ollama timeout ×5, call_transcription, call_detailed — additive, отдаёт provider_record + chain/used_model/used_step_index + автоматический LLM trace в system_log — BL-155, BL-167, маппинг research_report → signal_analysis — BL-194), langfuse_client (singleton с graceful degradation — BL-166), meeting_queue (enqueue-ядро файловой очереди: Unit, make_unit_id, build_meta, enqueue, path-хелперы — BL-145), openrouter_client (list_models с live API + TTL-кэш 1ч + fallback — BL-156; call() с детальным логированием raw-body при ошибке парсинга — BUG-020), system_log (13 process types, LoggedProcess, per-unit details), file_writer, vault_paths (29 функций, +llm_wiki_cowork_session, +raw_research_queue/processed/failed — BL-194), domain_config, frontmatter_utils, settings, signal_triage/signal_analysis/signal_escalation operation groups (8 операций, 3 fallback chains — BL-189), 2 новых process type: signal-moderator, trend-detect. Единый источник для всех компонентов. |
 
 Схема: semver `MAJOR.MINOR.PATCH`. MAJOR — ломающие изменения API/контрактов. MINOR — новый функционал. PATCH — багофиксы.
 
@@ -282,6 +285,7 @@ pm_assistant/
 |---|---|---|
 | ke-moderate | `0 8 * * 1-5` (08:00 Пн-Пт) | Ежедневный прогон News Moderator (moderate-news --notify) |
 | ke-trends | `0 6 * * 1` (06:00 Пн) | Еженедельный trend detection (trend-detect --notify) |
+| ke-research | `5 8 * * 1-5` (08:05 Пн-Пт) | Обработка research-queue (research-run --notify) |
 
 ## Web UI
 

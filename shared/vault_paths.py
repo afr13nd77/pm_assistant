@@ -63,6 +63,18 @@ def raw_metrics() -> Path:
     return _ensure_dir(VAULT_PATH / "raw" / "metrics")
 
 
+def raw_research_queue() -> Path:
+    return _ensure_dir(VAULT_PATH / "raw" / "inbound" / "research-queue")
+
+
+def raw_research_queue_processed() -> Path:
+    return _ensure_dir(VAULT_PATH / "raw" / "inbound" / "research-queue" / "processed")
+
+
+def raw_research_queue_failed() -> Path:
+    return _ensure_dir(VAULT_PATH / "raw" / "inbound" / "research-queue" / "failed")
+
+
 def wiki_domain_dir(domain: str, artifact_type: str) -> Path:
     if artifact_type not in _VALID_ARTIFACT_TYPES:
         raise ValueError(

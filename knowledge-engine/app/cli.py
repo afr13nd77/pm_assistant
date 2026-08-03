@@ -253,6 +253,20 @@ def main():
     convert_news_parser.add_argument("--date", type=str, default=None,
                                       help="Date to convert (YYYY-MM-DD, default: yesterday)")
 
+    research_parser = subparsers.add_parser(
+        "research-run",
+        help="Process research queue: generate reports from pending tasks (BL-194)"
+    )
+    research_parser.add_argument("--vault", default=None, help="Vault root path")
+    research_parser.add_argument("--file", default=None,
+                                  help="Process specific JSON file from research-queue")
+    research_parser.add_argument("--method", choices=["internal", "cowork"], default=None,
+                                  help="Override report_method from settings.yaml")
+    research_parser.add_argument("--notify", action="store_true",
+                                  help="Send Telegram notifications")
+    research_parser.add_argument("--dry-run", action="store_true",
+                                  help="Execute LLM calls but do not write report or move JSON")
+
     serve_parser = subparsers.add_parser("serve", help="Start HTTP API server")
     serve_parser.add_argument("--vault", default=None, help="Vault root path")
     serve_parser.add_argument("--host", default="0.0.0.0")
@@ -1077,6 +1091,60 @@ def main():
             })
         _output_json(output)
         sys.exit(0)
+
+    elif args.command == "research-run":
+        from shared import vault_paths as _vp
+        _vp.VAULT_PATH = __import__("pathlib").Path(vault_path)
+        from shared.system_log import LoggedProcess
+
+        from .research_runner import run_all
+        logger.info(
+            f"research-run: starting, vault={vault_path}, file={args.file}, "
+            f"method={args.method}, notify={args.notify}, dry_run={args.dry_run}"
+        )
+
+        with LoggedProcess("research-runner", source="ke-cron") as lp:
+            results = run_all(
+                vault_path,
+                method_override=args.method,
+                notify=args.notify,
+                dry_run=args.dry_run,
+                target_file=args.file,
+            )
+            completed = [r for r in results if r.error is None]
+            failed = [r for r in results if r.error is not None]
+            lp.summary = f"{len(completed)} отчётов создано, {len(failed)} ошибок"
+            lp.details = {
+                "completed": len(completed),
+                "failed": len(failed),
+                "results": [
+                    {
+                        "topic": r.topic[:60],
+                        "completeness": r.completeness,
+                        "report_path": r.report_path,
+                        "error": r.error,
+                    }
+                    for r in results
+                ],
+            }
+
+        output = {
+            "status": "ok" if not failed else "partial",
+            "completed": len(completed),
+            "failed": len(failed),
+            "results": [
+                {
+                    "topic": r.topic,
+                    "completeness": r.completeness,
+                    "ideas_count": r.ideas_count,
+                    "report_path": r.report_path,
+                    "error": r.error,
+                }
+                for r in results
+            ],
+        }
+        _output_json(output)
+        sys.exit(0 if not failed else 1)
 
     elif args.command == "trend-detect":
         from shared import vault_paths as _vp

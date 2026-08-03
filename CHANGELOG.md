@@ -5,6 +5,22 @@
 
 ---
 
+## 03.08.2026
+
+### knowledge-engine 1.19.0
+- **feat:** BL-194 Research Runner — модуль обработки research-queue (research_runner.py, ~350 строк)
+- **feat:** CLI команда `research-run` с параметрами --file, --method, --notify, --dry-run
+- **feat:** Cron задача ke-research (08:05 Пн-Пт)
+- **feat:** Промпт `research_report.txt` для генерации аналитических отчётов
+- **feat:** 48 unit-тестов (test_research_runner.py)
+
+### shared 0.7.4
+- **feat:** vault_paths: функции raw_research_queue(), raw_research_queue_processed(), raw_research_queue_failed()
+- **feat:** llm_client: маппинг operation research_report → signal_analysis
+- **fix:** system_log: добавлен process type `research-runner` в VALID_PROCESS_TYPES (14 типов)
+
+---
+
 ## 03.08.2026 — fix: quality_gate._extract_fields crash на reaction=report (BUG-026)
 
 - fix(knowledge-engine): `_extract_fields` проверял наличие ключа `"idea_draft" in analysis` вместо truthiness `analysis.get("idea_draft")`. Для `reaction=report` ключ всегда есть (dataclass __dict__), но значение None → `None.get("title")` → crash.
