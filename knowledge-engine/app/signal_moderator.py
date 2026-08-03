@@ -86,7 +86,7 @@ def _parse_json_response(text: str) -> dict | None:
     # Try direct parse
     try:
         result = json.loads(text)
-        logger.info(f"_parse_json_response: parsed directly")
+        logger.info("_parse_json_response: parsed directly")
         return result
     except json.JSONDecodeError:
         pass
@@ -96,7 +96,7 @@ def _parse_json_response(text: str) -> dict | None:
     if match:
         try:
             result = json.loads(match.group(1))
-            logger.info(f"_parse_json_response: parsed from markdown code block")
+            logger.info("_parse_json_response: parsed from markdown code block")
             return result
         except json.JSONDecodeError:
             pass
@@ -106,7 +106,7 @@ def _parse_json_response(text: str) -> dict | None:
     if match:
         try:
             result = json.loads(match.group(0))
-            logger.info(f"_parse_json_response: parsed from embedded object")
+            logger.info("_parse_json_response: parsed from embedded object")
             return result
         except json.JSONDecodeError:
             pass
@@ -128,7 +128,7 @@ def _build_scoring_prompt(
 
     template = _load_prompt("signal_score")
     if not template:
-        logger.error(f"_build_scoring_prompt: template signal_score.txt is empty or missing")
+        logger.error("_build_scoring_prompt: template signal_score.txt is empty or missing")
         return ""
 
     news_item = (
@@ -161,7 +161,7 @@ def _build_analysis_prompt(
 
     template = _load_prompt("signal_analyze")
     if not template:
-        logger.error(f"_build_analysis_prompt: template signal_analyze.txt is empty or missing")
+        logger.error("_build_analysis_prompt: template signal_analyze.txt is empty or missing")
         return ""
 
     news_item = (
@@ -209,7 +209,7 @@ def score_signal(
 
     prompt = _build_scoring_prompt(item, business_context, memory_context)
     if not prompt:
-        logger.error(f"score_signal: empty prompt, returning default ScoringResult")
+        logger.error("score_signal: empty prompt, returning default ScoringResult")
         return ScoringResult(relevance=0, reason="Empty prompt template")
 
     messages = [{"role": "user", "content": prompt}]
@@ -271,7 +271,7 @@ def score_signal(
                 }
             ]
 
-    logger.error(f"score_signal: all attempts exhausted, returning default")
+    logger.error("score_signal: all attempts exhausted, returning default")
     return ScoringResult(relevance=0, reason="JSON parse error")
 
 
@@ -300,7 +300,7 @@ def analyze_signal(
         item, scoring, business_context, competitor_profile, memory_history, critique
     )
     if not prompt:
-        logger.error(f"analyze_signal: empty prompt, returning default AnalysisResult")
+        logger.error("analyze_signal: empty prompt, returning default AnalysisResult")
         return AnalysisResult(
             reaction="idea",
             analysis="Empty prompt template",
@@ -310,7 +310,7 @@ def analyze_signal(
     # Determine operation name based on escalation
     if operation_group == "signal_escalation":
         operation = "signal_analyze_escalation"
-        logger.info(f"analyze_signal: using escalation operation")
+        logger.info("analyze_signal: using escalation operation")
     else:
         operation = "signal_analyze"
 
@@ -337,7 +337,7 @@ def analyze_signal(
 
     parsed = _parse_json_response(response)
     if parsed is None:
-        logger.error(f"analyze_signal: JSON parse failed")
+        logger.error("analyze_signal: JSON parse failed")
         return AnalysisResult(
             reaction="idea",
             analysis="JSON parse error",
@@ -396,7 +396,7 @@ def dispatch_idea(
     logger.info(f"dispatch_idea: starting for '{title[:60]}'")
 
     if not analysis.idea_draft:
-        logger.error(f"dispatch_idea: no idea_draft in analysis, returning None")
+        logger.error("dispatch_idea: no idea_draft in analysis, returning None")
         return None
 
     # Build idea_data from analysis.idea_draft
@@ -481,7 +481,7 @@ def dispatch_idea(
                 f"{analysis.analysis[:200]}"
             )
             send_telegram(msg, parse_mode=None)
-            logger.info(f"dispatch_idea: Telegram notification sent")
+            logger.info("dispatch_idea: Telegram notification sent")
         except Exception as e:
             logger.warning(f"dispatch_idea: Telegram notification failed: {e}")
 
@@ -516,7 +516,7 @@ def dispatch_report(
     Writes a JSON task file to raw/inbound/research-queue/.
     """
     if not analysis.report_brief:
-        logger.error(f"dispatch_report: no report_brief in analysis, returning None")
+        logger.error("dispatch_report: no report_brief in analysis, returning None")
         return None
 
     topic = analysis.report_brief.get("topic", "unknown")
@@ -566,7 +566,7 @@ def dispatch_report(
 
             msg = f"Запущен анализ: {topic}..."
             send_telegram(msg, parse_mode=None)
-            logger.info(f"dispatch_report: Telegram notification sent")
+            logger.info("dispatch_report: Telegram notification sent")
         except Exception as e:
             logger.warning(f"dispatch_report: Telegram notification failed: {e}")
 

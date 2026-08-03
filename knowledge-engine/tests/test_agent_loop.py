@@ -1,8 +1,6 @@
 """Tests for agent_loop module: AgentLoop retry-with-critique cycle."""
 from __future__ import annotations
 
-import pytest
-
 from unittest.mock import MagicMock
 
 from app.agent_loop import AgentLoop, LoopIteration, _make_failed_quality
@@ -22,8 +20,11 @@ class TestAgentLoopPassesOnFirstAttempt:
     def test_returns_result_and_single_iteration(self):
         """AC-17: AgentLoop.run() returns (result, history) when step passes."""
         loop = AgentLoop(max_iterations=3)
-        step_fn = lambda **kw: {"answer": 42}
-        quality_fn = lambda r: _FakeQuality(passed=True, score=9)
+        def step_fn(**kw):
+            return {"answer": 42}
+
+        def quality_fn(r):
+            return _FakeQuality(passed=True, score=9)
 
         result, history = loop.run(step_fn, quality_fn)
 
@@ -35,8 +36,11 @@ class TestAgentLoopPassesOnFirstAttempt:
     def test_no_quality_warning_on_pass(self):
         """AC-17: Passed result should not have _quality_warning."""
         loop = AgentLoop(max_iterations=3)
-        step_fn = lambda **kw: {"data": "ok"}
-        quality_fn = lambda r: _FakeQuality(passed=True, score=10)
+        def step_fn(**kw):
+            return {"data": "ok"}
+
+        def quality_fn(r):
+            return _FakeQuality(passed=True, score=10)
 
         result, _ = loop.run(step_fn, quality_fn)
 
@@ -60,7 +64,8 @@ class TestAgentLoopRetryAndPass:
             _FakeQuality(passed=True, score=8),
         ]
         quality_iter = iter(qualities)
-        quality_fn = lambda r: next(quality_iter)
+        def quality_fn(r):
+            return next(quality_iter)
 
         loop = AgentLoop(max_iterations=3)
         result, history = loop.run(step_fn, quality_fn)

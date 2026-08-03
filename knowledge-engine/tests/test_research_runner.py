@@ -35,7 +35,6 @@ from app.research_runner import (
 )
 from app.signal_orchestrator import ModeratorConfig
 
-
 # ---------------------------------------------------------------------------
 # ResearchTask dataclass
 # ---------------------------------------------------------------------------

@@ -9,13 +9,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from shared import settings
+
 from .agent_loop import AgentLoop
 from .idea_extractor import extract_ideas
 from .quality_gate import QualityGate
 from .signal_memory import SignalMemory, SignalRecord
 from .signal_moderator import (
     AnalysisResult,
-    ScoringResult,
     _write_processed_md,
     _write_skipped_md,
     analyze_signal,
@@ -23,7 +24,6 @@ from .signal_moderator import (
     dispatch_report,
     score_signal,
 )
-from shared import settings
 
 logger = logging.getLogger(__name__)
 
@@ -406,6 +406,9 @@ class SignalOrchestrator:
         trace=None,
     ) -> None:
         """Обработка одного item через полный pipeline."""
+        if self.run_state is None:
+            logger.error("_process_single_item called with run_state=None")
+            return
         item_state = self.run_state.items[item_key]
         item_state.started_at = datetime.now().isoformat()
         title = item.get("title", "")[:50]
@@ -810,7 +813,7 @@ class SignalOrchestrator:
             reports_dir = Path(self.vault_path) / "wiki" / "reports"
             if not reports_dir.exists():
                 logger.info(
-                    f"check_pending_reports: reports dir does not exist"
+                    "check_pending_reports: reports dir does not exist"
                 )
                 continue
 
@@ -1011,7 +1014,7 @@ class SignalOrchestrator:
             )
             return None
 
-    def _auto_detect_digest(self) -> str:
+    def _auto_detect_digest(self) -> str | None:
         """Найти последний файл в raw/inbound/news/*.json."""
         logger.info("_auto_detect_digest: scanning raw/inbound/news/")
         news_dir = Path(self.vault_path) / "raw" / "inbound" / "news"

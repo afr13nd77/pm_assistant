@@ -8,9 +8,6 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -121,9 +118,9 @@ class TestSignalStatusListView:
             ["signal-status", "--vault", str(tmp_path), "--last", "2"], tmp_path
         )
         assert exit_code == 0
-        lines = [l for l in stdout.strip().split("\n") if l.strip()]
+        lines = [line for line in stdout.strip().split("\n") if line.strip()]
         # header + separator + 2 data rows = 4 lines
-        data_lines = [l for l in lines if l.startswith("2026-")]
+        data_lines = [line for line in lines if line.startswith("2026-")]
         assert len(data_lines) == 2
 
     def test_signal_status_table_format_headers(self, tmp_path):
@@ -194,7 +191,7 @@ class TestSignalStatusJsonFormat:
         )
         assert exit_code == 0
         # Parse JSON from the last non-empty line (skip log lines)
-        json_line = [l for l in stdout.strip().split("\n") if l.strip()][-1]
+        json_line = [line for line in stdout.strip().split("\n") if line.strip()][-1]
         data = json.loads(json_line)
         assert isinstance(data, list)
         assert len(data) == 1

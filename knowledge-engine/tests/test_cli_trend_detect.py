@@ -5,13 +5,11 @@ import io
 import json
 import os
 import sys
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.signal_memory import SignalMemory, SignalRecord, TrendAlert
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -61,7 +59,6 @@ class TestTrendDetectSubparser:
 
     def test_trend_detect_registered(self):
         """trend-detect is a valid subcommand."""
-        from app.cli import main
         import argparse
 
         # Just verify the parser accepts trend-detect without error
@@ -69,7 +66,7 @@ class TestTrendDetectSubparser:
             from app import cli
             importlib.reload(cli)
             # Will fail at runtime (no DB), but parser accepts it
-            parser = argparse.ArgumentParser()
+            argparse.ArgumentParser()
             # If subparser not registered, main() would fail with argparse error
 
     def test_trend_detect_help_flag(self):
@@ -327,7 +324,7 @@ class TestTrendDetectIntegration:
         memory = SignalMemory(db_path)
 
         # Insert signals for "booking.com" to trigger spike
-        from datetime import datetime, timedelta
+        from datetime import datetime
         today = datetime.now().strftime("%Y-%m-%d")
         for i in range(4):
             memory.record_signal(SignalRecord(

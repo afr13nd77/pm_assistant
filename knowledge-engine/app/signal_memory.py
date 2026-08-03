@@ -105,7 +105,7 @@ class SignalMemory:
         conn.commit()
         logger.info("SignalMemory tables initialized")
 
-    def record_signal(self, signal: SignalRecord) -> int:
+    def record_signal(self, signal: SignalRecord) -> int | None:
         """INSERT into signals table. Return inserted row id."""
         conn = self._get_conn()
         cursor = conn.execute(

@@ -455,7 +455,7 @@ class TestConnectionManagement:
 
     def test_close_and_reopen(self, db_path: str):
         mem1 = SignalMemory(db_path)
-        rid = mem1.record_signal(_make_record(title="Persist test"))
+        mem1.record_signal(_make_record(title="Persist test"))
         mem1.close()
 
         mem2 = SignalMemory(db_path)

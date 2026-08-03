@@ -348,7 +348,7 @@ def process_task(
         msg = f"Отчёт готов: {task.topic}. Completeness: {score}/10."
         if quality_warning:
             msg += " Warning: Low quality"
-        logger.info(f"process_task: sending completion notification")
+        logger.info("process_task: sending completion notification")
         send_telegram(msg, parse_mode=None)
 
     logger.info(
@@ -608,7 +608,7 @@ def _check_existing_report(vault_path: str, task: ResearchTask) -> Path | None:
     reports_dir = wiki_reports()
 
     if not reports_dir.exists():
-        logger.info(f"_check_existing_report: reports directory does not exist")
+        logger.info("_check_existing_report: reports directory does not exist")
         return None
 
     pattern = f"*-{task.slug}*"
@@ -619,7 +619,7 @@ def _check_existing_report(vault_path: str, task: ResearchTask) -> Path | None:
         logger.info(f"_check_existing_report: existing report found: {matches[0]}")
         return matches[0]
 
-    logger.info(f"_check_existing_report: no existing report found")
+    logger.info("_check_existing_report: no existing report found")
     return None
 
 

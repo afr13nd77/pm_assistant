@@ -116,13 +116,13 @@ class QualityGate:
         logger.info(f"check_dedup found {len(candidates)} keyword-overlap candidates")
 
         if not candidates:
-            logger.info(f"check_dedup: no candidates, idea is unique")
+            logger.info("check_dedup: no candidates, idea is unique")
             return DedupResult(is_duplicate=False)
 
         # Build prompt
         template = self._load_prompt("dedup_check")
         if not template:
-            logger.error(f"check_dedup: dedup_check.txt prompt missing, assuming unique")
+            logger.error("check_dedup: dedup_check.txt prompt missing, assuming unique")
             return DedupResult(is_duplicate=False)
 
         candidates_list = "\n".join(
@@ -137,7 +137,7 @@ class QualityGate:
         messages = [{"role": "user", "content": prompt}]
 
         try:
-            logger.info(f"check_dedup calling LLM, operation=dedup_check")
+            logger.info("check_dedup calling LLM, operation=dedup_check")
             response, meta = call_detailed(
                 operation="dedup_check",
                 messages=messages,
@@ -154,7 +154,7 @@ class QualityGate:
 
         parsed = self._parse_json_response(response)
         if not parsed:
-            logger.error(f"check_dedup failed to parse LLM response")
+            logger.error("check_dedup failed to parse LLM response")
             return DedupResult(is_duplicate=False, reason="Failed to parse LLM response")
 
         similarity = int(parsed.get("similarity", 0))
@@ -199,7 +199,7 @@ class QualityGate:
         template = self._load_prompt("completeness_check")
         if not template:
             logger.error(
-                f"check_report_completeness: completeness_check.txt prompt missing"
+                "check_report_completeness: completeness_check.txt prompt missing"
             )
             return QualityResult(
                 passed=True, score=5, issues=["Completeness prompt missing"]
@@ -215,7 +215,7 @@ class QualityGate:
 
         try:
             logger.info(
-                f"check_report_completeness calling LLM, operation=completeness_check"
+                "check_report_completeness calling LLM, operation=completeness_check"
             )
             response, meta = call_detailed(
                 operation="completeness_check",
@@ -236,7 +236,7 @@ class QualityGate:
         parsed = self._parse_json_response(response)
         if not parsed:
             logger.error(
-                f"check_report_completeness failed to parse LLM response"
+                "check_report_completeness failed to parse LLM response"
             )
             return QualityResult(
                 passed=True, score=5, issues=["Failed to parse LLM response"]
@@ -359,7 +359,7 @@ class QualityGate:
             problem = draft.get("problem", "")
             solution = draft.get("solution", "")
             domain = draft.get("domain", "general")
-            logger.info(f"_extract_fields: using idea_draft shape")
+            logger.info("_extract_fields: using idea_draft shape")
         elif analysis.get("report_brief"):
             brief = analysis["report_brief"]
             title = brief.get("topic", "")
@@ -367,13 +367,13 @@ class QualityGate:
             questions = brief.get("questions", [])
             solution = "; ".join(questions) if questions else ""
             domain = "general"
-            logger.info(f"_extract_fields: using report_brief shape")
+            logger.info("_extract_fields: using report_brief shape")
         else:
             title = analysis.get("title", "")
             problem = analysis.get("problem", "")
             solution = analysis.get("solution", "")
             domain = analysis.get("domain", "general")
-            logger.info(f"_extract_fields: using flat dict shape (fallback)")
+            logger.info("_extract_fields: using flat dict shape (fallback)")
 
         return title, problem, solution, domain
 
@@ -383,7 +383,7 @@ class QualityGate:
         """Run the quality_check prompt through LLM and parse result."""
         template = self._load_prompt("quality_check")
         if not template:
-            logger.error(f"_run_quality_llm: quality_check.txt prompt missing")
+            logger.error("_run_quality_llm: quality_check.txt prompt missing")
             return QualityResult(
                 passed=True, score=5, issues=["Quality prompt missing"]
             )
@@ -396,7 +396,7 @@ class QualityGate:
         messages = [{"role": "user", "content": prompt}]
 
         try:
-            logger.info(f"_run_quality_llm calling LLM, operation=quality_check")
+            logger.info("_run_quality_llm calling LLM, operation=quality_check")
             response, meta = call_detailed(
                 operation="quality_check",
                 messages=messages,
@@ -415,7 +415,7 @@ class QualityGate:
 
         parsed = self._parse_json_response(response)
         if not parsed:
-            logger.error(f"_run_quality_llm failed to parse LLM response")
+            logger.error("_run_quality_llm failed to parse LLM response")
             return QualityResult(
                 passed=True, score=5, issues=["Failed to parse LLM response"]
             )
@@ -458,7 +458,7 @@ class QualityGate:
             )
             return self._ideas_cache
 
-        logger.info(f"_load_existing_ideas loading from vault")
+        logger.info("_load_existing_ideas loading from vault")
         ideas: list[dict] = []
         domains = vault_paths.all_domains()
 
@@ -505,7 +505,7 @@ class QualityGate:
 
         idea_words = self._extract_words(idea)
         if not idea_words:
-            logger.info(f"_keyword_overlap: no words extracted from idea")
+            logger.info("_keyword_overlap: no words extracted from idea")
             return []
 
         scored: list[tuple[int, dict]] = []
@@ -579,7 +579,7 @@ class QualityGate:
         # Try direct parse
         try:
             result = json.loads(text)
-            logger.info(f"_parse_json_response: parsed directly")
+            logger.info("_parse_json_response: parsed directly")
             return result
         except json.JSONDecodeError:
             pass
@@ -589,7 +589,7 @@ class QualityGate:
         if match:
             try:
                 result = json.loads(match.group(1))
-                logger.info(f"_parse_json_response: parsed from markdown code block")
+                logger.info("_parse_json_response: parsed from markdown code block")
                 return result
             except json.JSONDecodeError:
                 pass
@@ -599,7 +599,7 @@ class QualityGate:
         if match:
             try:
                 result = json.loads(match.group(0))
-                logger.info(f"_parse_json_response: parsed from embedded object")
+                logger.info("_parse_json_response: parsed from embedded object")
                 return result
             except json.JSONDecodeError:
                 pass

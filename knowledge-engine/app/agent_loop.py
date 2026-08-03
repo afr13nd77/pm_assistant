@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
-    from app.quality_gate import QualityResult
+    pass
 
 logger = logging.getLogger(__name__)
 

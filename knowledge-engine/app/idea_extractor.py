@@ -37,13 +37,13 @@ def extract_ideas(
 
     prompt = _build_extraction_prompt(report_content, business_context)
     if not prompt.strip():
-        logger.error(f"Failed to build extraction prompt (template missing?)")
+        logger.error("Failed to build extraction prompt (template missing?)")
         return []
 
     messages = [{"role": "user", "content": prompt}]
 
     try:
-        logger.info(f"Calling LLM for idea extraction, operation=report_to_ideas")
+        logger.info("Calling LLM for idea extraction, operation=report_to_ideas")
         response, meta = call_detailed(
             operation="report_to_ideas",
             messages=messages,
@@ -57,7 +57,7 @@ def extract_ideas(
 
     parsed = _parse_json_response(response)
     if not parsed:
-        logger.error(f"Failed to parse LLM response for idea extraction")
+        logger.error("Failed to parse LLM response for idea extraction")
         return []
 
     ideas = parsed.get("ideas", [])
@@ -112,12 +112,12 @@ def extract_ideas_full(
 
     prompt = _build_extraction_prompt(report_content, business_context)
     if not prompt.strip():
-        logger.error(f"Cannot build extraction prompt: template missing")
+        logger.error("Cannot build extraction prompt: template missing")
         return [], "prompt template missing"
 
     messages = [{"role": "user", "content": prompt}]
 
-    logger.info(f"Calling LLM for idea extraction, operation=report_to_ideas")
+    logger.info("Calling LLM for idea extraction, operation=report_to_ideas")
     response, meta = call_detailed(
         operation="report_to_ideas",
         messages=messages,
@@ -128,7 +128,7 @@ def extract_ideas_full(
 
     parsed = _parse_json_response(response)
     if not parsed:
-        logger.error(f"Failed to parse LLM response for idea extraction")
+        logger.error("Failed to parse LLM response for idea extraction")
         raise ValueError("Failed to parse LLM response for idea extraction")
 
     ideas = parsed.get("ideas", [])
@@ -188,10 +188,10 @@ def _build_extraction_prompt(
     report_content: str, business_context: str
 ) -> str:
     """Собрать промпт из шаблона report_to_ideas.txt."""
-    logger.info(f"Building extraction prompt from template report_to_ideas")
+    logger.info("Building extraction prompt from template report_to_ideas")
     template = _load_prompt("report_to_ideas")
     if not template:
-        logger.error(f"Cannot build prompt: template report_to_ideas.txt is empty or missing")
+        logger.error("Cannot build prompt: template report_to_ideas.txt is empty or missing")
         return ""
 
     prompt = template.replace("{business_context}", business_context)
@@ -207,7 +207,7 @@ def _parse_json_response(text: str) -> dict | None:
     # Try direct parse
     try:
         result = json.loads(text)
-        logger.info(f"JSON parsed directly")
+        logger.info("JSON parsed directly")
         return result
     except json.JSONDecodeError:
         pass
@@ -217,7 +217,7 @@ def _parse_json_response(text: str) -> dict | None:
     if match:
         try:
             result = json.loads(match.group(1))
-            logger.info(f"JSON parsed from markdown code block")
+            logger.info("JSON parsed from markdown code block")
             return result
         except json.JSONDecodeError:
             pass
@@ -227,7 +227,7 @@ def _parse_json_response(text: str) -> dict | None:
     if match:
         try:
             result = json.loads(match.group(0))
-            logger.info(f"JSON parsed from embedded object")
+            logger.info("JSON parsed from embedded object")
             return result
         except json.JSONDecodeError:
             pass

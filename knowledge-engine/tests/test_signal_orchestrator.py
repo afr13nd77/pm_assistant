@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 from datetime import datetime
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -27,7 +26,6 @@ from app.signal_orchestrator import (
     SignalOrchestrator,
     load_config_from_settings,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -1306,7 +1304,7 @@ class TestLangfuseTraceIntegration:
             SignalOrchestrator, "_load_business_context", return_value=""
         ):
             orch = SignalOrchestrator(str(tmp_vault), config)
-            run_state = orch.process_digest(sample_digest)
+            orch.process_digest(sample_digest)
 
         mock_lf.trace.assert_called_once()
         call_kwargs = mock_lf.trace.call_args.kwargs
