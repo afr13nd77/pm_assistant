@@ -5,6 +5,13 @@
 
 ---
 
+## 03.08.2026 — fix: quality_gate._extract_fields crash на reaction=report (BUG-026)
+
+- fix(knowledge-engine): `_extract_fields` проверял наличие ключа `"idea_draft" in analysis` вместо truthiness `analysis.get("idea_draft")`. Для `reaction=report` ключ всегда есть (dataclass __dict__), но значение None → `None.get("title")` → crash.
+- test: 4 новых теста в `test_quality_gate.py::TestExtractFieldsBug026` (report_brief, idea_draft, flat fallback, empty fallback)
+
+---
+
 ## 03.08.2026 — feat: Signal Chain Settings — UI настройка LLM-цепочек для News Moderator (BL-192)
 
 - feat(shared): `_DEFAULT_FALLBACK` для signal_triage/analysis/escalation → `["openrouter", "claude"]`

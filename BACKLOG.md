@@ -1,8 +1,8 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.20.0 / knowledge-engine 1.18.0 / idea-pipeline 1.2.0 / web-ui 1.28.0 / shared 0.7.3
-**Обновлён:** 03.08.2026 (BL-192 — реализовано)
-**Бэклог:** реализованные фичи (103), баги (26), идеи (50), итого (180)
+**Версии:** pm-bot 1.20.0 / knowledge-engine 1.18.1 / idea-pipeline 1.2.0 / web-ui 1.28.0 / shared 0.7.3
+**Обновлён:** 03.08.2026 (BL-193/BUG-026 — исправлено)
+**Бэклог:** реализованные фичи (103), баги (27), идеи (50), итого (181)
 
 ---
 
@@ -296,6 +296,7 @@
 | BL-129 | ✅ BUG-017 (health false positives) | knowledge-engine | Health scorer считал false positive broken links (вложения, @mentions, шаблоны) и dead ends (Jira-импорт). Fix: _is_ignorable_link() + исключение jira_key из dead_ends. Результат: -57 broken, -388 dead ends |
 | BL-160 | ✅ BUG-023 (jira-sync custom-named files) | knowledge-engine | Jira sync не обновлял статус vault-файлов с кастомными именами (E-*.md). Fix: fallback-поиск по jira_key в frontmatter в секциях UPDATED, CLOSED и import_single_issue. Partial update через frontmatter_utils вместо полного rewrite |
 | BL-165 | ✅ BUG-025 (_CLOSED_STATUSES raw values) | knowledge-engine | _CLOSED_STATUSES содержал сырые Jira-статусы вместо нормализованных — задачи со статусом "Отменена" не распознавались как закрытые. Fix: замена на нормализованные значения (done, deploy, staging, cancelled) |
+| BL-193 | ✅ BUG-026 (quality_gate report_brief crash) | knowledge-engine | `_extract_fields` падал на `reaction=report`: проверка `"idea_draft" in analysis` всегда True (dataclass key). Fix: truthiness check `analysis.get("idea_draft")` |
 
 ---
 
@@ -374,7 +375,7 @@
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
 | ✅ Реализовано | 103 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-192 |
-| ✅ Баги исправлены | 26 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165 |
+| ✅ Баги исправлены | 27 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165, BL-193 |
 | Идея | 50 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-188 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **180** | |
+| **Итого** | **181** | |

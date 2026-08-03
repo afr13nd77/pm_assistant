@@ -353,14 +353,14 @@ class QualityGate:
 
         Supports two shapes: idea_draft and report_brief.
         """
-        if "idea_draft" in analysis:
+        if analysis.get("idea_draft"):
             draft = analysis["idea_draft"]
             title = draft.get("title", "")
             problem = draft.get("problem", "")
             solution = draft.get("solution", "")
             domain = draft.get("domain", "general")
             logger.info(f"_extract_fields: using idea_draft shape")
-        elif "report_brief" in analysis:
+        elif analysis.get("report_brief"):
             brief = analysis["report_brief"]
             title = brief.get("topic", "")
             problem = "Нужен глубокий анализ"

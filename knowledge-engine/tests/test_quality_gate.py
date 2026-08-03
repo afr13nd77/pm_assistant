@@ -763,3 +763,92 @@ class TestQualityGateAgentLoopIntegration:
         assert isinstance(qr.passed, bool)
         assert isinstance(qr.score, int)
         assert isinstance(qr.issues, list)
+
+
+# ---------------------------------------------------------------------------
+# BUG-026: _extract_fields with None branches
+# ---------------------------------------------------------------------------
+
+
+class TestExtractFieldsBug026:
+    """BUG-026: _extract_fields must use truthiness, not key-existence checks.
+
+    When AnalysisResult.__dict__ always contains both 'idea_draft' and
+    'report_brief' keys (dataclass fields default to None), the old code
+    crashed with 'NoneType' object has no attribute 'get' because
+    ``"idea_draft" in analysis`` was always True even when the value was None.
+    """
+
+    def test_report_brief_when_idea_draft_is_none(self, tmp_path):
+        """reaction=report: idea_draft=None, report_brief has data -> use report_brief."""
+        gate = _gate(tmp_path)
+        analysis = {
+            "idea_draft": None,
+            "report_brief": {
+                "topic": "Market trends in OTA",
+                "questions": ["What drives growth?", "Who are competitors?"],
+                "scope": "OTA market 2026",
+            },
+        }
+
+        title, problem, solution, domain = gate._extract_fields(analysis)
+
+        assert title == "Market trends in OTA"
+        assert problem == "Нужен глубокий анализ"
+        assert "What drives growth?" in solution
+        assert "Who are competitors?" in solution
+        assert domain == "general"
+
+    def test_idea_draft_when_report_brief_is_none(self, tmp_path):
+        """reaction=idea: idea_draft has data, report_brief=None -> use idea_draft."""
+        gate = _gate(tmp_path)
+        analysis = {
+            "idea_draft": {
+                "title": "Add Redis caching",
+                "problem": "Search is slow",
+                "solution": "Implement Redis cache layer",
+                "domain": "search-engine",
+            },
+            "report_brief": None,
+        }
+
+        title, problem, solution, domain = gate._extract_fields(analysis)
+
+        assert title == "Add Redis caching"
+        assert problem == "Search is slow"
+        assert solution == "Implement Redis cache layer"
+        assert domain == "search-engine"
+
+    def test_both_none_uses_flat_fallback(self, tmp_path):
+        """Both idea_draft and report_brief are None -> flat dict fallback."""
+        gate = _gate(tmp_path)
+        analysis = {
+            "idea_draft": None,
+            "report_brief": None,
+            "title": "Fallback title",
+            "problem": "Fallback problem",
+            "solution": "Fallback solution",
+            "domain": "general",
+        }
+
+        title, problem, solution, domain = gate._extract_fields(analysis)
+
+        assert title == "Fallback title"
+        assert problem == "Fallback problem"
+        assert solution == "Fallback solution"
+        assert domain == "general"
+
+    def test_both_none_no_flat_keys_returns_empty(self, tmp_path):
+        """Both None and no flat keys -> empty strings with 'general' domain."""
+        gate = _gate(tmp_path)
+        analysis = {
+            "idea_draft": None,
+            "report_brief": None,
+        }
+
+        title, problem, solution, domain = gate._extract_fields(analysis)
+
+        assert title == ""
+        assert problem == ""
+        assert solution == ""
+        assert domain == "general"
