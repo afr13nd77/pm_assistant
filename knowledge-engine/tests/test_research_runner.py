@@ -19,7 +19,9 @@ from app.research_runner import (
     ResearchResult,
     ResearchTask,
     _check_existing_report,
+    _classify_by_reason,
     _collect_context,
+    _extract_and_classify,
     _format_report,
     _generate_internal_report,
     _move_task_file,
@@ -27,6 +29,7 @@ from app.research_runner import (
     _resolve_method,
     _run_completeness_check,
     _scan_queue,
+    _update_processed_json,
     process_task,
     run_all,
 )
@@ -60,7 +63,7 @@ class TestResearchTask:
     def test_report_filename(self):
         t = ResearchTask(topic="Test Topic", questions=["q1"], scope="s")
         today = date.today().isoformat()
-        assert t.report_filename == f"report-test-topic-{today}.md"
+        assert t.report_filename == f"{today}-test-topic.md"
 
     def test_defaults(self):
         t = ResearchTask(topic="t", questions=["q"], scope="s")
@@ -237,7 +240,7 @@ class TestCheckExistingReport:
     def test_existing_found(self, mock_reports, tmp_path):
         mock_reports.return_value = tmp_path
         task = ResearchTask(topic="New Topic", questions=["q"], scope="s")
-        report = tmp_path / f"report-{task.slug}-2026-01-01.md"
+        report = tmp_path / f"2026-01-01-{task.slug}.md"
         report.write_text("content", encoding="utf-8")
         result = _check_existing_report("/vault", task)
         assert result is not None
@@ -750,3 +753,197 @@ class TestRunAll:
         results = run_all("/vault")
         assert len(results) == 2
         assert all(r.error is not None for r in results)
+
+
+# ---------------------------------------------------------------------------
+# Outcome classification (BL-198): _classify_by_reason, _extract_and_classify,
+# _update_processed_json, and the outcome fields on process_task's result.
+# ---------------------------------------------------------------------------
+
+
+class TestOutcome:
+    @patch("app.research_runner._update_processed_json")
+    @patch("app.research_runner.update_frontmatter")
+    @patch("app.research_runner.dispatch_idea")
+    @patch("app.research_runner.extract_ideas_full")
+    def test_outcome_idea_dispatches_ideas(
+        self, mock_extract, mock_dispatch, mock_fm, mock_proc, tmp_path,
+    ):
+        mock_extract.return_value = (
+            [
+                {"title": "Idea 1", "rationale": "r1"},
+                {"title": "Idea 2", "rationale": "r2"},
+            ],
+            "",
+        )
+        mock_dispatch.side_effect = ["ref1", "ref2"]
+
+        report_path = tmp_path / "report.md"
+        report_path.write_text("content", encoding="utf-8")
+        task = ResearchTask(
+            topic="T", questions=["Q1"], scope="s",
+            source_path=tmp_path / "task.json",
+        )
+
+        outcome, details, count, refs = _extract_and_classify(
+            report_path=report_path,
+            task=task,
+            vault_path=str(tmp_path),
+            config=ModeratorConfig(),
+        )
+
+        assert outcome == "idea"
+        assert count == 2
+        assert refs == ["ref1", "ref2"]
+        assert mock_dispatch.call_count == 2
+
+        mock_fm.assert_called_once()
+        fm_path, fm_data = mock_fm.call_args[0]
+        assert fm_path == report_path
+        assert fm_data["outcome"] == "idea"
+        assert fm_data["ideas_count"] == 2
+
+    @patch("app.research_runner._update_processed_json")
+    @patch("app.research_runner.update_frontmatter")
+    @patch("app.research_runner.dispatch_idea")
+    @patch("app.research_runner.extract_ideas_full")
+    def test_outcome_not_relevant(
+        self, mock_extract, mock_dispatch, mock_fm, mock_proc, tmp_path,
+    ):
+        mock_extract.return_value = ([], "не наш профиль, другая отрасль")
+
+        report_path = tmp_path / "report.md"
+        report_path.write_text("content", encoding="utf-8")
+        task = ResearchTask(
+            topic="T", questions=["Q1"], scope="s",
+            source_path=tmp_path / "task.json",
+        )
+
+        outcome, details, count, refs = _extract_and_classify(
+            report_path=report_path,
+            task=task,
+            vault_path=str(tmp_path),
+            config=ModeratorConfig(),
+        )
+
+        assert outcome == "not_relevant"
+        assert "не наш профиль" in details
+        assert count == 0
+        mock_dispatch.assert_not_called()
+
+    @patch("app.research_runner._update_processed_json")
+    @patch("app.research_runner.update_frontmatter")
+    @patch("app.research_runner.dispatch_idea")
+    @patch("app.research_runner.extract_ideas_full")
+    def test_outcome_insight_default(
+        self, mock_extract, mock_dispatch, mock_fm, mock_proc, tmp_path,
+    ):
+        mock_extract.return_value = (
+            [], "тема интересная но без конкретных идей для продукта",
+        )
+
+        report_path = tmp_path / "report.md"
+        report_path.write_text("content", encoding="utf-8")
+        task = ResearchTask(
+            topic="T", questions=["Q1"], scope="s",
+            source_path=tmp_path / "task.json",
+        )
+
+        outcome, details, count, refs = _extract_and_classify(
+            report_path=report_path,
+            task=task,
+            vault_path=str(tmp_path),
+            config=ModeratorConfig(),
+        )
+
+        assert outcome == "insight"
+        mock_dispatch.assert_not_called()
+
+    @patch("app.research_runner.update_frontmatter")
+    @patch("app.research_runner.extract_ideas_full")
+    @patch("app.research_runner._move_task_file")
+    @patch("app.research_runner._write_report")
+    @patch("app.research_runner._run_completeness_check")
+    @patch("app.research_runner._generate_internal_report")
+    @patch("app.research_runner._collect_context")
+    @patch("app.research_runner._check_existing_report")
+    def test_outcome_error_does_not_block_report(
+        self, mock_check, mock_ctx, mock_gen, mock_comp, mock_write, mock_move,
+        mock_extract, mock_fm,
+    ):
+        """A crash inside idea extraction/classification must never poison the
+        already-written report or the overall ResearchResult.error field."""
+        mock_check.return_value = None
+        mock_ctx.return_value = {"business_context": "", "competitor_context": ""}
+        mock_gen.return_value = ("Report content " * 20, 100, 200)
+        mock_comp.return_value = (8, False, [])
+        mock_write.return_value = Path("/vault/wiki/reports/report-t.md")
+        mock_extract.side_effect = Exception("LLM timeout")
+
+        task = ResearchTask(
+            topic="T", questions=["Q1"], scope="s",
+            source_path=Path("/tmp/task.json"),
+        )
+        result = process_task(task, "/vault", ModeratorConfig())
+
+        assert result.report_path is not None
+        assert result.error is None
+        assert result.outcome == "error"
+        assert "LLM timeout" in result.outcome_details
+
+    @patch("app.research_runner._extract_and_classify")
+    @patch("app.research_runner._move_task_file")
+    @patch("app.research_runner._write_report")
+    @patch("app.research_runner._run_completeness_check")
+    @patch("app.research_runner._generate_internal_report")
+    @patch("app.research_runner._collect_context")
+    @patch("app.research_runner._check_existing_report")
+    def test_outcome_skipped_on_dry_run(
+        self, mock_check, mock_ctx, mock_gen, mock_comp, mock_write, mock_move,
+        mock_extract,
+    ):
+        mock_check.return_value = None
+        mock_ctx.return_value = {"business_context": "", "competitor_context": ""}
+        mock_gen.return_value = ("Content " * 30, 100, 200)
+        mock_comp.return_value = (8, False, [])
+
+        task = ResearchTask(
+            topic="T", questions=["Q1"], scope="s",
+            source_path=Path("/tmp/task.json"),
+        )
+        result = process_task(task, "/vault", ModeratorConfig(), dry_run=True)
+
+        mock_extract.assert_not_called()
+        assert result.outcome is None
+
+    def test_classify_by_reason_markers(self):
+        assert _classify_by_reason("") == "insight"
+        assert _classify_by_reason("Не наш профиль, другая отрасль") == "not_relevant"
+        assert _classify_by_reason("Нет пересечений с продуктом") == "not_relevant"
+        assert _classify_by_reason("Тема полезная, но конкретных идей нет") == "insight"
+        assert _classify_by_reason("Вне сферы деятельности компании") == "not_relevant"
+
+    @patch("app.research_runner.raw_research_queue_processed")
+    def test_update_processed_json(self, mock_processed, tmp_path):
+        proc_dir = tmp_path / "processed"
+        proc_dir.mkdir()
+        proc_file = proc_dir / "task.json"
+        proc_file.write_text(
+            json.dumps({"topic": "T", "questions": ["Q"], "scope": "s"}),
+            encoding="utf-8",
+        )
+        mock_processed.return_value = proc_dir
+
+        _update_processed_json(Path("/tmp/task.json"), {
+            "outcome": "idea",
+            "outcome_details": "",
+            "ideas_count": 2,
+            "ideas_refs": ["ref1", "ref2"],
+        })
+
+        data = json.loads(proc_file.read_text(encoding="utf-8"))
+        assert data["outcome"] == "idea"
+        assert data["ideas_count"] == 2
+        assert data["ideas_refs"] == ["ref1", "ref2"]
+        # original fields preserved
+        assert data["topic"] == "T"

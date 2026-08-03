@@ -85,6 +85,57 @@
           </div>
         </template>
 
+        <!-- Outcome block (BL-198) -->
+        <template v-if="drawerTask.outcome">
+          <div class="rq-drawer__field">
+            <label>Outcome</label>
+            <span class="rq-outcome-badge rq-outcome-badge--lg" :class="'rq-outcome--' + drawerTask.outcome">
+              {{ outcomeLabel(drawerTask.outcome, drawerTask.ideas_count) }}
+            </span>
+          </div>
+        </template>
+
+        <!-- Ideas list (BL-198) -->
+        <template v-if="drawerTask.outcome === 'idea' && drawerTask.ideas_refs && drawerTask.ideas_refs.length">
+          <div class="rq-drawer__field">
+            <label>Извлечённые идеи</label>
+            <ul class="rq-ideas-list">
+              <li v-for="ref in drawerTask.ideas_refs" :key="ref">{{ ref }}</li>
+            </ul>
+          </div>
+        </template>
+
+        <!-- No ideas reason (BL-198) -->
+        <template v-if="drawerTask.outcome && drawerTask.outcome !== 'idea' && drawerTask.outcome_details">
+          <div class="rq-drawer__field">
+            <label>Причина</label>
+            <p>{{ drawerTask.outcome_details }}</p>
+          </div>
+        </template>
+
+        <!-- Report drawer (BL-198) -->
+        <template v-if="drawerTask._category === 'report'">
+          <div class="rq-drawer__row">
+            <div class="rq-drawer__field">
+              <label>Completeness</label>
+              <span class="rq-completeness" :class="completenessClass(drawerTask.completeness)">
+                {{ drawerTask.completeness }}/10
+              </span>
+            </div>
+            <div class="rq-drawer__field">
+              <label>Date</label>
+              <span>{{ drawerTask.date || '---' }}</span>
+            </div>
+          </div>
+          <div class="rq-drawer__field" v-if="drawerTask.filename">
+            <label>Report</label>
+            <a :href="'obsidian://open?vault=pm-vault&file=wiki/reports/' + encodeURIComponent(drawerTask.filename)"
+               class="rq-report-link" target="_blank">
+              Открыть в Obsidian
+            </a>
+          </div>
+        </template>
+
         <!-- Failed-specific fields -->
         <template v-if="drawerTask._category === 'failed'">
           <div class="rq-drawer__field rq-drawer__field--error">
@@ -135,7 +186,7 @@
             </div>
 
             <!-- Processing -->
-            <div class="rq-node" data-node="processing" style="grid-column:3; grid-row:2;">
+            <div class="rq-node" data-node="processing" @click="expandedNode = null" style="grid-column:3; grid-row:2;">
               <span class="material-symbols-outlined rq-node__icon">sync</span>
               <div class="rq-node__title">Processing</div>
               <div class="rq-node__status">{{ isRunning ? 'Running...' : 'Idle' }}</div>
@@ -150,15 +201,16 @@
               <div class="rq-node__metric" v-if="summary.avg_completeness != null">avg: {{ summary.avg_completeness }}</div>
             </div>
 
-            <!-- Ghost: Reports -->
-            <div class="rq-node rq-node--ghost" data-node="reports" style="grid-column:5; grid-row:2;">
+            <!-- Reports -->
+            <div class="rq-node" :class="{ 'rq-node--active': reportsCount > 0 }"
+                 data-node="reports" @click="toggleNode('reports')" style="grid-column:5; grid-row:2;">
               <span class="material-symbols-outlined rq-node__icon">description</span>
               <div class="rq-node__title">Reports</div>
               <div class="rq-node__badge">{{ reportsCount }}</div>
             </div>
 
             <!-- Ghost: extract_ideas -->
-            <div class="rq-node rq-node--ghost" data-node="extract-ideas" style="grid-column:6; grid-row:2;">
+            <div class="rq-node rq-node--ghost" data-node="extract-ideas" @click="expandedNode = null" style="grid-column:6; grid-row:2;">
               <span class="material-symbols-outlined rq-node__icon">lightbulb</span>
               <div class="rq-node__title">extract_ideas</div>
             </div>
@@ -204,9 +256,12 @@
             <div class="rq-task-card__meta">
               <span v-if="task.signal_source" class="rq-tag">{{ task.signal_source }}</span>
               <span v-if="task.competitor" class="rq-tag rq-tag--comp">{{ task.competitor }}</span>
+              <span v-if="task.outcome" class="rq-outcome-badge" :class="'rq-outcome--' + task.outcome">
+                {{ outcomeLabel(task.outcome, task.ideas_count) }}
+              </span>
               <span class="rq-task-card__date">{{ formatDate(task) }}</span>
             </div>
-            <div v-if="expandedNode === 'processed' && task.completeness != null"
+            <div v-if="(expandedNode === 'processed' || expandedNode === 'reports') && task.completeness != null"
                  class="rq-completeness" :class="completenessClass(task.completeness)">
               {{ task.completeness }}/10
             </div>
@@ -237,6 +292,7 @@
         pending: [],
         processed: [],
         failed: [],
+        reports: [],
         summary: { pending: 0, processed: 0, failed: 0, avg_completeness: null },
         reportsCount: 0,
         expandedNode: null,
@@ -265,11 +321,12 @@
           case 'queue': return this.pending;
           case 'processed': return this.processed;
           case 'failed': return this.failed;
+          case 'reports': return this.reports;
           default: return [];
         }
       },
       expandedNodeTitle: function() {
-        var titles = { queue: 'Pending', processed: 'Processed', failed: 'Failed' };
+        var titles = { queue: 'Pending', processed: 'Processed', failed: 'Failed', reports: 'Reports' };
         return titles[this.expandedNode] || '';
       },
     },
@@ -282,6 +339,10 @@
           self.failed = (data.failed || []).map(function(t) { t._category = 'failed'; t._retrying = false; return t; });
           self.summary = data.summary || { pending: 0, processed: 0, failed: 0, avg_completeness: null };
           self.reportsCount = data.reports_count || 0;
+          self.reports = (data.reports || []).map(function(r) {
+            r._category = 'report';
+            return r;
+          });
           Vue.nextTick(function() { self.recalcEdges(); });
         }).catch(function(err) {
           if (err.name !== 'AbortError') {
@@ -359,6 +420,15 @@
         if (!d) return '';
         var m = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
         return m ? m[3] + '.' + m[2] + '.' + m[1] : d;
+      },
+      outcomeLabel: function(outcome, ideasCount) {
+        switch (outcome) {
+          case 'idea': return 'Идея (' + (ideasCount || 0) + ')';
+          case 'insight': return 'Инсайт';
+          case 'not_relevant': return 'Не релевантно';
+          case 'error': return 'Ошибка';
+          default: return '';
+        }
       },
       showToast: function(message, type) {
         var self = this;

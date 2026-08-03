@@ -18,6 +18,7 @@ from app.idea_extractor import (
     _load_report,
     _parse_json_response,
     extract_ideas,
+    extract_ideas_full,
 )
 
 
@@ -66,6 +67,11 @@ SAMPLE_LLM_RESPONSE = json.dumps({
 SAMPLE_LLM_NO_IDEAS = json.dumps({
     "ideas": [],
     "no_ideas_reason": "Report contains only internal metrics, no actionable opportunities",
+})
+
+SAMPLE_LLM_NO_IDEAS_RU = json.dumps({
+    "ideas": [],
+    "no_ideas_reason": "не наш профиль, другая отрасль",
 })
 
 PROMPT_TEMPLATE = """\
@@ -366,3 +372,124 @@ class TestExtractIdeas:
 
         assert len(ideas) == 2
         assert ideas[0]["source"] == "report"
+
+
+# ---------------------------------------------------------------------------
+# extract_ideas_full tests (T-02, BL-198)
+# ---------------------------------------------------------------------------
+
+class TestExtractIdeasFull:
+    @patch("app.idea_extractor._load_prompt", return_value=PROMPT_TEMPLATE)
+    @patch("app.idea_extractor.call_detailed")
+    def test_full_returns_ideas_and_empty_reason(
+        self, mock_call: MagicMock, mock_prompt: MagicMock,
+        report_file: Path, mock_config: MagicMock,
+    ):
+        """LLM returns 2 ideas with no_ideas_reason="" -> (ideas, "")."""
+        mock_call.return_value = (SAMPLE_LLM_RESPONSE, {"used": "claude"})
+
+        ideas, reason = extract_ideas_full(
+            report_path=report_file,
+            vault_path=str(report_file.parent),
+            business_context="OTA company context",
+            config=mock_config,
+        )
+
+        assert len(ideas) == 2
+        assert reason == ""
+        for idea in ideas:
+            assert idea["source"] == "report"
+            assert idea["report_ref"] == report_file.name
+
+    @patch("app.idea_extractor._load_prompt", return_value=PROMPT_TEMPLATE)
+    @patch("app.idea_extractor.call_detailed")
+    def test_full_returns_empty_ideas_with_reason(
+        self, mock_call: MagicMock, mock_prompt: MagicMock,
+        report_file: Path, mock_config: MagicMock,
+    ):
+        """LLM returns ideas=[] with a no_ideas_reason -> ([], reason)."""
+        mock_call.return_value = (SAMPLE_LLM_NO_IDEAS_RU, {"used": "claude"})
+
+        ideas, reason = extract_ideas_full(
+            report_path=report_file,
+            vault_path=str(report_file.parent),
+            business_context="context",
+            config=mock_config,
+        )
+
+        assert ideas == []
+        assert reason == "не наш профиль, другая отрасль"
+
+    @patch("app.idea_extractor._load_prompt", return_value=PROMPT_TEMPLATE)
+    @patch("app.idea_extractor.call_detailed")
+    def test_full_empty_report_returns_reason(
+        self, mock_call: MagicMock, mock_prompt: MagicMock,
+        empty_report_file: Path, mock_config: MagicMock,
+    ):
+        """Empty report -> ([], "empty report"), LLM is not called."""
+        ideas, reason = extract_ideas_full(
+            report_path=empty_report_file,
+            vault_path=str(empty_report_file.parent),
+            business_context="context",
+            config=mock_config,
+        )
+
+        assert ideas == []
+        assert reason == "empty report"
+        mock_call.assert_not_called()
+
+    @patch("app.idea_extractor._load_prompt", return_value=PROMPT_TEMPLATE)
+    @patch("app.idea_extractor.call_detailed")
+    def test_full_llm_error_raises(
+        self, mock_call: MagicMock, mock_prompt: MagicMock,
+        report_file: Path, mock_config: MagicMock,
+    ):
+        """LLM call failure must propagate, not be swallowed."""
+        mock_call.side_effect = Exception("API timeout")
+
+        with pytest.raises(Exception, match="API timeout"):
+            extract_ideas_full(
+                report_path=report_file,
+                vault_path=str(report_file.parent),
+                business_context="context",
+                config=mock_config,
+            )
+
+    @patch("app.idea_extractor._load_prompt", return_value=PROMPT_TEMPLATE)
+    @patch("app.idea_extractor.call_detailed")
+    def test_full_json_parse_error_raises(
+        self, mock_call: MagicMock, mock_prompt: MagicMock,
+        report_file: Path, mock_config: MagicMock,
+    ):
+        """Unparseable LLM response must raise ValueError."""
+        mock_call.return_value = ("not a json", {"used": "claude"})
+
+        with pytest.raises(ValueError):
+            extract_ideas_full(
+                report_path=report_file,
+                vault_path=str(report_file.parent),
+                business_context="context",
+                config=mock_config,
+            )
+
+    @patch("app.idea_extractor._load_prompt", return_value=PROMPT_TEMPLATE)
+    @patch("app.idea_extractor.call_detailed")
+    def test_original_extract_ideas_unchanged(
+        self, mock_call: MagicMock, mock_prompt: MagicMock,
+        report_file: Path, mock_config: MagicMock,
+    ):
+        """extract_ideas() keeps returning list[dict] (not a tuple) -- backward compat."""
+        mock_call.return_value = (SAMPLE_LLM_RESPONSE, {"used": "claude"})
+
+        result = extract_ideas(
+            report_path=report_file,
+            vault_path=str(report_file.parent),
+            business_context="context",
+            config=mock_config,
+        )
+
+        assert isinstance(result, list)
+        assert not isinstance(result, tuple)
+        assert len(result) == 2
+        for idea in result:
+            assert isinstance(idea, dict)

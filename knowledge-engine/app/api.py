@@ -208,7 +208,7 @@ def _match_report(slug: str, vault_path: str) -> dict | None:
     if not reports_dir.exists():
         return None
 
-    pattern = f"report-{slug}*.md"
+    pattern = f"*-{slug}*.md"
     matches = list(reports_dir.glob(pattern))
     if not matches:
         return None
@@ -224,10 +224,51 @@ def _match_report(slug: str, vault_path: str) -> dict | None:
             except ValueError:
                 completeness = None
         rel_path = str(report_file.relative_to(pathlib.Path(vault_path)))
-        return {"completeness": completeness, "report_path": rel_path}
+        return {
+            "completeness": completeness,
+            "report_path": rel_path,
+            "outcome": meta.get("outcome"),
+            "outcome_details": meta.get("outcome_details", ""),
+            "ideas_count": meta.get("ideas_count", 0),
+        }
     except Exception as exc:
         logger.warning(f"_match_report: failed to read frontmatter {report_file.name}: {exc}")
         return {"completeness": None, "report_path": str(report_file.relative_to(pathlib.Path(vault_path)))}
+
+
+def _build_reports_list(vault_path: str, limit: int = 50) -> list[dict]:
+    """Scan wiki/reports/ for research reports with frontmatter (BL-198)."""
+    logger.info("_build_reports_list: scanning")
+    reports_dir = _vp.wiki_reports()
+    if not reports_dir.exists():
+        logger.info("_build_reports_list: reports dir does not exist")
+        return []
+
+    from shared.frontmatter_utils import read_frontmatter
+
+    reports = []
+    for f in sorted(reports_dir.glob("*.md"), reverse=True):
+        if len(reports) >= limit:
+            break
+        try:
+            meta, _ = read_frontmatter(f)
+            if meta.get("type") != "research-report":
+                continue
+            reports.append({
+                "filename": f.name,
+                "topic": meta.get("topic", f.stem),
+                "date": meta.get("date", ""),
+                "outcome": meta.get("outcome"),
+                "outcome_details": meta.get("outcome_details", ""),
+                "ideas_count": meta.get("ideas_count", 0),
+                "completeness": meta.get("completeness"),
+                "signal_source": meta.get("signal_source", ""),
+            })
+        except Exception as exc:
+            logger.warning(f"_build_reports_list: failed to read {f.name}: {exc}")
+
+    logger.info(f"_build_reports_list: found {len(reports)} research reports")
+    return reports
 
 
 def _build_research_queue_status(vault_path: str) -> dict:
@@ -262,10 +303,16 @@ def _build_research_queue_status(vault_path: str) -> dict:
                         and report_info["completeness"] < 5
                     )
                     item["report_path"] = report_info["report_path"]
+                    item["outcome"] = report_info.get("outcome")
+                    item["outcome_details"] = report_info.get("outcome_details", "")
+                    item["ideas_count"] = report_info.get("ideas_count", 0)
                 else:
                     item["completeness"] = None
                     item["quality_warning"] = False
                     item["report_path"] = None
+                    item["outcome"] = None
+                    item["outcome_details"] = ""
+                    item["ideas_count"] = 0
                 item["method"] = "internal"
                 item["tokens_in"] = None
                 item["tokens_out"] = None
@@ -293,10 +340,8 @@ def _build_research_queue_status(vault_path: str) -> dict:
     )
 
     # Reports count
-    reports_dir = _vp.wiki_reports()
-    reports_count = 0
-    if reports_dir.exists():
-        reports_count = len(list(reports_dir.glob("report-*.md")))
+    reports_list = _build_reports_list(vault_path)
+    reports_count = len(reports_list)
 
     logger.info(
         f"_build_research_queue_status: pending={len(pending)}, "
@@ -314,6 +359,7 @@ def _build_research_queue_status(vault_path: str) -> dict:
             "failed": len(failed),
             "avg_completeness": avg_completeness,
         },
+        "reports": reports_list,
         "reports_count": reports_count,
     }
 

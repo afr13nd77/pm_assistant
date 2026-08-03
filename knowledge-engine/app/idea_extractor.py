@@ -79,6 +79,73 @@ def extract_ideas(
     return ideas
 
 
+def extract_ideas_full(
+    report_path: Path,
+    vault_path: str,
+    business_context: str,
+    config: Any,
+) -> tuple[list[dict], str]:
+    """Извлечь actionable идеи из аналитического отчёта (AC-38), включая причину отсутствия идей.
+
+    Расширенная версия extract_ideas(): вместо тихого проглатывания ошибок LLM-вызова
+    пробрасывает исключение вызывающему коду, а также возвращает no_ideas_reason.
+
+    Args:
+        report_path: путь к отчёту в vault
+        vault_path: корень vault
+        business_context: содержимое business-context-brief.md
+        config: ModeratorConfig с настройками
+
+    Returns:
+        tuple[list[dict], str]: (ideas, no_ideas_reason) — ideas совместим с write_idea()
+
+    Raises:
+        Exception: при ошибке вызова LLM (call_detailed)
+        ValueError: если не удалось распарсить ответ LLM
+    """
+    logger.info(f"Extracting ideas (full) from report: {report_path}")
+
+    report_content = _load_report(report_path)
+    if not report_content.strip():
+        logger.warning(f"Empty report, skipping idea extraction: {report_path}")
+        return [], "empty report"
+
+    prompt = _build_extraction_prompt(report_content, business_context)
+    if not prompt.strip():
+        logger.error(f"Cannot build extraction prompt: template missing")
+        return [], "prompt template missing"
+
+    messages = [{"role": "user", "content": prompt}]
+
+    logger.info(f"Calling LLM for idea extraction, operation=report_to_ideas")
+    response, meta = call_detailed(
+        operation="report_to_ideas",
+        messages=messages,
+        max_tokens=2000,
+        timeout=60,
+    )
+    logger.info(f"LLM call succeeded, provider={meta.get('used', 'unknown')}")
+
+    parsed = _parse_json_response(response)
+    if not parsed:
+        logger.error(f"Failed to parse LLM response for idea extraction")
+        raise ValueError("Failed to parse LLM response for idea extraction")
+
+    ideas = parsed.get("ideas", [])
+    no_ideas_reason = parsed.get("no_ideas_reason", "")
+
+    # Enrich each idea with source metadata (AC-39)
+    for idea in ideas:
+        idea["source"] = "report"
+        idea["report_ref"] = report_path.name
+
+    logger.info(
+        f"extract_ideas_full: {len(ideas)} ideas, "
+        f"reason={no_ideas_reason[:80] if no_ideas_reason else 'N/A'}"
+    )
+    return ideas, no_ideas_reason
+
+
 def _load_report(path: Path) -> str:
     """Прочитать отчёт, убрать frontmatter, ограничить ~3000 токенов."""
     logger.info(f"Loading report: {path}")

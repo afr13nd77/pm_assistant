@@ -1,8 +1,8 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.21.0 / knowledge-engine 1.20.0 / idea-pipeline 1.2.0 / web-ui 1.29.0 / shared 0.7.4
-**Обновлён:** 03.08.2026 (BL-195 — Research Queue UI реализован)
-**Бэклог:** реализованные фичи (105), баги (28), идеи (51), итого (184)
+**Версии:** pm-bot 1.21.0 / knowledge-engine 1.21.0 / idea-pipeline 1.2.0 / web-ui 1.30.0 / shared 0.7.4
+**Обновлён:** 03.08.2026 (BL-198 — Research Outcome реализован)
+**Бэклог:** реализованные фичи (106), баги (29), идеи (51), итого (186)
 
 ---
 
@@ -170,6 +170,7 @@
 | BL-169 | Диагностический endpoint для UI-страниц | pm-bot | `GET /api/v1/diagnostics/today` — проверяет все API-зависимости страницы TODAY за 1 запрос: статус каждого endpoint, наличие данных, дата последнего отчёта. Team Lead вызывает перед объявлением готовности. Расширяемо на другие страницы (`/diagnostics/{page}`). Мотивация: BL-168 live-testing (20 ошибок после "готово") |
 | BL-170 | DOM-валидация frontend-страниц (Node.js) | web-ui | Node.js скрипт валидации HTML/Vue: проверка CSS-классов на конфликты (отсутствие prefix), проверка `v-html` vs `{{ }}` для markdown-контента, проверка что все `@click` ссылаются на существующие методы. Расширение test-today-node.js. Мотивация: BL-168 — 6 из 20 ошибок были конфликты классов и неверные привязки |
 | BL-171 | Visual regression testing (Playwright) | web-ui, инфраструктура | Playwright + фикстурный vault: headless-браузер открывает каждую страницу, делает скриншоты блоков, сравнивает с baseline (pixel diff). Клик по интерактивным элементам → скриншот popup. Отчёт: список блоков с % отклонения. Docker-контейнер с тестовым vault. Мотивация: BL-168 — ручное тестирование 10 страниц неэффективно |
+| BL-197 | Управление LLM-промптами через UI | web-ui, pm-bot, knowledge-engine | Страница просмотра и редактирования промптов из `knowledge-engine/app/prompts/`. KE API: GET/PUT `/api/v1/prompts` (список файлов, чтение, запись). Proxy через vault_api + api.js. UI: список промптов, редактор с подсветкой переменных `{var}`, кнопка сохранения, diff с текущей версией. Без перезапуска контейнера (промпты читаются при каждом вызове). Мотивация: редактирование промптов сейчас требует доступа к файлам и пересборки Docker |
 
 ---
 
@@ -192,6 +193,7 @@
 | BL-191 | ✅ News Digest Converter | knowledge-engine | Конвертер daily-news markdown → JSON-дайджест. Парсинг markdown (frontmatter + regex items), CLI convert-news-digest, cron 07:55 Пн-Пт. 13 тестов |
 | BL-192 | ✅ Signal Chain Settings — UI настройка LLM-цепочек | shared, pm-bot, web-ui | Дефолт signal_* → ["openrouter", "claude"]. API поддержка signal_triage/analysis/escalation_fallback. 3 группы в Settings FALLBACK CHAINS с drag-and-drop |
 | BL-194 | ✅ Research Runner — обработчик research-queue | knowledge-engine, shared | Модуль подхвата заданий из `raw/inbound/research-queue/` (JSON от `dispatch_report`), генерация аналитических отчётов через LLM (Variant B — internal), completeness check, запись в `wiki/reports/`. CLI `research-run`, cron 08:05 Пн-Пт. 48 тестов. Downstream (`check_pending_reports` → `extract_ideas`) уже реализован. Спека: docs/BL-194_research-runner/ |
+| BL-198 | ✅ Research Outcome — автоматический вердикт и UI отчётов | knowledge-engine, web-ui | Автоматический outcome LLM после генерации отчёта (idea/insight/not_relevant/error). `extract_ideas_full()` + `_extract_and_classify()` в research_runner. Кликабельный Reports нод в Research Queue UI, outcome-бейджи, drawer для отчётов. API: reports[] + outcome в processed[]. Нейминг отчётов: `{date}-{slug}.md`. 20 новых тестов. Спека: docs/BL-198_research-outcome/ |
 
 ### 6.2 Идеи
 
@@ -379,8 +381,8 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 105 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-192, BL-194..BL-195 |
+| ✅ Реализовано | 106 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-192, BL-194..BL-195, BL-198 |
 | ✅ Баги исправлены | 29 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165, BL-193, BUG-027, BUG-028 |
-| Идея | 51 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-188, BL-196 |
+| Идея | 52 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-188, BL-196..BL-197 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **185** | |
+| **Итого** | **186** | |

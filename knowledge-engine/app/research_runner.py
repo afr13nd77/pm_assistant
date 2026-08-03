@@ -10,6 +10,7 @@ from datetime import date
 from pathlib import Path
 
 from shared.file_writer import atomic_write
+from shared.frontmatter_utils import update_frontmatter
 from shared.llm_client import call_detailed
 from shared.vault_paths import (
     raw_research_queue,
@@ -18,8 +19,10 @@ from shared.vault_paths import (
     wiki_reports,
 )
 
+from .idea_extractor import extract_ideas_full
 from .notifier import send_telegram
 from .quality_gate import QualityGate
+from .signal_moderator import AnalysisResult, dispatch_idea
 from .signal_orchestrator import ModeratorConfig, load_config_from_settings
 
 logger = logging.getLogger(__name__)
@@ -45,7 +48,7 @@ class ResearchTask:
     @property
     def report_filename(self) -> str:
         today = date.today().isoformat()
-        return f"report-{self.slug}-{today}.md"
+        return f"{today}-{self.slug}.md"
 
 
 @dataclass
@@ -61,6 +64,8 @@ class ResearchResult:
     tokens_out: int
     method: str
     error: str | None
+    outcome: str | None = None  # idea | insight | not_relevant | error | None (BL-198)
+    outcome_details: str = ""  # no_ideas_reason or error message, truncated (BL-198)
 
 
 class ResearchError(Exception):
@@ -320,6 +325,24 @@ def process_task(
     else:
         logger.info("process_task: dry_run=True, skipping write and move")
 
+    # 8a. Extract ideas and classify outcome (BL-198)
+    outcome: str | None = None
+    outcome_details = ""
+    ideas_refs: list[str] = []
+    extracted_ideas_count = 0
+
+    if report_path and not dry_run:
+        outcome, outcome_details, extracted_ideas_count, ideas_refs = _extract_and_classify(
+            report_path=Path(report_path),
+            task=task,
+            vault_path=vault_path,
+            config=config,
+        )
+        logger.info(
+            f"process_task: outcome classification done, outcome={outcome}, "
+            f"ideas_count={extracted_ideas_count}"
+        )
+
     # 9. Notify completion
     if notify:
         msg = f"Отчёт готов: {task.topic}. Completeness: {score}/10."
@@ -337,17 +360,185 @@ def process_task(
         report_path=report_path,
         completeness=score,
         quality_warning=quality_warning,
-        ideas_count=0,
+        ideas_count=extracted_ideas_count,
         tokens_in=tokens_in,
         tokens_out=tokens_out,
         method=method,
         error=None,
+        outcome=outcome,
+        outcome_details=outcome_details,
     )
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+_NOT_RELEVANT_MARKERS = [
+    "не наш профиль",
+    "нет пересечений",
+    "не релевантно",
+    "вне сферы",
+    "не применимо",
+    "не связано с нашим",
+    "другая отрасль",
+    "нет связи с продуктом",
+]
+
+
+def _classify_by_reason(reason: str) -> str:
+    """Classify no_ideas_reason into 'insight' or 'not_relevant' via marker match (BL-198)."""
+    if not reason:
+        logger.info("_classify_by_reason: empty reason, defaulting to 'insight'")
+        return "insight"
+
+    reason_lower = reason.lower()
+    for marker in _NOT_RELEVANT_MARKERS:
+        if marker in reason_lower:
+            logger.info(f"_classify_by_reason: matched marker '{marker}', outcome=not_relevant")
+            return "not_relevant"
+
+    logger.info("_classify_by_reason: no marker matched, outcome=insight")
+    return "insight"
+
+
+def _extract_and_classify(
+    report_path: Path,
+    task: ResearchTask,
+    vault_path: str,
+    config: ModeratorConfig,
+) -> tuple[str, str, int, list[str]]:
+    """Extract ideas from a report and classify the research outcome (BL-198).
+
+    Loads business context, calls extract_ideas_full() to get ideas plus the
+    no_ideas_reason, classifies the outcome (idea | insight | not_relevant),
+    dispatches each extracted idea into the vault, and persists the outcome
+    both in the report's frontmatter and in the moved processed/ JSON task
+    file.
+
+    Never raises: any failure is caught, logged, and reported as
+    outcome="error" so a broken idea-extraction step can never leave the
+    already-saved report or already-moved task file in an inconsistent state.
+
+    Returns: (outcome, outcome_details, ideas_count, ideas_refs)
+    """
+    logger.info(f"_extract_and_classify: starting for {report_path.name}")
+
+    try:
+        # Load business context
+        bc_path = Path(vault_path) / "wiki" / "concepts" / "business-context-brief.md"
+        business_context = ""
+        if bc_path.exists():
+            try:
+                business_context = bc_path.read_text(encoding="utf-8")
+                logger.info(
+                    f"_extract_and_classify: business context loaded, "
+                    f"{len(business_context)} chars"
+                )
+            except Exception as exc:
+                logger.error(f"_extract_and_classify: failed to read business context: {exc}")
+        else:
+            logger.info(f"_extract_and_classify: business context file not found: {bc_path}")
+
+        ideas, no_ideas_reason = extract_ideas_full(
+            report_path, vault_path, business_context, config,
+        )
+        logger.info(
+            f"_extract_and_classify: extract_ideas_full done, ideas={len(ideas)}, "
+            f"no_ideas_reason={no_ideas_reason[:80] if no_ideas_reason else 'N/A'}"
+        )
+
+        if ideas:
+            outcome = "idea"
+            outcome_details = ""
+        else:
+            outcome = _classify_by_reason(no_ideas_reason)
+            outcome_details = no_ideas_reason[:500]
+
+        # Dispatch each extracted idea into the vault (AC-08)
+        ideas_refs: list[str] = []
+        for idea in ideas:
+            idea_title = idea.get("title", "")[:60]
+            logger.info(f"_extract_and_classify: dispatching idea '{idea_title}'")
+            ref = dispatch_idea(
+                item={"title": task.topic, "date": date.today().isoformat()},
+                analysis=AnalysisResult(
+                    reaction="idea",
+                    analysis=idea.get("rationale", ""),
+                    idea_draft=idea,
+                ),
+                vault_path=vault_path,
+                notify=True,
+                dry_run=False,
+            )
+            if ref:
+                ideas_refs.append(ref)
+            else:
+                logger.warning(
+                    f"_extract_and_classify: dispatch_idea returned None for '{idea_title}'"
+                )
+
+        # Persist outcome in report frontmatter
+        update_frontmatter(report_path, {
+            "outcome": outcome,
+            "outcome_details": outcome_details,
+            "ideas_count": len(ideas),
+            "ideas_refs": ideas_refs,
+        })
+        logger.info(f"_extract_and_classify: frontmatter updated, outcome={outcome}")
+
+        # Persist outcome in the moved processed/ JSON task file
+        _update_processed_json(task.source_path, {
+            "outcome": outcome,
+            "outcome_details": outcome_details,
+            "ideas_count": len(ideas),
+            "ideas_refs": ideas_refs,
+        })
+
+        logger.info(
+            f"_extract_and_classify: done, outcome={outcome}, ideas_count={len(ideas)}"
+        )
+        return outcome, outcome_details, len(ideas), ideas_refs
+
+    except Exception as exc:
+        logger.error(f"_extract_and_classify: failed: {exc}", exc_info=True)
+        try:
+            update_frontmatter(report_path, {
+                "outcome": "error",
+                "outcome_details": str(exc)[:200],
+                "ideas_count": 0,
+                "ideas_refs": [],
+            })
+            logger.info("_extract_and_classify: recorded outcome=error in frontmatter")
+        except Exception as fm_exc:
+            logger.error(
+                f"_extract_and_classify: failed to record error in frontmatter: {fm_exc}"
+            )
+        return "error", str(exc)[:200], 0, []
+
+
+def _update_processed_json(source_path: Path, outcome_data: dict) -> None:
+    """Append outcome fields into the moved processed/ JSON task file (BL-198).
+
+    By the time this runs, _move_task_file() has already relocated the task
+    JSON from queue/ to processed/, so we look it up there by filename.
+    """
+    logger.info(f"_update_processed_json: updating {source_path.name}")
+    proc_dir = raw_research_queue_processed()
+    proc_path = proc_dir / source_path.name
+
+    if not proc_path.exists():
+        logger.warning(f"_update_processed_json: file not found: {proc_path}")
+        return
+
+    try:
+        data = json.loads(proc_path.read_text(encoding="utf-8"))
+        data.update(outcome_data)
+        atomic_write(proc_path, json.dumps(data, ensure_ascii=False, indent=2))
+        logger.info(f"_update_processed_json: success, path={proc_path}")
+    except Exception as exc:
+        logger.error(f"_update_processed_json: failed to update {proc_path}: {exc}")
 
 
 def _scan_queue(vault_path: str, target_file: str | None = None) -> list[Path]:
@@ -420,7 +611,7 @@ def _check_existing_report(vault_path: str, task: ResearchTask) -> Path | None:
         logger.info(f"_check_existing_report: reports directory does not exist")
         return None
 
-    pattern = f"report-{task.slug}*"
+    pattern = f"*-{task.slug}*"
     matches = list(reports_dir.glob(pattern))
     logger.info(f"_check_existing_report: glob '{pattern}' found {len(matches)} match(es)")
 

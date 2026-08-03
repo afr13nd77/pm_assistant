@@ -7,6 +7,22 @@
 
 ## 03.08.2026
 
+### knowledge-engine 1.21.0
+- **feat:** BL-198 Research Outcome — автоматический вердикт LLM после генерации отчёта (idea/insight/not_relevant/error)
+- **feat:** `extract_ideas_full()` в idea_extractor — расширенная версия с возвратом no_ideas_reason
+- **feat:** `_extract_and_classify()` в research_runner — шаг 8a: extract_ideas → classify → dispatch_idea → frontmatter + JSON
+- **feat:** API `_build_reports_list()` — список research-отчётов с frontmatter для UI
+- **feat:** Outcome в processed[] API-ответа, массив reports[] в /api/v1/research-queue/status
+- **fix:** glob-паттерн `report-*.md` → `*-{slug}*.md` в _match_report() и reports_count (регрессия от переименования)
+- **test:** 20 новых тестов (extract_ideas_full, outcome classification, API reports_list, match_report)
+
+### web-ui 1.30.0
+- **feat:** BL-198 Reports нод кликабельный — список research-отчётов с outcome-бейджами
+- **feat:** Outcome-бейджи в карточках processed и reports (Идея/Инсайт/Не релевантно/Ошибка)
+- **feat:** Расширение drawer: outcome, извлечённые идеи, причина отсутствия идей, Obsidian link для отчётов
+- **fix:** Нейминг отчётов `report-{slug}-{date}.md` → `{date}-{slug}.md`
+- **fix:** Клик по нодам Processing и extract_ideas теперь закрывает открытый список (раньше игнорировался)
+
 ### knowledge-engine 1.20.2
 - **fix:** BUG-028 `process_task` сохранял мусорные отчёты (completeness=0) вместо отклонения: reject gate при score < threshold → failed/, полная перегенерация при score < 2, порог из `config.completeness_threshold`
 - **test:** 4 новых теста в `test_research_runner.py` (catastrophic regeneration, rejected→failed, partial supplement, score=threshold)

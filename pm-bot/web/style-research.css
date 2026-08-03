@@ -584,3 +584,61 @@
     right: -100vw;
   }
 }
+
+/* ================================================================
+   OUTCOME BADGES (BL-198)
+   ================================================================ */
+
+.rq-outcome-badge {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--rad);
+  text-transform: uppercase;
+  font-weight: 600;
+  white-space: nowrap;
+  display: inline-block;
+}
+
+.rq-outcome-badge--lg {
+  font-size: 12px;
+  padding: 4px 12px;
+}
+
+.rq-outcome--idea {
+  background: rgba(52, 211, 153, 0.12);
+  color: var(--g);
+}
+
+.rq-outcome--insight {
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--cyan, #22d3ee);
+}
+
+.rq-outcome--not_relevant {
+  background: rgba(128, 128, 128, 0.12);
+  color: var(--text-muted);
+}
+
+.rq-outcome--error {
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--r);
+}
+
+/* Ideas list in drawer */
+.rq-ideas-list {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 0 0;
+}
+
+.rq-ideas-list li {
+  font-size: 12px;
+  color: var(--text-body);
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.rq-ideas-list li:last-child {
+  border-bottom: none;
+}
