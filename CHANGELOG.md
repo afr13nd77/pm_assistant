@@ -7,6 +7,10 @@
 
 ## 03.08.2026
 
+### knowledge-engine 1.20.2
+- **fix:** BUG-028 `process_task` сохранял мусорные отчёты (completeness=0) вместо отклонения: reject gate при score < threshold → failed/, полная перегенерация при score < 2, порог из `config.completeness_threshold`
+- **test:** 4 новых теста в `test_research_runner.py` (catastrophic regeneration, rejected→failed, partial supplement, score=threshold)
+
 ### knowledge-engine 1.20.1
 - **fix:** BUG-027 `dispatch_report` записывал домен источника новости (skift.com, TechCrunch) в поле `competitor` research-queue JSON вместо реального конкурента
 - **fix:** промпт `signal_analyze.txt` — LLM теперь извлекает `competitor` в `report_brief`; `signal_orchestrator._process_item` передаёт entity из `scoring.matched_entities` как fallback в `_handle_report`/`dispatch_report`

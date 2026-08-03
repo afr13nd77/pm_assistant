@@ -223,45 +223,93 @@ def process_task(
         f"quality_warning={quality_warning}, unanswered={unanswered}"
     )
 
-    # 6. Retry if completeness < 4
-    if score < 4 and unanswered:
-        logger.info(
-            f"process_task: completeness {score} < 4, "
-            f"retrying with unanswered questions: {unanswered}"
-        )
-        retry_questions = [
-            task.questions[i - 1]
-            for i in unanswered
-            if 0 < i <= len(task.questions)
-        ]
-        if retry_questions:
-            retry_task = ResearchTask(
-                topic=task.topic,
-                questions=retry_questions,
-                scope=f"Дополнительное исследование: ответить на неотвеченные вопросы. {task.scope}",
-                signal_source=task.signal_source,
-                signal_date=task.signal_date,
-                competitor=task.competitor,
-                source_path=task.source_path,
+    # 6. Retry if completeness below threshold
+    min_score = config.completeness_threshold  # default 6 from settings.yaml
+    retry_score = min(4, min_score)  # retry trigger, at most 4
+
+    if score < retry_score:
+        if score < 2:
+            # 6a. Catastrophic quality — full regeneration (discard garbage)
+            logger.warning(
+                f"process_task: catastrophic quality (score={score}), "
+                f"full regeneration"
             )
-            logger.info(
-                f"process_task: retry with {len(retry_questions)} unanswered questions"
+            content, t_in_r, t_out_r = _generate_internal_report(
+                task, context, config,
             )
-            retry_content, t_in, t_out = _generate_internal_report(
-                retry_task, context, config,
-            )
-            tokens_in += t_in
-            tokens_out += t_out
-            content = content + "\n\n---\n\n## Дополнение\n\n" + retry_content
-            score, quality_warning, _ = _run_completeness_check(
+            tokens_in += t_in_r
+            tokens_out += t_out_r
+            score, quality_warning, unanswered = _run_completeness_check(
                 content, task.questions, vault_path, config,
             )
             logger.info(
-                f"process_task: after retry completeness score={score}, "
+                f"process_task: after regeneration score={score}, "
                 f"quality_warning={quality_warning}"
             )
+        elif unanswered:
+            # 6b. Partial quality — append supplement for unanswered questions
+            logger.info(
+                f"process_task: completeness {score} < {retry_score}, "
+                f"retrying with unanswered questions: {unanswered}"
+            )
+            retry_questions = [
+                task.questions[i - 1]
+                for i in unanswered
+                if 0 < i <= len(task.questions)
+            ]
+            if retry_questions:
+                retry_task = ResearchTask(
+                    topic=task.topic,
+                    questions=retry_questions,
+                    scope=f"Дополнительное исследование: ответить на неотвеченные вопросы. {task.scope}",
+                    signal_source=task.signal_source,
+                    signal_date=task.signal_date,
+                    competitor=task.competitor,
+                    source_path=task.source_path,
+                )
+                logger.info(
+                    f"process_task: retry with {len(retry_questions)} unanswered questions"
+                )
+                retry_content, t_in_r, t_out_r = _generate_internal_report(
+                    retry_task, context, config,
+                )
+                tokens_in += t_in_r
+                tokens_out += t_out_r
+                content = content + "\n\n---\n\n## Дополнение\n\n" + retry_content
+                score, quality_warning, _ = _run_completeness_check(
+                    content, task.questions, vault_path, config,
+                )
+                logger.info(
+                    f"process_task: after supplement score={score}, "
+                    f"quality_warning={quality_warning}"
+                )
 
-    # 7. Format + write
+    # 7. Reject gate: if score still below threshold after retry, move to failed
+    if score < min_score and not dry_run:
+        logger.warning(
+            f"process_task: rejecting report, score={score} < {min_score}, "
+            f"moving to failed"
+        )
+        _move_task_file(task.source_path, "failed", vault_path)
+        if notify:
+            msg = (
+                f"Отчёт отклонён: {task.topic}. "
+                f"Completeness: {score}/{min_score}. Задание в failed/."
+            )
+            send_telegram(msg, parse_mode=None)
+        return ResearchResult(
+            topic=task.topic,
+            report_path=None,
+            completeness=score,
+            quality_warning=True,
+            ideas_count=0,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            method=method,
+            error=f"Rejected: completeness {score} < {min_score}",
+        )
+
+    # 8. Format + write (score >= min_score or dry_run)
     formatted = _format_report(content, task, score)
     report_path: str | None = None
     if not dry_run:
@@ -272,7 +320,7 @@ def process_task(
     else:
         logger.info("process_task: dry_run=True, skipping write and move")
 
-    # 8. Notify completion
+    # 9. Notify completion
     if notify:
         msg = f"Отчёт готов: {task.topic}. Completeness: {score}/10."
         if quality_warning:

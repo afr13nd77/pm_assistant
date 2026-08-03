@@ -555,6 +555,128 @@ class TestProcessTask:
         assert result.tokens_out == 160  # 100 + 60
         assert mock_gen.call_count == 2
 
+    @patch("app.research_runner._move_task_file")
+    @patch("app.research_runner._write_report")
+    @patch("app.research_runner._run_completeness_check")
+    @patch("app.research_runner._generate_internal_report")
+    @patch("app.research_runner._collect_context")
+    @patch("app.research_runner._check_existing_report")
+    def test_catastrophic_quality_full_regeneration(
+        self, mock_check, mock_ctx, mock_gen, mock_comp, mock_write, mock_move,
+    ):
+        """BUG-028: score < 2 triggers full regeneration, not supplement."""
+        mock_check.return_value = None
+        mock_ctx.return_value = {"business_context": "", "competitor_context": ""}
+        mock_gen.side_effect = [
+            ("Garbage " * 50, 100, 200),      # first: garbage
+            ("Good content " * 50, 100, 200),  # regeneration: good
+        ]
+        mock_comp.side_effect = [
+            (0, True, []),   # first check: catastrophic
+            (8, False, []),  # after regeneration: good
+        ]
+        mock_write.return_value = Path("/vault/wiki/reports/report-t.md")
+
+        task = ResearchTask(
+            topic="T", questions=["Q1"], scope="s",
+            source_path=Path("/tmp/task.json"),
+        )
+        result = process_task(task, "/vault", ModeratorConfig())
+        assert result.completeness == 8
+        assert result.error is None
+        assert mock_gen.call_count == 2
+        mock_move.assert_called_once_with(Path("/tmp/task.json"), "processed", "/vault")
+
+    @patch("app.research_runner._move_task_file")
+    @patch("app.research_runner._write_report")
+    @patch("app.research_runner._run_completeness_check")
+    @patch("app.research_runner._generate_internal_report")
+    @patch("app.research_runner._collect_context")
+    @patch("app.research_runner._check_existing_report")
+    def test_rejected_report_goes_to_failed(
+        self, mock_check, mock_ctx, mock_gen, mock_comp, mock_write, mock_move,
+    ):
+        """BUG-028: if score stays below threshold after retry, move to failed."""
+        mock_check.return_value = None
+        mock_ctx.return_value = {"business_context": "", "competitor_context": ""}
+        mock_gen.side_effect = [
+            ("Bad content " * 20, 50, 100),   # first attempt
+            ("Still bad " * 20, 50, 100),     # regeneration attempt
+        ]
+        mock_comp.side_effect = [
+            (1, True, []),   # first check: catastrophic
+            (2, True, []),   # after regeneration: still bad
+        ]
+
+        task = ResearchTask(
+            topic="T", questions=["Q1"], scope="s",
+            source_path=Path("/tmp/task.json"),
+        )
+        result = process_task(task, "/vault", ModeratorConfig())
+        assert result.completeness == 2
+        assert result.error is not None
+        assert "Rejected" in result.error
+        assert result.report_path is None
+        mock_write.assert_not_called()
+        mock_move.assert_called_once_with(Path("/tmp/task.json"), "failed", "/vault")
+
+    @patch("app.research_runner._move_task_file")
+    @patch("app.research_runner._write_report")
+    @patch("app.research_runner._run_completeness_check")
+    @patch("app.research_runner._generate_internal_report")
+    @patch("app.research_runner._collect_context")
+    @patch("app.research_runner._check_existing_report")
+    def test_partial_quality_supplement_then_accept(
+        self, mock_check, mock_ctx, mock_gen, mock_comp, mock_write, mock_move,
+    ):
+        """BUG-028: score 2-3 with unanswered triggers supplement, not regeneration."""
+        mock_check.return_value = None
+        mock_ctx.return_value = {"business_context": "", "competitor_context": ""}
+        mock_gen.side_effect = [
+            ("Partial content " * 20, 50, 100),
+            ("Supplement " * 20, 30, 60),
+        ]
+        mock_comp.side_effect = [
+            (3, False, [1]),   # partial quality with unanswered
+            (7, False, []),    # after supplement: good
+        ]
+        mock_write.return_value = Path("/vault/wiki/reports/report-t.md")
+
+        task = ResearchTask(
+            topic="T", questions=["Q1"], scope="s",
+            source_path=Path("/tmp/task.json"),
+        )
+        result = process_task(task, "/vault", ModeratorConfig())
+        assert result.completeness == 7
+        assert result.error is None
+        mock_move.assert_called_once_with(Path("/tmp/task.json"), "processed", "/vault")
+
+    @patch("app.research_runner._move_task_file")
+    @patch("app.research_runner._write_report")
+    @patch("app.research_runner._run_completeness_check")
+    @patch("app.research_runner._generate_internal_report")
+    @patch("app.research_runner._collect_context")
+    @patch("app.research_runner._check_existing_report")
+    def test_score_at_threshold_passes(
+        self, mock_check, mock_ctx, mock_gen, mock_comp, mock_write, mock_move,
+    ):
+        """BUG-028: score == completeness_threshold should pass."""
+        mock_check.return_value = None
+        mock_ctx.return_value = {"business_context": "", "competitor_context": ""}
+        mock_gen.return_value = ("OK content " * 30, 100, 200)
+        mock_comp.return_value = (6, False, [])
+        mock_write.return_value = Path("/vault/wiki/reports/report-t.md")
+
+        task = ResearchTask(
+            topic="T", questions=["Q1"], scope="s",
+            source_path=Path("/tmp/task.json"),
+        )
+        result = process_task(task, "/vault", ModeratorConfig())
+        assert result.completeness == 6
+        assert result.error is None
+        assert result.report_path is not None
+        mock_move.assert_called_once_with(Path("/tmp/task.json"), "processed", "/vault")
+
     @patch("app.research_runner._check_existing_report")
     @patch("app.research_runner._collect_context")
     @patch("app.research_runner._generate_internal_report")

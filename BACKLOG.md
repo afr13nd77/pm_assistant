@@ -301,6 +301,7 @@
 | BL-165 | ✅ BUG-025 (_CLOSED_STATUSES raw values) | knowledge-engine | _CLOSED_STATUSES содержал сырые Jira-статусы вместо нормализованных — задачи со статусом "Отменена" не распознавались как закрытые. Fix: замена на нормализованные значения (done, deploy, staging, cancelled) |
 | BL-193 | ✅ BUG-026 (quality_gate report_brief crash) | knowledge-engine | `_extract_fields` падал на `reaction=report`: проверка `"idea_draft" in analysis` всегда True (dataclass key). Fix: truthiness check `analysis.get("idea_draft")` |
 | — | ✅ BUG-027 (signal_moderator competitor misclassification) | knowledge-engine | `dispatch_report` записывал домен источника новости (skift.com, TechCrunch) в поле `competitor` research-queue JSON вместо реального конкурента. Fix: LLM извлекает `competitor` в `report_brief` (промпт `signal_analyze.txt`), `_process_item` в `signal_orchestrator.py` передаёт entity из `scoring.matched_entities` как fallback через `_handle_report(..., competitor=...)` → `dispatch_report(..., competitor=...)` |
+| — | ✅ BUG-028 (research_runner no quality gate) | knowledge-engine | `process_task` сохранял мусорные отчёты (completeness=0, quality_warning=True) вместо отклонения. Fix: reject gate при score < threshold → failed/, полная перегенерация при score < 2 (catastrophic), порог из `config.completeness_threshold` |
 
 ---
 
@@ -379,7 +380,7 @@
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
 | ✅ Реализовано | 105 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-192, BL-194..BL-195 |
-| ✅ Баги исправлены | 28 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165, BL-193, BUG-027 |
+| ✅ Баги исправлены | 29 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165, BL-193, BUG-027, BUG-028 |
 | Идея | 51 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-188, BL-196 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **184** | |
+| **Итого** | **185** | |
