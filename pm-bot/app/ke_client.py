@@ -325,3 +325,38 @@ def digest_status() -> dict:
     """Get digest coverage statistics."""
     logger.info("digest_status: fetching coverage stats")
     return _get("/api/v1/digest/status", _get_timeout("default"))
+
+
+# ---------------------------------------------------------------------------
+# 27. GET /api/v1/research-queue/status
+# ---------------------------------------------------------------------------
+
+def research_queue_status() -> dict:
+    """Get research queue status (pending/processed/failed)."""
+    logger.info("research_queue_status: fetching")
+    return _get("/api/v1/research-queue/status", _get_timeout("default"))
+
+
+# ---------------------------------------------------------------------------
+# 28. POST /api/v1/research-queue/run
+# ---------------------------------------------------------------------------
+
+def research_queue_run(target_file: Optional[str] = None, notify: bool = False) -> dict:
+    """Trigger research-run for all pending or specific file."""
+    logger.info("research_queue_run: target_file=%s, notify=%s", target_file, notify)
+    body: dict = {"notify": notify}
+    if target_file:
+        body["target_file"] = target_file
+    return _post("/api/v1/research-queue/run", _get_timeout("research_run"),
+                 json=body)
+
+
+# ---------------------------------------------------------------------------
+# 29. POST /api/v1/research-queue/retry
+# ---------------------------------------------------------------------------
+
+def research_queue_retry(filename: str) -> dict:
+    """Retry a failed research task."""
+    logger.info("research_queue_retry: filename=%s", filename)
+    return _post("/api/v1/research-queue/retry", _get_timeout("research_run"),
+                 json={"filename": filename})

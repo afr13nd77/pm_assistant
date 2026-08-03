@@ -137,6 +137,37 @@ def run_all(
     return results
 
 
+def retry_failed_task(
+    filename: str,
+    vault_path: str,
+) -> list[ResearchResult]:
+    """Move a task from failed/ back to queue/ and re-process it."""
+    logger.info(f"retry_failed_task: starting, filename={filename}")
+    try:
+        failed_dir = raw_research_queue_failed()
+        queue_dir = raw_research_queue()
+        source = failed_dir / filename
+
+        if not source.exists():
+            logger.error(f"retry_failed_task: file not found in failed/: {filename}")
+            raise FileNotFoundError(f"File not found in failed/: {filename}")
+
+        shutil.move(str(source), str(queue_dir / filename))
+        logger.info(f"retry_failed_task: moved {filename} from failed/ to queue/")
+
+        results = run_all(vault_path, target_file=filename)
+        logger.info(
+            f"retry_failed_task: completed, results={len(results)}, "
+            f"errors={sum(1 for r in results if r.error)}"
+        )
+        return results
+    except FileNotFoundError:
+        raise
+    except Exception as exc:
+        logger.error(f"retry_failed_task: unexpected error: {exc}", exc_info=True)
+        raise
+
+
 def process_task(
     task: ResearchTask,
     vault_path: str,

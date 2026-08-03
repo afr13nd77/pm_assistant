@@ -543,6 +543,31 @@ var api = {
   /** GET /api/v1/reports?type=... -- latest report for today page (filtered) */
   todayLatestReport: function() {
     return apiFetch('/reports?type=weekly-status-report,feature-analysis-report');
+  },
+
+  /** GET /api/v1/research-queue/status */
+  researchStatus: function() {
+    return apiFetch('/research-queue/status');
+  },
+
+  /** POST /api/v1/research-queue/run */
+  researchRun: function(targetFile) {
+    var body = {};
+    if (targetFile) body.target_file = targetFile;
+    return apiFetch('/research-queue/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  },
+
+  /** POST /api/v1/research-queue/retry */
+  researchRetry: function(filename) {
+    return apiFetch('/research-queue/retry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: filename })
+    });
   }
 };
 

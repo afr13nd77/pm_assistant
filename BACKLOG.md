@@ -1,8 +1,8 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.20.0 / knowledge-engine 1.19.0 / idea-pipeline 1.2.0 / web-ui 1.28.0 / shared 0.7.4
-**Обновлён:** 03.08.2026 (BL-194 — Research Runner реализован)
-**Бэклог:** реализованные фичи (104), баги (27), идеи (52), итого (184)
+**Версии:** pm-bot 1.21.0 / knowledge-engine 1.20.0 / idea-pipeline 1.2.0 / web-ui 1.29.0 / shared 0.7.4
+**Обновлён:** 03.08.2026 (BL-195 — Research Queue UI реализован)
+**Бэклог:** реализованные фичи (105), баги (28), идеи (51), итого (184)
 
 ---
 
@@ -154,6 +154,7 @@
 | BL-168 | ✅ Реорганизация меню + страница TODAY | web-ui, pm-bot | Реорганизация sidebar-навигации: 4 группы (Рабочий день, Знания, Мониторинг, Система), collapse группы «Система». Новая страница TODAY — стартовая страница рабочего дня (Morning Digest, фокус дня, встречи, TODO, отчёты, новости). CalDAV-интеграция Яндекс Календаря. Парсеры vault-файлов. API для TODO CRUD и TODAY-данных. DS v2 CSS-токены. Спека: docs/BL-168_menu-reorganization/ |
 | BL-172 | ✅ Настройка CalDAV в Settings UI | web-ui, pm-bot | Секция «CALENDAR» на settings.html: username, app password, timezone, URL. Сохранение через user-prefs API. TEST CONNECTION → POST /api/v1/test-caldav. Статус подключения (connected/disabled/error). calendar_client.py: динамические credentials из user-prefs с fallback на env. Маскировка пароля в GET. Спека: docs/BL-172_caldav-settings-ui/ |
 | BL-188 | ✅ Auto-refresh встреч на TODAY | web-ui | today.html: автоматическое обновление блока встреч (CalDAV) каждые 15 минут через setInterval. loadMeetings(true) с инвалидацией CalDAV-кэша. cleanup в beforeUnmount. Безусловный (без проверки refreshMode). Спека: docs/BL-188_today-meetings-autorefresh/ |
+| BL-195 | ✅ Research Queue UI — мониторинг исследований | web-ui, pm-bot, knowledge-engine | Pipeline graph страница `research.html` в стиле n8n: 7 узлов (2 ghost + 5 основных), SVG edges с dash-offset анимацией, drawer для деталей задания. 3 API endpoint (status, run, retry) через полный proxy-chain (KE → ke_client → vault_api → api.js). Completeness badges, auto-refresh 60s, responsive. Спека: docs/BL-195_research-queue-ui/ |
 
 ### 5.2 Идеи
 
@@ -169,7 +170,6 @@
 | BL-169 | Диагностический endpoint для UI-страниц | pm-bot | `GET /api/v1/diagnostics/today` — проверяет все API-зависимости страницы TODAY за 1 запрос: статус каждого endpoint, наличие данных, дата последнего отчёта. Team Lead вызывает перед объявлением готовности. Расширяемо на другие страницы (`/diagnostics/{page}`). Мотивация: BL-168 live-testing (20 ошибок после "готово") |
 | BL-170 | DOM-валидация frontend-страниц (Node.js) | web-ui | Node.js скрипт валидации HTML/Vue: проверка CSS-классов на конфликты (отсутствие prefix), проверка `v-html` vs `{{ }}` для markdown-контента, проверка что все `@click` ссылаются на существующие методы. Расширение test-today-node.js. Мотивация: BL-168 — 6 из 20 ошибок были конфликты классов и неверные привязки |
 | BL-171 | Visual regression testing (Playwright) | web-ui, инфраструктура | Playwright + фикстурный vault: headless-браузер открывает каждую страницу, делает скриншоты блоков, сравнивает с baseline (pixel diff). Клик по интерактивным элементам → скриншот popup. Отчёт: список блоков с % отклонения. Docker-контейнер с тестовым vault. Мотивация: BL-168 — ручное тестирование 10 страниц неэффективно |
-| BL-195 | Research Queue UI — мониторинг исследований | web-ui, pm-bot | Страница `research.html`: мониторинг очереди исследований (research-queue). Три секции: (1) Pending — задания в очереди (`raw/inbound/research-queue/*.json`), (2) Processed — завершённые с ссылкой на готовый отчёт в `wiki/reports/` и completeness score, (3) Failed — ошибочные с причиной. Карточка задания: topic, questions, scope, signal_source, метод (cowork/internal), время обработки. Действия: перезапуск failed, ручной запуск исследования по теме. API: `GET /api/v1/research-queue/status` (scan 3 подпапок research-queue). Sidebar: группа «Мониторинг». Зависит от BL-194 (Research Runner — lifecycle и подпапки processed/failed) |
 
 ---
 
@@ -377,8 +377,8 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 104 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-192, BL-194 |
-| ✅ Баги исправлены | 27 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165, BL-193 |
-| Идея | 52 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-188, BL-195..BL-196 |
+| ✅ Реализовано | 105 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-192, BL-194..BL-195 |
+| ✅ Баги исправлены | 28 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165, BL-193, BUG-027 |
+| Идея | 51 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-188, BL-196 |
 | ❌ Удалено | 1 | BL-121 |
 | **Итого** | **184** | |

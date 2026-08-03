@@ -17,6 +17,7 @@ timeouts:
   rebuild_index: 60
   ingest_clippings: 120
   health: 60
+  research_run: 300
   default: 60
 
 cooldowns:

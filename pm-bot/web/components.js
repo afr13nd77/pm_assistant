@@ -163,7 +163,8 @@ function registerComponents(app) {
             links: [
               { name: 'roadmap', label: 'DEVELOPMENT', href: 'roadmap.html', icon: 'rocket_launch' },
               { name: 'ideas', label: 'IDEAS', href: 'ideas.html', icon: 'lightbulb' },
-              { name: 'board', label: 'WORK QUEUE', href: 'board.html', icon: 'task_alt' }
+              { name: 'board', label: 'WORK QUEUE', href: 'board.html', icon: 'task_alt' },
+              { name: 'research', label: 'RESEARCH', href: 'research.html', icon: 'science' }
             ]
           },
           {

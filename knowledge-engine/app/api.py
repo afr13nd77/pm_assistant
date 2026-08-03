@@ -7,10 +7,12 @@ the same JSON structure that _output_json() would print.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import pathlib
 import re
+from datetime import datetime
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
@@ -118,6 +120,15 @@ class DigestBulkRequest(BaseModel):
     force: bool = False
 
 
+class ResearchRunRequest(BaseModel):
+    target_file: Optional[str] = None
+    notify: bool = False
+
+
+class ResearchRetryRequest(BaseModel):
+    filename: str
+
+
 # ---------------------------------------------------------------------------
 # Startup
 # ---------------------------------------------------------------------------
@@ -136,6 +147,175 @@ def _configure_vault():
 def _vault_path_str() -> str:
     """Return current vault path as a string."""
     return str(_vp.VAULT_PATH)
+
+
+def _file_mtime_iso(path: pathlib.Path) -> str:
+    """File modification time as ISO string."""
+    ts = os.path.getmtime(path)
+    return datetime.fromtimestamp(ts).isoformat(timespec="seconds")
+
+
+def _compute_slug(topic: str) -> str:
+    """Compute slug from topic (same as ResearchTask.slug)."""
+    s = re.sub(r"[^a-zA-Zа-яА-Яё0-9]", "-", topic)[:50]
+    return re.sub(r"-+", "-", s).strip("-").lower()
+
+
+def _parse_queue_file(path: pathlib.Path) -> dict | None:
+    """Parse a single research queue JSON file."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        logger.warning(f"_parse_queue_file: file disappeared: {path.name}")
+        return None
+    except Exception as exc:
+        logger.error(f"_parse_queue_file: read error {path.name}: {exc}")
+        return None
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        logger.warning(f"_parse_queue_file: invalid JSON: {path.name}")
+        return {
+            "filename": path.name,
+            "topic": path.stem,
+            "questions": [],
+            "questions_count": 0,
+            "scope": "",
+            "signal_source": "",
+            "signal_date": "",
+            "competitor": "",
+            "error": "parse error",
+            "created_at": _file_mtime_iso(path),
+        }
+
+    return {
+        "filename": path.name,
+        "topic": data.get("topic", path.stem),
+        "questions": data.get("questions", []),
+        "questions_count": len(data.get("questions", [])),
+        "scope": data.get("scope", ""),
+        "signal_source": data.get("signal_source", ""),
+        "signal_date": data.get("signal_date", ""),
+        "competitor": data.get("competitor", ""),
+        "created_at": _file_mtime_iso(path),
+    }
+
+
+def _match_report(slug: str, vault_path: str) -> dict | None:
+    """Find matching report for a research task by slug."""
+    reports_dir = _vp.wiki_reports()
+    if not reports_dir.exists():
+        return None
+
+    pattern = f"report-{slug}*.md"
+    matches = list(reports_dir.glob(pattern))
+    if not matches:
+        return None
+
+    report_file = matches[0]
+    try:
+        from shared.frontmatter_utils import read_frontmatter
+        meta, _ = read_frontmatter(report_file)
+        completeness = meta.get("completeness")
+        if isinstance(completeness, str):
+            try:
+                completeness = int(completeness)
+            except ValueError:
+                completeness = None
+        rel_path = str(report_file.relative_to(pathlib.Path(vault_path)))
+        return {"completeness": completeness, "report_path": rel_path}
+    except Exception as exc:
+        logger.warning(f"_match_report: failed to read frontmatter {report_file.name}: {exc}")
+        return {"completeness": None, "report_path": str(report_file.relative_to(pathlib.Path(vault_path)))}
+
+
+def _build_research_queue_status(vault_path: str) -> dict:
+    """Scan research queue dirs and build full status response."""
+    logger.info("_build_research_queue_status: scanning")
+
+    pending = []
+    processed = []
+    failed = []
+
+    # Pending
+    queue_dir = _vp.raw_research_queue()
+    if queue_dir.exists():
+        for f in sorted(queue_dir.glob("*.json")):
+            item = _parse_queue_file(f)
+            if item:
+                pending.append(item)
+
+    # Processed
+    proc_dir = _vp.raw_research_queue_processed()
+    if proc_dir.exists():
+        for f in sorted(proc_dir.glob("*.json")):
+            item = _parse_queue_file(f)
+            if item:
+                item["processed_at"] = item.pop("created_at")
+                slug = _compute_slug(item["topic"])
+                report_info = _match_report(slug, vault_path)
+                if report_info:
+                    item["completeness"] = report_info["completeness"]
+                    item["quality_warning"] = (
+                        report_info["completeness"] is not None
+                        and report_info["completeness"] < 5
+                    )
+                    item["report_path"] = report_info["report_path"]
+                else:
+                    item["completeness"] = None
+                    item["quality_warning"] = False
+                    item["report_path"] = None
+                item["method"] = "internal"
+                item["tokens_in"] = None
+                item["tokens_out"] = None
+                processed.append(item)
+
+    # Failed
+    fail_dir = _vp.raw_research_queue_failed()
+    if fail_dir.exists():
+        for f in sorted(fail_dir.glob("*.json")):
+            item = _parse_queue_file(f)
+            if item:
+                item["failed_at"] = item.pop("created_at")
+                if "error" not in item:
+                    item["error"] = "Ошибка обработки (подробности в system log)"
+                failed.append(item)
+
+    # Summary
+    completeness_values = [
+        p["completeness"] for p in processed
+        if p["completeness"] is not None
+    ]
+    avg_completeness = (
+        round(sum(completeness_values) / len(completeness_values), 1)
+        if completeness_values else None
+    )
+
+    # Reports count
+    reports_dir = _vp.wiki_reports()
+    reports_count = 0
+    if reports_dir.exists():
+        reports_count = len(list(reports_dir.glob("report-*.md")))
+
+    logger.info(
+        f"_build_research_queue_status: pending={len(pending)}, "
+        f"processed={len(processed)}, failed={len(failed)}"
+    )
+
+    return {
+        "status": "ok",
+        "pending": pending,
+        "processed": processed,
+        "failed": failed,
+        "summary": {
+            "pending": len(pending),
+            "processed": len(processed),
+            "failed": len(failed),
+            "avg_completeness": avg_completeness,
+        },
+        "reports_count": reports_count,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1262,4 +1442,96 @@ def signals_stats(days: int = Query(default=30, ge=1, le=365)):
         }
     except Exception as exc:
         logger.error(f"API signals_stats error: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Research Queue (BL-195)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/v1/research-queue/status")
+def research_queue_status():
+    logger.info("API research_queue_status: start")
+    try:
+        result = _build_research_queue_status(_vault_path_str())
+        logger.info(
+            f"API research_queue_status: completed, "
+            f"pending={result['summary']['pending']}"
+        )
+        return result
+    except Exception as exc:
+        logger.error(f"API research_queue_status error: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/api/v1/research-queue/run")
+def research_queue_run(req: ResearchRunRequest):
+    logger.info(
+        f"API research_queue_run: start, target_file={req.target_file}, "
+        f"notify={req.notify}"
+    )
+    try:
+        from .research_runner import run_all
+
+        results = run_all(
+            _vault_path_str(),
+            target_file=req.target_file,
+            notify=req.notify,
+        )
+        completed = sum(1 for r in results if r.error is None)
+        errors = sum(1 for r in results if r.error is not None)
+        logger.info(
+            f"API research_queue_run: completed={completed}, errors={errors}"
+        )
+        return {
+            "status": "ok",
+            "completed": completed,
+            "failed": errors,
+            "results": [
+                {
+                    "topic": r.topic,
+                    "report_path": r.report_path,
+                    "completeness": r.completeness,
+                    "error": r.error,
+                }
+                for r in results
+            ],
+        }
+    except Exception as exc:
+        logger.error(f"API research_queue_run error: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/api/v1/research-queue/retry")
+def research_queue_retry(req: ResearchRetryRequest):
+    logger.info(f"API research_queue_retry: start, filename={req.filename}")
+    try:
+        from .research_runner import retry_failed_task
+
+        results = retry_failed_task(req.filename, _vault_path_str())
+        completed = sum(1 for r in results if r.error is None)
+        errors = sum(1 for r in results if r.error is not None)
+        logger.info(
+            f"API research_queue_retry: completed={completed}, errors={errors}"
+        )
+        return {
+            "status": "ok",
+            "completed": completed,
+            "failed": errors,
+            "results": [
+                {
+                    "topic": r.topic,
+                    "report_path": r.report_path,
+                    "completeness": r.completeness,
+                    "error": r.error,
+                }
+                for r in results
+            ],
+        }
+    except FileNotFoundError as exc:
+        logger.warning(f"API research_queue_retry: not found: {exc}")
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        logger.error(f"API research_queue_retry error: {exc}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))

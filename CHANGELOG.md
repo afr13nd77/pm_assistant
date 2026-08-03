@@ -7,6 +7,26 @@
 
 ## 03.08.2026
 
+### web-ui 1.29.0
+- **feat:** BL-195 Research Queue UI — pipeline graph страница `research.html` (388 строк HTML + 585 строк CSS)
+- **feat:** Pipeline graph в стиле n8n: 7 узлов (Signal Moderator, Queue, Processing, Processed, Reports, extract_ideas, Failed), SVG edges с dash-offset анимацией
+- **feat:** Drawer с деталями задания: topic, questions, scope, signal_source (кликабельная ссылка), completeness badge
+- **feat:** Кнопки Run All и Retry, auto-refresh 60s, responsive layout (< 900px вертикальный flow)
+
+### knowledge-engine 1.20.0
+- **feat:** BL-195 KE API: 3 endpoint (GET status, POST run, POST retry) + 5 helper-функций + 2 Pydantic-модели
+- **feat:** `retry_failed_task()` в research_runner.py — перемещение failed→queue + повторный запуск
+
+### pm-bot 1.21.0
+- **feat:** BL-195 ke_client: 3 proxy-функции (research_queue_status/run/retry)
+- **feat:** BL-195 vault_api: 3 proxy-endpoint + ResearchRetryProxyRequest
+- **feat:** BL-195 api.js: 3 метода (researchStatus, researchRun, researchRetry)
+- **feat:** BL-195 components.js: sidebar-ссылка RESEARCH в группе МОНИТОРИНГ
+
+---
+
+## 03.08.2026
+
 ### knowledge-engine 1.19.0
 - **feat:** BL-194 Research Runner — модуль обработки research-queue (research_runner.py, ~350 строк)
 - **feat:** CLI команда `research-run` с параметрами --file, --method, --notify, --dry-run

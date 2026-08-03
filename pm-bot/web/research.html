@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="ru" class="theme-matrix">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PM Board — Research Queue</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-matrix.css" id="theme-css">
+  <link rel="stylesheet" href="style-research.css">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <script>
+  (function() {
+    try {
+      var t = localStorage.getItem('pm_theme');
+      if (t === 'light') {
+        document.documentElement.className = 'theme-light';
+        document.getElementById('theme-css').href = 'style-light.css';
+      }
+    } catch(e) {}
+  })();
+  </script>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <app-sidebar active="research" @search="searchOpen = true"></app-sidebar>
+    <search-overlay :open="searchOpen" @close="searchOpen = false"></search-overlay>
+
+    <!-- Drawer overlay -->
+    <div class="drawer-overlay" v-if="drawerOpen" @click="closeDrawer"></div>
+
+    <!-- Drawer -->
+    <div class="rq-drawer" :class="{ open: drawerOpen }">
+      <div class="rq-drawer__header">
+        <h3>{{ drawerTask.topic }}</h3>
+        <button class="rq-btn-close" @click="closeDrawer">&times;</button>
+      </div>
+      <div class="rq-drawer__body">
+        <div class="rq-drawer__field">
+          <label>Вопросы</label>
+          <ol><li v-for="q in drawerTask.questions">{{ q }}</li></ol>
+        </div>
+        <div class="rq-drawer__field">
+          <label>Scope</label>
+          <p>{{ drawerTask.scope }}</p>
+        </div>
+        <div class="rq-drawer__row">
+          <div class="rq-drawer__field">
+            <label>Signal Source</label>
+            <a v-if="drawerTask.signal_source && drawerTask.signal_source.startsWith('http')"
+               :href="drawerTask.signal_source" class="rq-report-link" target="_blank" rel="noopener">
+              {{ drawerTask.signal_source }}
+            </a>
+            <span v-else>{{ drawerTask.signal_source || '---' }}</span>
+          </div>
+          <div class="rq-drawer__field">
+            <label>Signal Date</label>
+            <span>{{ drawerTask.signal_date || '---' }}</span>
+          </div>
+          <div class="rq-drawer__field">
+            <label>Competitor</label>
+            <span>{{ drawerTask.competitor || '---' }}</span>
+          </div>
+        </div>
+
+        <!-- Processed-specific fields -->
+        <template v-if="drawerTask._category === 'processed'">
+          <div class="rq-drawer__row">
+            <div class="rq-drawer__field">
+              <label>Completeness</label>
+              <span class="rq-completeness" :class="completenessClass(drawerTask.completeness)">
+                {{ drawerTask.completeness }}/10
+              </span>
+            </div>
+            <div class="rq-drawer__field">
+              <label>Method</label>
+              <span>{{ drawerTask.method || 'internal' }}</span>
+            </div>
+          </div>
+          <div class="rq-drawer__field" v-if="drawerTask.report_path">
+            <label>Report</label>
+            <a :href="'obsidian://open?vault=pm-vault&file=' + encodeURIComponent(drawerTask.report_path)"
+               class="rq-report-link" target="_blank">
+              {{ drawerTask.report_path }}
+            </a>
+          </div>
+        </template>
+
+        <!-- Failed-specific fields -->
+        <template v-if="drawerTask._category === 'failed'">
+          <div class="rq-drawer__field rq-drawer__field--error">
+            <label>Error</label>
+            <p>{{ drawerTask.error }}</p>
+          </div>
+          <button class="rq-btn rq-btn--retry" @click="retryTask(drawerTask)" :disabled="drawerTask._retrying">
+            <span v-if="drawerTask._retrying" class="rq-spinner"></span>
+            <span v-else>Retry</span>
+          </button>
+        </template>
+      </div>
+    </div>
+
+    <!-- Main content -->
+    <main class="rq-content">
+      <!-- TOPBAR -->
+      <header class="rq-topbar">
+        <div class="title-wrap">
+          <h1>Research Queue</h1>
+        </div>
+        <div class="top-actions">
+          <button class="rq-btn rq-btn--run" @click="runAll" :disabled="isRunning || summary.pending === 0">
+            <span v-if="isRunning" class="rq-spinner"></span>
+            <span v-else class="material-symbols-outlined" style="font-size:16px;vertical-align:middle">play_arrow</span>
+            {{ isRunning ? 'Running...' : 'Run All' }}
+          </button>
+        </div>
+      </header>
+
+      <div class="rq-page">
+        <!-- PIPELINE GRAPH -->
+        <section class="rq-pipeline-section">
+          <div class="rq-pipeline" ref="pipeline">
+            <!-- Row 1: main flow -->
+            <!-- Ghost: Signal Moderator -->
+            <div class="rq-node rq-node--ghost" data-node="signal-moderator" style="grid-column:1; grid-row:2;">
+              <span class="material-symbols-outlined rq-node__icon">sensors</span>
+              <div class="rq-node__title">Signal Moderator</div>
+            </div>
+
+            <!-- Queue (Pending) -->
+            <div class="rq-node" :class="{ 'rq-node--active': summary.pending > 0 }" data-node="queue"
+                 @click="toggleNode('queue')" style="grid-column:2; grid-row:2;">
+              <span class="material-symbols-outlined rq-node__icon">inbox</span>
+              <div class="rq-node__title">Queue</div>
+              <div class="rq-node__badge">{{ summary.pending }}</div>
+            </div>
+
+            <!-- Processing -->
+            <div class="rq-node" data-node="processing" style="grid-column:3; grid-row:2;">
+              <span class="material-symbols-outlined rq-node__icon">sync</span>
+              <div class="rq-node__title">Processing</div>
+              <div class="rq-node__status">{{ isRunning ? 'Running...' : 'Idle' }}</div>
+            </div>
+
+            <!-- Processed -->
+            <div class="rq-node" :class="{ 'rq-node--active': summary.processed > 0 }" data-node="processed"
+                 @click="toggleNode('processed')" style="grid-column:4; grid-row:2;">
+              <span class="material-symbols-outlined rq-node__icon">check_circle</span>
+              <div class="rq-node__title">Processed</div>
+              <div class="rq-node__badge">{{ summary.processed }}</div>
+              <div class="rq-node__metric" v-if="summary.avg_completeness != null">avg: {{ summary.avg_completeness }}</div>
+            </div>
+
+            <!-- Ghost: Reports -->
+            <div class="rq-node rq-node--ghost" data-node="reports" style="grid-column:5; grid-row:2;">
+              <span class="material-symbols-outlined rq-node__icon">description</span>
+              <div class="rq-node__title">Reports</div>
+              <div class="rq-node__badge">{{ reportsCount }}</div>
+            </div>
+
+            <!-- Ghost: extract_ideas -->
+            <div class="rq-node rq-node--ghost" data-node="extract-ideas" style="grid-column:6; grid-row:2;">
+              <span class="material-symbols-outlined rq-node__icon">lightbulb</span>
+              <div class="rq-node__title">extract_ideas</div>
+            </div>
+
+            <!-- Failed (below Processing, row 3) -->
+            <div class="rq-node" :class="{ 'rq-node--alert': summary.failed > 0 }" data-node="failed"
+                 @click="toggleNode('failed')" style="grid-column:3; grid-row:3;">
+              <span class="material-symbols-outlined rq-node__icon">error</span>
+              <div class="rq-node__title">Failed</div>
+              <div class="rq-node__badge" v-if="summary.failed > 0">{{ summary.failed }}</div>
+            </div>
+
+            <!-- SVG Edges overlay -->
+            <svg class="rq-edges" ref="edgesSvg">
+              <defs>
+                <marker id="rq-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                  <path d="M0,0 L8,3 L0,6" fill="var(--text-muted)"/>
+                </marker>
+                <marker id="rq-arrow-alert" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                  <path d="M0,0 L8,3 L0,6" fill="var(--r)"/>
+                </marker>
+              </defs>
+              <line v-for="edge in edges" :key="edge.id"
+                    :x1="edge.x1" :y1="edge.y1" :x2="edge.x2" :y2="edge.y2"
+                    :class="['rq-edge', { 'rq-edge--animated': edge.animated && hasPending }, { 'rq-edge--alert': edge.alert && hasFailed }]"
+                    :marker-end="edge.alert && hasFailed ? 'url(#rq-arrow-alert)' : 'url(#rq-arrow)'"
+              />
+            </svg>
+          </div>
+        </section>
+
+        <!-- TASK LIST (below pipeline, shown when a node is expanded) -->
+        <section class="rq-task-list" v-if="expandedNode">
+          <div class="rq-task-list__header">
+            <h2>{{ expandedNodeTitle }} <span class="rq-count">({{ expandedTasks.length }})</span></h2>
+            <button class="rq-btn-close" @click="expandedNode = null">&times;</button>
+          </div>
+          <div class="rq-task-list__empty" v-if="expandedTasks.length === 0">
+            Нет заданий
+          </div>
+          <div class="rq-task-card" v-for="task in expandedTasks" :key="task.filename" @click="openDrawer(task)">
+            <div class="rq-task-card__topic">{{ task.topic }}</div>
+            <div class="rq-task-card__meta">
+              <span v-if="task.signal_source" class="rq-tag">{{ task.signal_source }}</span>
+              <span v-if="task.competitor" class="rq-tag rq-tag--comp">{{ task.competitor }}</span>
+              <span class="rq-task-card__date">{{ formatDate(task) }}</span>
+            </div>
+            <div v-if="expandedNode === 'processed' && task.completeness != null"
+                 class="rq-completeness" :class="completenessClass(task.completeness)">
+              {{ task.completeness }}/10
+            </div>
+            <button v-if="expandedNode === 'failed'" class="rq-btn rq-btn--retry-sm"
+                    @click.stop="retryTask(task)" :disabled="task._retrying">
+              <span v-if="task._retrying" class="rq-spinner"></span>
+              <span v-else>Retry</span>
+            </button>
+          </div>
+        </section>
+      </div>
+
+      <!-- Toast -->
+      <div class="rq-toast" :class="[toast.show ? 'show' : '', 'rq-toast--' + toast.type]">
+        {{ toast.message }}
+      </div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="components.js"></script>
+  <script src="api.js"></script>
+  <script>
+  var vueApp = Vue.createApp({
+    data: function() {
+      return {
+        searchOpen: false,
+        pending: [],
+        processed: [],
+        failed: [],
+        summary: { pending: 0, processed: 0, failed: 0, avg_completeness: null },
+        reportsCount: 0,
+        expandedNode: null,
+        drawerOpen: false,
+        drawerTask: {},
+        isRunning: false,
+        edges: [],
+        toast: { show: false, message: '', type: 'info' },
+        refreshTimer: null,
+        REFRESH_INTERVAL: 60000,
+        edgeDefs: [
+          { id: 'sm-queue', from: 'signal-moderator', to: 'queue', direction: 'right', animated: false, alert: false },
+          { id: 'queue-proc', from: 'queue', to: 'processing', direction: 'right', animated: true, alert: false },
+          { id: 'proc-done', from: 'processing', to: 'processed', direction: 'right', animated: true, alert: false },
+          { id: 'done-reports', from: 'processed', to: 'reports', direction: 'right', animated: false, alert: false },
+          { id: 'reports-ei', from: 'reports', to: 'extract-ideas', direction: 'right', animated: false, alert: false },
+          { id: 'proc-failed', from: 'processing', to: 'failed', direction: 'down', animated: false, alert: true },
+        ],
+      };
+    },
+    computed: {
+      hasPending: function() { return this.summary.pending > 0; },
+      hasFailed: function() { return this.summary.failed > 0; },
+      expandedTasks: function() {
+        switch (this.expandedNode) {
+          case 'queue': return this.pending;
+          case 'processed': return this.processed;
+          case 'failed': return this.failed;
+          default: return [];
+        }
+      },
+      expandedNodeTitle: function() {
+        var titles = { queue: 'Pending', processed: 'Processed', failed: 'Failed' };
+        return titles[this.expandedNode] || '';
+      },
+    },
+    methods: {
+      loadStatus: function() {
+        var self = this;
+        api.researchStatus().then(function(data) {
+          self.pending = data.pending || [];
+          self.processed = (data.processed || []).map(function(t) { t._category = 'processed'; return t; });
+          self.failed = (data.failed || []).map(function(t) { t._category = 'failed'; t._retrying = false; return t; });
+          self.summary = data.summary || { pending: 0, processed: 0, failed: 0, avg_completeness: null };
+          self.reportsCount = data.reports_count || 0;
+          Vue.nextTick(function() { self.recalcEdges(); });
+        }).catch(function(err) {
+          if (err.name !== 'AbortError') {
+            console.error('[research] loadStatus error:', err);
+            self.showToast('Ошибка загрузки: ' + err.message, 'error');
+          }
+        });
+      },
+      runAll: function() {
+        var self = this;
+        if (self.isRunning) return;
+        self.isRunning = true;
+        api.researchRun().then(function(data) {
+          self.isRunning = false;
+          var msg = 'Обработано: ' + (data.completed || 0) + ', ошибок: ' + (data.failed || 0);
+          self.showToast(msg, data.failed > 0 ? 'error' : 'success');
+          self.loadStatus();
+        }).catch(function(err) {
+          self.isRunning = false;
+          self.showToast('Ошибка: ' + err.message, 'error');
+        });
+      },
+      retryTask: function(task) {
+        var self = this;
+        task._retrying = true;
+        api.researchRetry(task.filename).then(function(data) {
+          task._retrying = false;
+          self.showToast('Задание перезапущено', 'success');
+          self.loadStatus();
+        }).catch(function(err) {
+          task._retrying = false;
+          self.showToast('Ошибка retry: ' + err.message, 'error');
+        });
+      },
+      toggleNode: function(type) {
+        this.expandedNode = this.expandedNode === type ? null : type;
+      },
+      openDrawer: function(task) {
+        this.drawerTask = task;
+        this.drawerOpen = true;
+      },
+      closeDrawer: function() {
+        this.drawerOpen = false;
+      },
+      recalcEdges: function() {
+        var container = this.$refs.pipeline;
+        if (!container) return;
+        var rect = container.getBoundingClientRect();
+        var self = this;
+        this.edges = this.edgeDefs.map(function(def) {
+          var fromEl = container.querySelector('[data-node="' + def.from + '"]');
+          var toEl = container.querySelector('[data-node="' + def.to + '"]');
+          if (!fromEl || !toEl) return null;
+          var fromRect = fromEl.getBoundingClientRect();
+          var toRect = toEl.getBoundingClientRect();
+          var isVertical = def.direction === 'down';
+          return {
+            x1: isVertical ? fromRect.left + fromRect.width / 2 - rect.left : fromRect.right - rect.left,
+            y1: isVertical ? fromRect.bottom - rect.top : fromRect.top + fromRect.height / 2 - rect.top,
+            x2: isVertical ? toRect.left + toRect.width / 2 - rect.left : toRect.left - rect.left,
+            y2: isVertical ? toRect.top - rect.top : toRect.top + toRect.height / 2 - rect.top,
+            animated: def.animated,
+            alert: def.alert,
+            id: def.id,
+          };
+        }).filter(Boolean);
+      },
+      completenessClass: function(score) {
+        if (score >= 6) return 'rq-completeness--good';
+        if (score >= 4) return 'rq-completeness--warn';
+        return 'rq-completeness--bad';
+      },
+      formatDate: function(task) {
+        var d = task.created_at || task.processed_at || task.failed_at || '';
+        if (!d) return '';
+        var m = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return m ? m[3] + '.' + m[2] + '.' + m[1] : d;
+      },
+      showToast: function(message, type) {
+        var self = this;
+        self.toast = { show: true, message: message, type: type || 'info' };
+        setTimeout(function() { self.toast.show = false; }, 4000);
+      },
+    },
+    mounted: function() {
+      var self = this;
+      self.loadStatus();
+      self.refreshTimer = setInterval(function() { self.loadStatus(); }, self.REFRESH_INTERVAL);
+      window.addEventListener('resize', self.recalcEdges);
+      // ResizeObserver for pipeline container
+      if (window.ResizeObserver) {
+        var _debounceTimer = null;
+        new ResizeObserver(function() {
+          clearTimeout(_debounceTimer);
+          _debounceTimer = setTimeout(function() { self.recalcEdges(); }, 100);
+        }).observe(self.$refs.pipeline);
+      }
+    },
+    beforeUnmount: function() {
+      clearInterval(this.refreshTimer);
+      window.removeEventListener('resize', this.recalcEdges);
+    },
+  });
+  registerComponents(vueApp);
+  applyPageTheme();
+  vueApp.mount('#app');
+  </script>
+</body>
+</html>
