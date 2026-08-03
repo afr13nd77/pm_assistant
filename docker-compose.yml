@@ -108,9 +108,10 @@ services:
         echo '0 4 * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine health --save >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-health &&
         echo '0 5 * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine decay-recalc >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-decay &&
         echo '30 3 * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -c \"from shared.system_log import cleanup_old; cleanup_old(90)\" >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-syslog-cleanup &&
+        echo '55 7 * * 1-5 root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine convert-news-digest >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-convert-news &&
         echo '0 8 * * 1-5 root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine moderate-news --notify >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-moderate &&
         echo '0 6 * * 1 root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine trend-detect --notify >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-trends &&
-        chmod 0644 /etc/cron.d/ke-synth /etc/cron.d/ke-fetch /etc/cron.d/ke-process-queue /etc/cron.d/ke-jira /etc/cron.d/ke-cowork /etc/cron.d/ke-rebuild-index /etc/cron.d/ke-lint /etc/cron.d/ke-health /etc/cron.d/ke-decay /etc/cron.d/ke-syslog-cleanup /etc/cron.d/ke-moderate /etc/cron.d/ke-trends &&
+        chmod 0644 /etc/cron.d/ke-synth /etc/cron.d/ke-fetch /etc/cron.d/ke-process-queue /etc/cron.d/ke-jira /etc/cron.d/ke-cowork /etc/cron.d/ke-rebuild-index /etc/cron.d/ke-lint /etc/cron.d/ke-health /etc/cron.d/ke-decay /etc/cron.d/ke-syslog-cleanup /etc/cron.d/ke-convert-news /etc/cron.d/ke-moderate /etc/cron.d/ke-trends &&
         touch /var/log/ke-cron.log &&
         cron && tail -f /var/log/ke-cron.log
       "

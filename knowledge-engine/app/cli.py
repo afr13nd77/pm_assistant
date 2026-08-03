@@ -245,6 +245,14 @@ def main():
     signal_status_parser.add_argument("--format", choices=["json", "table"], default="table",
                                       help="Output format (default: table)")
 
+    convert_news_parser = subparsers.add_parser(
+        "convert-news-digest",
+        help="Convert daily-news markdown to JSON digest for moderate-news"
+    )
+    convert_news_parser.add_argument("--vault", default=None, help="Vault root path")
+    convert_news_parser.add_argument("--date", type=str, default=None,
+                                      help="Date to convert (YYYY-MM-DD, default: yesterday)")
+
     serve_parser = subparsers.add_parser("serve", help="Start HTTP API server")
     serve_parser.add_argument("--vault", default=None, help="Vault root path")
     serve_parser.add_argument("--host", default="0.0.0.0")
@@ -785,6 +793,26 @@ def main():
         logger.info("audit-domain: completed, status=%s", result.get("status"))
         _output_json(result)
         sys.exit(0 if result["status"] == "ok" else 1)
+
+    elif args.command == "convert-news-digest":
+        import pathlib
+
+        from shared import vault_paths as _vp
+        _vp.VAULT_PATH = pathlib.Path(vault_path)
+        from .news_digest_converter import convert_news_digest
+        logger.info(f"convert-news-digest: vault={vault_path}, date={args.date}")
+        try:
+            result = convert_news_digest(vault_path, args.date)
+            if result:
+                logger.info(f"convert-news-digest: converted -> {result}")
+                print(f"Converted: {result}")
+            else:
+                logger.info("convert-news-digest: no conversion needed")
+                print("No conversion needed")
+        except FileNotFoundError as e:
+            logger.error(f"convert-news-digest: {e}")
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
 
     elif args.command == "serve":
         import pathlib
