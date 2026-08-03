@@ -48,9 +48,9 @@ _DEFAULT_FALLBACK: dict[str, list[str]] = {
     "transcription": ["claude"],
     "analysis": ["claude"],
     "pipeline": ["claude"],
-    "signal_triage": ["claude"],
-    "signal_analysis": ["claude"],
-    "signal_escalation": ["claude"],
+    "signal_triage": ["openrouter", "claude"],
+    "signal_analysis": ["openrouter", "claude"],
+    "signal_escalation": ["openrouter", "claude"],
 }
 
 _DEFAULT_LLM_PREFS = {

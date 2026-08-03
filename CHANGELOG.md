@@ -5,6 +5,31 @@
 
 ---
 
+## 03.08.2026 — feat: Signal Chain Settings — UI настройка LLM-цепочек для News Moderator (BL-192)
+
+- feat(shared): `_DEFAULT_FALLBACK` для signal_triage/analysis/escalation → `["openrouter", "claude"]`
+- feat(pm-bot): API поддержка signal_*_fallback в GET/PUT /api/v1/user-prefs
+  - UserPrefs model: 3 новых поля
+  - Валидация, нормализация, дефолты — аналогично capture/transcription/analysis/pipeline
+- feat(web-ui): 3 новые группы в Settings → FALLBACK CHAINS
+  - SIGNAL TRIAGE (signal_score, quality_check, dedup_check, completeness_check)
+  - SIGNAL ANALYSIS (signal_analyze, report_to_ideas, trend_detect)
+  - SIGNAL ESCALATION (signal_analyze_escalation)
+  - Drag-and-drop, inline OpenRouter model select — повторяет существующий паттерн
+
+---
+
+## 03.08.2026 — feat: News Digest Converter — конвертер daily-news markdown → JSON (BL-191)
+
+- feat(knowledge-engine): `news_digest_converter.py` — парсер daily-news markdown → JSON-дайджест
+  - `parse_daily_news()` — regex-парсинг markdown: frontmatter date, items (`**[title](url)** — source`), multiline summary, пропуск italic-блоков
+  - `convert_news_digest()` — оркестратор: поиск файла, skip if exists, запись JSON в `raw/inbound/news/{date}-digest.json`
+- feat(knowledge-engine): CLI `convert-news-digest` — subparser с `--vault` и `--date` (default: вчера)
+- feat(ke-cron): cron job `ke-convert-news` — Пн-Пт 07:55, перед moderate-news (08:00)
+- test: 13 тестов (7 parse + 6 convert)
+
+---
+
 ## 03.08.2026 — feat: Agent Observability — мониторинг и аналитика агентной цепочки (BL-190)
 
 - feat(knowledge-engine): Langfuse e2e trace для Signal Moderator

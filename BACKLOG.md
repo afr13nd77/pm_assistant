@@ -1,8 +1,8 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.19.0 / knowledge-engine 1.16.0 / idea-pipeline 1.2.0 / web-ui 1.27.1 / shared 0.7.3
-**Обновлён:** 02.08.2026 (BL-189 — реализовано)
-**Бэклог:** реализованные фичи (100), баги (26), идеи (51), итого (178)
+**Версии:** pm-bot 1.20.0 / knowledge-engine 1.18.0 / idea-pipeline 1.2.0 / web-ui 1.28.0 / shared 0.7.3
+**Обновлён:** 03.08.2026 (BL-192 — реализовано)
+**Бэклог:** реализованные фичи (103), баги (26), идеи (50), итого (180)
 
 ---
 
@@ -186,6 +186,9 @@
 | BL-141 | ✅ Настраиваемые fallback-цепочки провайдеров | shared, pm-bot, web-ui, knowledge-engine | OpenRouter как альтернатива для capture. 3 группы операций (Capture, Transcription, Analysis) с per-group fallback-цепочкой. Drag-and-drop в Settings UI. Обратная совместимость с legacy prefs. 21 unit-тест |
 | BL-142 | ✅ LLM Playground — страница тестирования моделей | web-ui, pm-bot | playground.html: чат-интерфейс для тестирования LLM. Выбор провайдера (Claude/Ollama/OpenRouter), модели, температуры. API: GET /playground/providers, POST /playground/chat. Sidebar ссылка PLAYGROUND |
 | BL-155, BL-156 | ✅ Множественный выбор моделей OpenRouter + динамический список из API | shared, pm-bot, web-ui | `shared/openrouter_client.py::list_models()` с live-запросом и TTL-кэшем (1ч fallback). Мультимодельные fallback-цепочки: несколько шагов OpenRouter подряд с разными моделями, storage в объектном формате {provider, model}. `shared/llm_client.py::_normalize_step()` для обратной совместимости. `PUT /api/v1/user-prefs` валидирует openrouter-шаги (обязательна непустая model), дедупирует смежные дубли. `GET /api/v1/user-prefs` нормализует в объектный формат для UI. `settings.html`: редактор цепочек с инлайн-селектором модели, пометка fallback-списка (источник live|fallback). Backoff 0.7s между смежными openrouter-шагами после 429. Логирование используемой модели в system-log. Спека: docs/openrouter-model-selection/ |
+| BL-190 | ✅ Agent Observability — мониторинг и аналитика агентной цепочки | knowledge-engine, shared | Langfuse e2e trace для Signal Moderator, 3 HTTP-endpoints диагностики (signals/runs, signals/runs/{id}, signals/stats), CLI signal-status, persistence решений агентов (iterations_history, gate_results, reaction, completed_at). 47 тестов |
+| BL-191 | ✅ News Digest Converter | knowledge-engine | Конвертер daily-news markdown → JSON-дайджест. Парсинг markdown (frontmatter + regex items), CLI convert-news-digest, cron 07:55 Пн-Пт. 13 тестов |
+| BL-192 | ✅ Signal Chain Settings — UI настройка LLM-цепочек | shared, pm-bot, web-ui | Дефолт signal_* → ["openrouter", "claude"]. API поддержка signal_triage/analysis/escalation_fallback. 3 группы в Settings FALLBACK CHAINS с drag-and-drop |
 
 ### 6.2 Идеи
 
@@ -197,7 +200,6 @@
 | BL-73 | Multi-Agent Shared Vault | pm-bot | Расширить на команду PM-ов, агент находит пересечения и конфликты идей между участниками |
 | BL-154 | Telegram Q&A по базе знаний через Claude CLI | pm-bot, инфраструктура | Новая команда `/ask <вопрос>` в Telegram-боте. pm-bot запускает `claude --print` как subprocess с `cwd=VAULT_PATH`, CLI подхватывает CLAUDE.md + читает wiki/, возвращает ответ в stdout. Авторизация через подписку (claude login). Каждый вопрос = отдельная сессия CLI, память между запросами не нужна. **Требования к реализации (по итогам архитектурного ревью):** (1) Dockerfile: добавить установку Claude CLI при сборке образа. (2) docker-compose.yml: добавить named volume для `~/.claude/` — иначе авторизация теряется при перезапуске контейнера. (3) Безопасность: `shell=False`, аргументы списком `["claude", "--print", "-p", prompt]` — исключает shell injection. Системный промпт явно запрещает запись: "Ты ассистент по базе знаний в режиме read-only. Никакие операции записи недопустимы. Отвечай только на основе файлов в wiki/. Вопрос: {question}". (4) Async: `asyncio.get_running_loop().run_in_executor()` (не deprecated get_event_loop). При таймауте (120с) — явный `proc.kill()`. (5) UX: немедленно отправлять "Думаю... (до 2 минут)" и блокировать повторный `/ask` пока выполняется текущий (флаг `_ask_in_progress`). (6) Логирование: оборачивать subprocess-вызов в `system_log` с теми же полями что и SDK-вызовы. **Открытый вопрос при реализации:** `context_assembler.py` (существует) собирает контекст детерминированно — рассмотреть как альтернативу надежде на то, что CLI сам найдёт нужные файлы в wiki/. |
 | BL-139 | Перенос идеи при смене домена | web-ui, knowledge-engine | При смене домена идеи через Web UI (editable-field domain) — физически перемещать файл из wiki/domains/старый/ideas/ в wiki/domains/новый/ideas/. Обновлять log.md и index.md обоих доменов. Сейчас меняется только frontmatter, файл остаётся в старой папке |
-| BL-190 | Agent Observability — мониторинг и аналитика агентной цепочки | knowledge-engine, shared | Наблюдаемость News Moderator (BL-189) как агентной системы. **4 уровня:** (1) **Langfuse end-to-end trace** — обернуть прогон Orchestrator в один trace, каждый агентный шаг (score, analyze, quality_gate, dedup, dispatch, extract) — span с привязкой к run_id. Визуализация flow, cost, timing в Langfuse UI. (2) **Agent Events таблица** в signal_memory.db — структурированный аудит: run_id, item_hash, step, agent, operation, provider, decision, score, tokens_in/out, cost, iteration, critique, duration_ms. Каждый агентный шаг = одна строка. (3) **Персистенция critique и gate scores** — AgentLoop сохраняет в RunState историю итераций (quality score, critique text, escalated flag). QualityGate записывает detail (какие из 5 критериев провалены). (4) **HTTP-диагностика** — `GET /api/v1/signals/runs` (последние N прогонов с per-item breakdown), `GET /api/v1/signals/stats` (avg quality, escalation rate, cost/run, dedup rate). (5) **CLI `signal-status`** — дамп run state + agent events в human-readable формате (`--last N`, `--run <id>`). **Аналитика:** частота escalation (индикатор качества промптов), dedup rate (дублирование источников), cost trend, средний quality score по runs. Связано с BL-189 |
 
 ---
 
@@ -371,8 +373,8 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 101 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-190 |
+| ✅ Реализовано | 103 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-192 |
 | ✅ Баги исправлены | 26 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165 |
 | Идея | 50 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-188 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **178** | |
+| **Итого** | **180** | |

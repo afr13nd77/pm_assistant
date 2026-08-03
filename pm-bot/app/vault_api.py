@@ -2718,6 +2718,9 @@ _DEFAULT_USER_PREFS = {
     "transcription_fallback": ["claude"],
     "analysis_fallback": ["claude"],
     "pipeline_fallback": ["claude"],
+    "signal_triage_fallback": ["openrouter", "claude"],
+    "signal_analysis_fallback": ["openrouter", "claude"],
+    "signal_escalation_fallback": ["openrouter", "claude"],
     "caldav_username": "",
     "caldav_password": "",
     "caldav_timezone": "Europe/Moscow",
@@ -2745,6 +2748,9 @@ class UserPrefs(BaseModel):
     transcription_fallback: list[Any] = ["claude"]
     analysis_fallback: list[Any] = ["claude"]
     pipeline_fallback: list[Any] = ["claude"]
+    signal_triage_fallback: list[Any] = ["openrouter", "claude"]
+    signal_analysis_fallback: list[Any] = ["openrouter", "claude"]
+    signal_escalation_fallback: list[Any] = ["openrouter", "claude"]
     caldav_username: str = ""
     caldav_password: str = ""
     caldav_timezone: str = "Europe/Moscow"
@@ -2866,6 +2872,12 @@ def get_user_prefs():
         prefs["analysis_fallback"] = ["claude"]
     if "pipeline_fallback" not in prefs:
         prefs["pipeline_fallback"] = ["claude"]
+    if "signal_triage_fallback" not in prefs:
+        prefs["signal_triage_fallback"] = _DEFAULT_USER_PREFS.get("signal_triage_fallback", ["openrouter", "claude"])
+    if "signal_analysis_fallback" not in prefs:
+        prefs["signal_analysis_fallback"] = _DEFAULT_USER_PREFS.get("signal_analysis_fallback", ["openrouter", "claude"])
+    if "signal_escalation_fallback" not in prefs:
+        prefs["signal_escalation_fallback"] = _DEFAULT_USER_PREFS.get("signal_escalation_fallback", ["openrouter", "claude"])
     # --- CalDAV ---
     if "caldav_username" not in prefs:
         prefs["caldav_username"] = ""
@@ -2877,7 +2889,7 @@ def get_user_prefs():
         prefs["caldav_url"] = "https://caldav.yandex.ru/"
     from shared.openrouter_client import DEFAULT_MODEL as _OR_DEFAULT_MODEL
     default_openrouter_model = prefs.get("openrouter_model") or _OR_DEFAULT_MODEL
-    for key in ("capture_fallback", "transcription_fallback", "analysis_fallback", "pipeline_fallback"):
+    for key in ("capture_fallback", "transcription_fallback", "analysis_fallback", "pipeline_fallback", "signal_triage_fallback", "signal_analysis_fallback", "signal_escalation_fallback"):
         val = prefs[key]
         if not isinstance(val, list) or len(val) == 0:
             logger.info("GET /api/v1/user-prefs — %s invalid (not list or empty), resetting to default", key)
@@ -2961,7 +2973,7 @@ def put_user_prefs(body: UserPrefs):
     from shared.openrouter_client import DEFAULT_MODEL as _OR_DEFAULT_MODEL
     default_openrouter_model = body.openrouter_model or _OR_DEFAULT_MODEL
 
-    for key in ("capture_fallback", "transcription_fallback", "analysis_fallback", "pipeline_fallback"):
+    for key in ("capture_fallback", "transcription_fallback", "analysis_fallback", "pipeline_fallback", "signal_triage_fallback", "signal_analysis_fallback", "signal_escalation_fallback"):
         chain = getattr(body, key)
         if not isinstance(chain, list) or len(chain) == 0:
             logger.warning("PUT /api/v1/user-prefs — %s is empty or not a list, rejecting", key)
@@ -3061,6 +3073,9 @@ def put_user_prefs(body: UserPrefs):
             "transcription_fallback": body.transcription_fallback,
             "analysis_fallback": body.analysis_fallback,
             "pipeline_fallback": body.pipeline_fallback,
+            "signal_triage_fallback": body.signal_triage_fallback,
+            "signal_analysis_fallback": body.signal_analysis_fallback,
+            "signal_escalation_fallback": body.signal_escalation_fallback,
             "caldav_username": body.caldav_username,
             "caldav_timezone": body.caldav_timezone,
             "caldav_url": body.caldav_url}

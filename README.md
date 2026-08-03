@@ -206,7 +206,7 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 - APScheduler: enrichment reminders (daily), daily alert (пн-пт 18:00)
 - SQLite: дедупликация enrichment-напоминаний (cooldown 24ч)
 
-### knowledge-engine (v1.17.0)
+### knowledge-engine (v1.18.0)
 
 Сервис обогащения и синтеза знаний.
 
@@ -232,6 +232,7 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 - Watchdog: auto-enrichment при появлении файлов в raw/inbound/
 - **News Moderator (BL-189)**: агентная цепочка анализа новостей — скоринг релевантности → содержательный анализ (AgentLoop + QualityGate) → dispatch идея/отчёт → извлечение идей → persistent SQLite memory → weekly trend detection
 - **Agent Observability (BL-190)**: мониторинг и аналитика агентной цепочки — Langfuse e2e trace, persistence решений агентов (iterations_history, gate_results), 3 HTTP-endpoints диагностики (signals/runs, signals/stats), CLI `signal-status`
+- **News Digest Converter (BL-191)**: конвертер daily-news markdown → JSON-дайджест для moderate-news pipeline, CLI `convert-news-digest`, cron 07:55 Пн-Пт
 
 ### idea-pipeline (v1.1.2)
 
@@ -258,6 +259,7 @@ Cron-контейнер для периодических задач:
 - Rebuild index: ежедневно 02:00
 - Lint: ежедневно 03:00
 - Vault health: ежедневно 04:00
+- News Digest Converter: Пн-Пт 07:55
 - News Moderator: Пн-Пт 08:00
 - Trend detect: Пн 06:00
 
@@ -503,7 +505,7 @@ API возвращает `trend_7d` и `trend_30d` — история score за
 - 27 идей в бэклоге
 - 139 пунктов бэклога всего
 
-Разработка ведется с 07.05.2026. Текущие версии: pm-bot 1.17.0, knowledge-engine 1.16.0, idea-pipeline 1.1.2, web-ui 1.25.0, shared 0.7.3.
+Разработка ведется с 07.05.2026. Текущие версии: pm-bot 1.20.0, knowledge-engine 1.18.0, idea-pipeline 1.2.0, web-ui 1.28.0, shared 0.7.3.
 
 ---
 
