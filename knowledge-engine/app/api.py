@@ -270,7 +270,7 @@ def _build_reports_list(vault_path: str, limit: int = 50) -> list[dict]:
 
     from shared.frontmatter_utils import read_frontmatter
 
-    reports = []
+    reports: list[dict] = []
     for f in sorted(reports_dir.glob("*.md"), reverse=True):
         if len(reports) >= limit:
             break
