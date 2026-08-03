@@ -552,6 +552,17 @@
 }
 
 /* ================================================================
+   BL-199: Idea cards & drawer
+   ================================================================ */
+
+.rq-tag--domain { background: var(--cyan); color: var(--bg-body, #fff); }
+.rq-priority--high { background: var(--r); color: #fff; }
+.rq-priority--medium { background: var(--warning, #f0ad4e); color: #000; }
+.rq-priority--low { background: var(--text-muted); color: var(--bg-body, #fff); }
+.rq-task-card__report-ref { font-size: 11px; color: var(--text-muted); font-style: italic; }
+.rq-drawer__multiline { white-space: pre-wrap; line-height: 1.5; }
+
+/* ================================================================
    11. RESPONSIVE
    ================================================================ */
 

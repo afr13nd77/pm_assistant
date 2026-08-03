@@ -2418,3 +2418,12 @@ body {
 .epic-link {
   font-weight: 600;
 }
+
+/* ============================================================
+   RESEARCH QUEUE — light overrides (BL-199)
+   ============================================================ */
+
+.rq-tag--domain { background: var(--cyan); color: #fff; }
+.rq-priority--high { background: var(--r); color: #fff; }
+.rq-priority--medium { background: var(--a); color: #fff; }
+.rq-priority--low { background: var(--text-muted); color: #fff; }

@@ -1,10 +1,15 @@
-"""Tests for research reports API helpers (T-06, BL-198).
+"""Tests for research reports API helpers (T-06, BL-198; T-01, BL-199).
 
 Covers additive changes from T-05:
   - _build_reports_list() — scans wiki/reports/ for research-report frontmatter,
     now also surfaces outcome / outcome_details / ideas_count.
   - _match_report() — matches a research task's slug to a report file using the
     new `*-{slug}*.md` naming pattern, and now returns outcome fields too.
+
+BL-199 additions (T-01):
+  - _parse_idea_body() — parses markdown body of an idea by ## headings.
+  - _build_extracted_ideas() — collects idea files referenced by research reports.
+  - _build_reports_list() — now includes ideas_refs field.
 """
 
 from __future__ import annotations
@@ -14,7 +19,12 @@ import textwrap
 
 import pytest
 
-from app.api import _build_reports_list, _match_report
+from app.api import (
+    _build_extracted_ideas,
+    _build_reports_list,
+    _match_report,
+    _parse_idea_body,
+)
 
 
 @pytest.fixture
@@ -161,3 +171,236 @@ class TestMatchReport:
         result = _match_report("missing-topic", str(vault))
 
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# _parse_idea_body (BL-199)
+# ---------------------------------------------------------------------------
+
+
+class TestParseIdeaBody:
+    def test_parses_all_sections(self):
+        body = textwrap.dedent("""\
+            ## Проблема
+            Нет автоматической отмены бронирований.
+
+            ## Решение
+            Добавить cron-задачу.
+
+            ## Анализ
+            Снизит нагрузку на поддержку.
+        """)
+        result = _parse_idea_body(body)
+
+        assert result["problem"] == "Нет автоматической отмены бронирований."
+        assert result["solution"] == "Добавить cron-задачу."
+        assert result["rationale"] == "Снизит нагрузку на поддержку."
+
+    def test_missing_sections_return_empty(self):
+        body = "## Проблема\nТекст проблемы."
+        result = _parse_idea_body(body)
+
+        assert result["problem"] == "Текст проблемы."
+        assert result["solution"] == ""
+        assert result["rationale"] == ""
+
+    def test_empty_body(self):
+        result = _parse_idea_body("")
+
+        assert result == {"problem": "", "solution": "", "rationale": ""}
+
+    def test_unknown_headings_ignored(self):
+        body = textwrap.dedent("""\
+            ## Описание
+            Это не парсится.
+            ## Проблема
+            Парсится.
+        """)
+        result = _parse_idea_body(body)
+
+        assert result["problem"] == "Парсится."
+        assert result["solution"] == ""
+
+    def test_multiline_section(self):
+        body = textwrap.dedent("""\
+            ## Решение
+            Строка 1.
+            Строка 2.
+
+            Строка 3.
+        """)
+        result = _parse_idea_body(body)
+
+        assert "Строка 1." in result["solution"]
+        assert "Строка 2." in result["solution"]
+        assert "Строка 3." in result["solution"]
+
+
+# ---------------------------------------------------------------------------
+# _build_reports_list ideas_refs field (BL-199)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildReportsListIdeasRefs:
+    def test_ideas_refs_included_when_ideas_count_positive(self, vault):
+        reports_dir = vault / "wiki" / "reports"
+        _write_report(
+            reports_dir,
+            "2026-08-03-ref-report.md",
+            """
+            type: research-report
+            topic: "Ref Report"
+            date: "2026-08-03"
+            outcome: idea
+            ideas_count: 2
+            ideas_refs:
+              - idea-auto-cancel.md
+              - idea-pricing-model.md
+            """,
+        )
+
+        result = _build_reports_list(str(vault))
+
+        assert len(result) == 1
+        assert result[0]["ideas_refs"] == ["idea-auto-cancel.md", "idea-pricing-model.md"]
+
+    def test_ideas_refs_empty_when_no_ideas(self, vault):
+        reports_dir = vault / "wiki" / "reports"
+        _write_report(
+            reports_dir,
+            "2026-08-03-no-ideas.md",
+            """
+            type: research-report
+            topic: "No Ideas"
+            date: "2026-08-03"
+            outcome: monitor
+            ideas_count: 0
+            """,
+        )
+
+        result = _build_reports_list(str(vault))
+
+        assert len(result) == 1
+        assert result[0]["ideas_refs"] == []
+
+
+# ---------------------------------------------------------------------------
+# _build_extracted_ideas (BL-199)
+# ---------------------------------------------------------------------------
+
+
+def _write_idea(ideas_dir: pathlib.Path, filename: str, frontmatter: str, body: str = "") -> pathlib.Path:
+    ideas_dir.mkdir(parents=True, exist_ok=True)
+    content = f"---\n{textwrap.dedent(frontmatter).strip()}\n---\n\n{body}"
+    path = ideas_dir / filename
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+class TestBuildExtractedIdeas:
+    def test_collects_ideas_from_reports(self, vault):
+        # Create idea file
+        ideas_dir = vault / "raw" / "inbound" / "ideas"
+        _write_idea(
+            ideas_dir,
+            "idea-auto-cancel.md",
+            """
+            title: "Auto Cancel"
+            domain: booking
+            status: new
+            created: "2026-08-01"
+            signal_date: "2026-07-30"
+            priority_hint: high
+            """,
+            body=textwrap.dedent("""\
+                ## Проблема
+                Бронирования не отменяются вовремя.
+
+                ## Решение
+                Cron-задача.
+            """),
+        )
+
+        reports_list = [
+            {
+                "filename": "2026-08-03-report.md",
+                "ideas_refs": ["idea-auto-cancel.md"],
+                "ideas_count": 1,
+            },
+        ]
+
+        result = _build_extracted_ideas(reports_list, str(vault))
+
+        assert len(result) == 1
+        idea = result[0]
+        assert idea["filename"] == "idea-auto-cancel.md"
+        assert idea["title"] == "Auto Cancel"
+        assert idea["domain"] == "booking"
+        assert idea["problem"] == "Бронирования не отменяются вовремя."
+        assert idea["solution"] == "Cron-задача."
+        assert idea["rationale"] == ""
+        assert idea["report_ref"] == "2026-08-03-report.md"
+        assert idea["priority_hint"] == "high"
+
+    def test_returns_empty_when_no_refs(self, vault):
+        reports_list = [
+            {"filename": "report.md", "ideas_refs": []},
+        ]
+
+        result = _build_extracted_ideas(reports_list, str(vault))
+
+        assert result == []
+
+    def test_skips_missing_idea_files(self, vault):
+        # No ideas directory at all
+        reports_list = [
+            {"filename": "report.md", "ideas_refs": ["nonexistent.md"]},
+        ]
+
+        result = _build_extracted_ideas(reports_list, str(vault))
+
+        assert result == []
+
+    def test_deduplicates_across_reports(self, vault):
+        ideas_dir = vault / "raw" / "inbound" / "ideas"
+        _write_idea(
+            ideas_dir,
+            "shared-idea.md",
+            """
+            title: "Shared Idea"
+            domain: tech
+            status: new
+            created: "2026-08-01"
+            """,
+        )
+
+        reports_list = [
+            {"filename": "report-1.md", "ideas_refs": ["shared-idea.md"]},
+            {"filename": "report-2.md", "ideas_refs": ["shared-idea.md"]},
+        ]
+
+        result = _build_extracted_ideas(reports_list, str(vault))
+
+        # Should appear only once
+        assert len(result) == 1
+
+    def test_sorted_by_created_desc(self, vault):
+        ideas_dir = vault / "raw" / "inbound" / "ideas"
+        _write_idea(ideas_dir, "old-idea.md", """
+            title: "Old"
+            created: "2026-07-01"
+        """)
+        _write_idea(ideas_dir, "new-idea.md", """
+            title: "New"
+            created: "2026-08-01"
+        """)
+
+        reports_list = [
+            {"filename": "report.md", "ideas_refs": ["old-idea.md", "new-idea.md"]},
+        ]
+
+        result = _build_extracted_ideas(reports_list, str(vault))
+
+        assert len(result) == 2
+        assert result[0]["title"] == "New"
+        assert result[1]["title"] == "Old"

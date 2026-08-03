@@ -35,6 +35,7 @@
         <button class="rq-btn-close" @click="closeDrawer">&times;</button>
       </div>
       <div class="rq-drawer__body">
+        <template v-if="drawerTask._category !== 'idea'">
         <div class="rq-drawer__field">
           <label>Вопросы</label>
           <ol><li v-for="q in drawerTask.questions">{{ q }}</li></ol>
@@ -61,6 +62,7 @@
             <span>{{ drawerTask.competitor || '---' }}</span>
           </div>
         </div>
+        </template>
 
         <!-- Processed-specific fields -->
         <template v-if="drawerTask._category === 'processed'">
@@ -130,6 +132,53 @@
           <div class="rq-drawer__field" v-if="drawerTask.filename">
             <label>Report</label>
             <a :href="'obsidian://open?vault=pm-vault&file=wiki/reports/' + encodeURIComponent(drawerTask.filename)"
+               class="rq-report-link" target="_blank">
+              Открыть в Obsidian
+            </a>
+          </div>
+        </template>
+
+        <!-- Idea drawer (BL-199) -->
+        <template v-if="drawerTask._category === 'idea'">
+          <div class="rq-drawer__row">
+            <div class="rq-drawer__field">
+              <label>Домен</label>
+              <span class="rq-tag rq-tag--domain">{{ drawerTask.domain || '---' }}</span>
+            </div>
+            <div class="rq-drawer__field">
+              <label>Приоритет</label>
+              <span v-if="drawerTask.priority_hint" class="rq-outcome-badge" :class="'rq-priority--' + drawerTask.priority_hint">
+                {{ drawerTask.priority_hint }}
+              </span>
+              <span v-else>---</span>
+            </div>
+            <div class="rq-drawer__field">
+              <label>Создана</label>
+              <span>{{ drawerTask.created || '---' }}</span>
+            </div>
+          </div>
+          <div class="rq-drawer__field" v-if="drawerTask.problem">
+            <label>Проблема</label>
+            <p class="rq-drawer__multiline">{{ drawerTask.problem }}</p>
+          </div>
+          <div class="rq-drawer__field" v-if="drawerTask.solution">
+            <label>Решение</label>
+            <p class="rq-drawer__multiline">{{ drawerTask.solution }}</p>
+          </div>
+          <div class="rq-drawer__field" v-if="drawerTask.rationale">
+            <label>Анализ</label>
+            <p class="rq-drawer__multiline">{{ drawerTask.rationale }}</p>
+          </div>
+          <div class="rq-drawer__field" v-if="drawerTask.report_ref">
+            <label>Исходный отчёт</label>
+            <a :href="'obsidian://open?vault=pm-vault&file=wiki/reports/' + encodeURIComponent(drawerTask.report_ref)"
+               class="rq-report-link" target="_blank">
+              {{ drawerTask.report_ref }}
+            </a>
+          </div>
+          <div class="rq-drawer__field" v-if="drawerTask.filename">
+            <label>Идея в Vault</label>
+            <a :href="'obsidian://open?vault=pm-vault&file=raw/inbound/ideas/' + encodeURIComponent(drawerTask.filename)"
                class="rq-report-link" target="_blank">
               Открыть в Obsidian
             </a>
@@ -209,10 +258,13 @@
               <div class="rq-node__badge">{{ reportsCount }}</div>
             </div>
 
-            <!-- Ghost: extract_ideas -->
-            <div class="rq-node rq-node--ghost" data-node="extract-ideas" @click="expandedNode = null" style="grid-column:6; grid-row:2;">
+            <!-- extract_ideas (BL-199) -->
+            <div class="rq-node" :class="{ 'rq-node--active': extractedIdeas.length > 0 }"
+                 data-node="extract-ideas" @click="toggleNode('extract-ideas')"
+                 style="grid-column:6; grid-row:2;">
               <span class="material-symbols-outlined rq-node__icon">lightbulb</span>
               <div class="rq-node__title">extract_ideas</div>
+              <div class="rq-node__badge" v-if="extractedIdeas.length > 0">{{ extractedIdeas.length }}</div>
             </div>
 
             <!-- Failed (below Processing, row 3) -->
@@ -249,11 +301,14 @@
             <button class="rq-btn-close" @click="expandedNode = null">&times;</button>
           </div>
           <div class="rq-task-list__empty" v-if="expandedTasks.length === 0">
-            Нет заданий
+            {{ expandedNode === 'extract-ideas' ? 'Нет извлечённых идей' : 'Нет заданий' }}
           </div>
           <div class="rq-task-card" v-for="task in expandedTasks" :key="task.filename" @click="openDrawer(task)">
             <div class="rq-task-card__topic">{{ task.topic }}</div>
             <div class="rq-task-card__meta">
+              <span v-if="task._category === 'idea' && task.domain" class="rq-tag rq-tag--domain">{{ task.domain }}</span>
+              <span v-if="task._category === 'idea' && task.priority_hint" class="rq-outcome-badge" :class="'rq-priority--' + task.priority_hint">{{ task.priority_hint }}</span>
+              <span v-if="task._category === 'idea' && task.report_ref" class="rq-task-card__report-ref">&larr; {{ task.report_ref.replace(/^\d{4}-\d{2}-\d{2}-/, '') }}</span>
               <span v-if="task.signal_source" class="rq-tag">{{ task.signal_source }}</span>
               <span v-if="task.competitor" class="rq-tag rq-tag--comp">{{ task.competitor }}</span>
               <span v-if="task.outcome" class="rq-outcome-badge" :class="'rq-outcome--' + task.outcome">
@@ -293,6 +348,7 @@
         processed: [],
         failed: [],
         reports: [],
+        extractedIdeas: [],
         summary: { pending: 0, processed: 0, failed: 0, avg_completeness: null },
         reportsCount: 0,
         expandedNode: null,
@@ -322,11 +378,12 @@
           case 'processed': return this.processed;
           case 'failed': return this.failed;
           case 'reports': return this.reports;
+          case 'extract-ideas': return this.extractedIdeas;
           default: return [];
         }
       },
       expandedNodeTitle: function() {
-        var titles = { queue: 'Pending', processed: 'Processed', failed: 'Failed', reports: 'Reports' };
+        var titles = { queue: 'Pending', processed: 'Processed', failed: 'Failed', reports: 'Reports', 'extract-ideas': 'Extracted Ideas' };
         return titles[this.expandedNode] || '';
       },
     },
@@ -342,6 +399,11 @@
           self.reports = (data.reports || []).map(function(r) {
             r._category = 'report';
             return r;
+          });
+          self.extractedIdeas = (data.extracted_ideas || []).map(function(idea) {
+            idea._category = 'idea';
+            idea.topic = idea.title;
+            return idea;
           });
           Vue.nextTick(function() { self.recalcEdges(); });
         }).catch(function(err) {

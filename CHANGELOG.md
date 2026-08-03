@@ -16,6 +16,18 @@
 - **fix:** glob-паттерн `report-*.md` → `*-{slug}*.md` в _match_report() и reports_count (регрессия от переименования)
 - **test:** 20 новых тестов (extract_ideas_full, outcome classification, API reports_list, match_report)
 
+### knowledge-engine 1.22.0
+- **feat:** BL-199 `_build_extracted_ideas()` — сбор idea-файлов по ideas_refs из отчётов
+- **feat:** BL-199 `_parse_idea_body()` — парсинг markdown body идей (problem/solution/rationale)
+- **feat:** BL-199 `extracted_ideas[]` в API `/research-queue/status`
+- **feat:** BL-199 `ideas_refs` в `_build_reports_list` для обратного маппинга
+- **test:** 12 новых тестов (parse_idea_body, build_extracted_ideas, reports_list ideas_refs)
+
+### web-ui 1.31.0
+- **feat:** BL-199 extract_ideas нод активен — кликабельный, с бейджем количества идей
+- **feat:** BL-199 Карточки идей: domain/priority бейджи, ссылка на исходный отчёт
+- **feat:** BL-199 Drawer идеи: проблема, решение, анализ, Obsidian links на идею и отчёт
+
 ### web-ui 1.30.0
 - **feat:** BL-198 Reports нод кликабельный — список research-отчётов с outcome-бейджами
 - **feat:** Outcome-бейджи в карточках processed и reports (Идея/Инсайт/Не релевантно/Ошибка)

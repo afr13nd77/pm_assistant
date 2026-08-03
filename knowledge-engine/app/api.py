@@ -236,6 +236,30 @@ def _match_report(slug: str, vault_path: str) -> dict | None:
         return {"completeness": None, "report_path": str(report_file.relative_to(pathlib.Path(vault_path)))}
 
 
+def _parse_idea_body(body: str) -> dict:
+    """Parse markdown body of an idea file by headings (BL-199)."""
+    sections = {"problem": "", "solution": "", "rationale": ""}
+    section_map = {"проблема": "problem", "решение": "solution", "анализ": "rationale"}
+    current_key = None
+    current_lines: list[str] = []
+
+    for line in body.splitlines():
+        stripped = line.strip().lower()
+        if stripped.startswith("## "):
+            if current_key:
+                sections[current_key] = "\n".join(current_lines).strip()
+            heading = stripped[3:].strip()
+            current_key = section_map.get(heading)
+            current_lines = []
+        elif current_key is not None:
+            current_lines.append(line)
+
+    if current_key:
+        sections[current_key] = "\n".join(current_lines).strip()
+
+    return sections
+
+
 def _build_reports_list(vault_path: str, limit: int = 50) -> list[dict]:
     """Scan wiki/reports/ for research reports with frontmatter (BL-198)."""
     logger.info("_build_reports_list: scanning")
@@ -263,12 +287,65 @@ def _build_reports_list(vault_path: str, limit: int = 50) -> list[dict]:
                 "ideas_count": meta.get("ideas_count", 0),
                 "completeness": meta.get("completeness"),
                 "signal_source": meta.get("signal_source", ""),
+                "ideas_refs": meta.get("ideas_refs", []) if meta.get("ideas_count", 0) > 0 else [],
             })
         except Exception as exc:
             logger.warning(f"_build_reports_list: failed to read {f.name}: {exc}")
 
     logger.info(f"_build_reports_list: found {len(reports)} research reports")
     return reports
+
+
+def _build_extracted_ideas(reports_list: list[dict], vault_path: str) -> list[dict]:
+    """Collect idea files referenced by research reports (BL-199)."""
+    logger.info("_build_extracted_ideas: collecting")
+    from shared.frontmatter_utils import read_frontmatter
+
+    # Build reverse map: idea_filename -> report_filename
+    idea_to_report: dict[str, str] = {}
+    seen: set[str] = set()
+    for report in reports_list:
+        for ref in report.get("ideas_refs", []):
+            if ref not in seen:
+                idea_to_report[ref] = report["filename"]
+                seen.add(ref)
+
+    if not seen:
+        logger.info("_build_extracted_ideas: no idea refs found")
+        return []
+
+    ideas_dir = pathlib.Path(vault_path) / "raw" / "inbound" / "ideas"
+    results = []
+
+    for idea_filename in seen:
+        idea_path = ideas_dir / idea_filename
+        if not idea_path.exists():
+            logger.warning(f"_build_extracted_ideas: idea file not found: {idea_filename}")
+            continue
+        try:
+            meta, body = read_frontmatter(idea_path)
+        except Exception as exc:
+            logger.warning(f"_build_extracted_ideas: failed to read {idea_filename}: {exc}")
+            continue
+
+        body_sections = _parse_idea_body(body)
+        results.append({
+            "filename": idea_filename,
+            "title": meta.get("title", idea_filename),
+            "domain": meta.get("domain", ""),
+            "status": meta.get("status", ""),
+            "problem": body_sections["problem"],
+            "solution": body_sections["solution"],
+            "rationale": body_sections["rationale"],
+            "report_ref": idea_to_report.get(idea_filename, ""),
+            "signal_date": meta.get("signal_date", ""),
+            "created": meta.get("created", ""),
+            "priority_hint": meta.get("priority_hint"),
+        })
+
+    results.sort(key=lambda x: x.get("created") or x.get("signal_date") or "", reverse=True)
+    logger.info(f"_build_extracted_ideas: found {len(results)} ideas")
+    return results
 
 
 def _build_research_queue_status(vault_path: str) -> dict:
@@ -343,6 +420,9 @@ def _build_research_queue_status(vault_path: str) -> dict:
     reports_list = _build_reports_list(vault_path)
     reports_count = len(reports_list)
 
+    # Extracted ideas from reports (BL-199)
+    extracted_ideas = _build_extracted_ideas(reports_list, vault_path)
+
     logger.info(
         f"_build_research_queue_status: pending={len(pending)}, "
         f"processed={len(processed)}, failed={len(failed)}"
@@ -361,6 +441,7 @@ def _build_research_queue_status(vault_path: str) -> dict:
         },
         "reports": reports_list,
         "reports_count": reports_count,
+        "extracted_ideas": extracted_ideas,
     }
 
 

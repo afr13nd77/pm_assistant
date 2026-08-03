@@ -1,8 +1,8 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.21.0 / knowledge-engine 1.21.0 / idea-pipeline 1.2.0 / web-ui 1.30.0 / shared 0.7.4
-**Обновлён:** 03.08.2026 (BL-198 — Research Outcome реализован)
-**Бэклог:** реализованные фичи (106), баги (29), идеи (51), итого (186)
+**Версии:** pm-bot 1.21.0 / knowledge-engine 1.22.0 / idea-pipeline 1.2.0 / web-ui 1.31.0 / shared 0.7.4
+**Обновлён:** 03.08.2026 (BL-199 — extract_ideas нод реализован)
+**Бэклог:** реализованные фичи (107), баги (29), идеи (51), итого (187)
 
 ---
 
@@ -194,6 +194,7 @@
 | BL-192 | ✅ Signal Chain Settings — UI настройка LLM-цепочек | shared, pm-bot, web-ui | Дефолт signal_* → ["openrouter", "claude"]. API поддержка signal_triage/analysis/escalation_fallback. 3 группы в Settings FALLBACK CHAINS с drag-and-drop |
 | BL-194 | ✅ Research Runner — обработчик research-queue | knowledge-engine, shared | Модуль подхвата заданий из `raw/inbound/research-queue/` (JSON от `dispatch_report`), генерация аналитических отчётов через LLM (Variant B — internal), completeness check, запись в `wiki/reports/`. CLI `research-run`, cron 08:05 Пн-Пт. 48 тестов. Downstream (`check_pending_reports` → `extract_ideas`) уже реализован. Спека: docs/BL-194_research-runner/ |
 | BL-198 | ✅ Research Outcome — автоматический вердикт и UI отчётов | knowledge-engine, web-ui | Автоматический outcome LLM после генерации отчёта (idea/insight/not_relevant/error). `extract_ideas_full()` + `_extract_and_classify()` в research_runner. Кликабельный Reports нод в Research Queue UI, outcome-бейджи, drawer для отчётов. API: reports[] + outcome в processed[]. Нейминг отчётов: `{date}-{slug}.md`. 20 новых тестов. Спека: docs/BL-198_research-outcome/ |
+| BL-199 | ✅ extract_ideas нод в Research Queue UI | web-ui, knowledge-engine | Активация ghost-нода extract_ideas в пайплайн-графе. Кликабельный нод с бейджем количества идей. API: `extracted_ideas[]` в `/research-queue/status` — сбор idea-файлов по `ideas_refs` из отчётов, парсинг frontmatter + body (problem/solution/rationale). Карточки идей с domain/priority бейджами, drawer с деталями + Obsidian links. 12 новых тестов. Спека: docs/BL-199_extract-ideas-node/ |
 
 ### 6.2 Идеи
 
@@ -381,8 +382,8 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 106 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-192, BL-194..BL-195, BL-198 |
+| ✅ Реализовано | 107 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-192, BL-194..BL-195, BL-198..BL-199 |
 | ✅ Баги исправлены | 29 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165, BL-193, BUG-027, BUG-028 |
-| Идея | 52 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-188, BL-196..BL-197 |
+| Идея | 51 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-188, BL-196..BL-197 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **186** | |
+| **Итого** | **187** | |
