@@ -193,6 +193,62 @@ class TestParseJsonResponse:
         result = _parse_json_response("")
         assert result is None
 
+    def test_truncated_json_missing_closing_brackets(self):
+        """Truncated JSON with missing ]} at the end should parse and return partial ideas."""
+        full = {
+            "ideas": [
+                {"title": "Idea 1", "problem": "P1", "solution": "S1",
+                 "domain": "product", "priority_hint": "high", "rationale": "R1"},
+                {"title": "Idea 2", "problem": "P2", "solution": "S2",
+                 "domain": "growth", "priority_hint": "medium", "rationale": "R2"},
+            ],
+            "no_ideas_reason": "",
+        }
+        full_json = json.dumps(full)
+        # Simulate max_tokens cutoff: remove the closing ]}
+        truncated = full_json.rstrip("}")  # removes outer }
+        truncated = truncated.rstrip()
+        # Remove trailing ] too to simulate real truncation
+        truncated = truncated.rstrip("]").rstrip().rstrip(",")
+        # Now the JSON is missing the closing of the array and outer object
+        # But both idea objects are complete
+
+        result = _parse_json_response(truncated)
+        assert result is not None
+        assert "ideas" in result
+        assert len(result["ideas"]) >= 1
+
+    def test_truncated_json_mid_object(self):
+        """Truncated JSON mid-object should return ideas up to last complete object."""
+        idea1 = {"title": "Complete Idea", "problem": "P1", "solution": "S1",
+                 "domain": "product", "priority_hint": "high", "rationale": "R1"}
+        # Build JSON that is cut off mid-second-object
+        text = '{"ideas": [' + json.dumps(idea1) + ', {"title": "Partial Idea", "prob'
+
+        result = _parse_json_response(text)
+        assert result is not None
+        assert "ideas" in result
+        assert len(result["ideas"]) == 1
+        assert result["ideas"][0]["title"] == "Complete Idea"
+
+    def test_truncated_json_in_markdown_block(self):
+        """Truncated JSON inside markdown code fence should still be repaired."""
+        idea1 = {"title": "First", "problem": "P", "solution": "S",
+                 "domain": "d", "priority_hint": "h", "rationale": "R"}
+        # Simulate markdown-wrapped truncated response
+        text = '```json\n{"ideas": [' + json.dumps(idea1) + ', {"title": "Sec'
+
+        result = _parse_json_response(text)
+        assert result is not None
+        assert len(result["ideas"]) == 1
+        assert result["ideas"][0]["title"] == "First"
+
+    def test_truncated_json_no_ideas_key_returns_none(self):
+        """Truncated JSON without 'ideas' key should not be repaired."""
+        text = '{"data": [{"title": "X"'
+        result = _parse_json_response(text)
+        assert result is None
+
 
 # ---------------------------------------------------------------------------
 # _build_extraction_prompt tests

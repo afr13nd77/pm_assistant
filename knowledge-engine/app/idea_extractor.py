@@ -47,7 +47,7 @@ def extract_ideas(
         response, meta = call_detailed(
             operation="report_to_ideas",
             messages=messages,
-            max_tokens=2000,
+            max_tokens=4000,
             timeout=60,
         )
         logger.info(f"LLM call succeeded, provider={meta.get('used', 'unknown')}")
@@ -121,7 +121,7 @@ def extract_ideas_full(
     response, meta = call_detailed(
         operation="report_to_ideas",
         messages=messages,
-        max_tokens=2000,
+        max_tokens=4000,
         timeout=60,
     )
     logger.info(f"LLM call succeeded, provider={meta.get('used', 'unknown')}")
@@ -231,6 +231,34 @@ def _parse_json_response(text: str) -> dict | None:
             return result
         except json.JSONDecodeError:
             pass
+
+    # Try repairing truncated JSON (max_tokens cutoff)
+    cleaned = text
+    cleaned = re.sub(r"^```(?:json)?\s*\n?", "", cleaned)
+    cleaned = re.sub(r"\n?```\s*$", "", cleaned)
+    cleaned = cleaned.strip()
+
+    # Find the last complete object in a truncated "ideas" array
+    # by walking backwards from the end to find a valid closing brace
+    if cleaned.startswith("{") and "ideas" in cleaned:
+        last_complete = cleaned.rfind("}")
+        while last_complete > 0:
+            candidate = cleaned[:last_complete + 1]
+            for suffix in [
+                '], "no_ideas_reason": ""}',
+                '], "no_ideas_reason": "truncated"}',
+            ]:
+                try:
+                    result = json.loads(candidate + suffix)
+                    if isinstance(result, dict) and "ideas" in result:
+                        logger.warning(
+                            f"JSON parsed after truncation repair, "
+                            f"kept {len(result.get('ideas', []))} ideas"
+                        )
+                        return result
+                except json.JSONDecodeError:
+                    continue
+            last_complete = cleaned.rfind("}", 0, last_complete)
 
     logger.error(f"Cannot parse JSON from response: {text[:200]}...")
     return None
