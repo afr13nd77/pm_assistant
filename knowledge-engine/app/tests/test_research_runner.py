@@ -5,13 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.research_runner import ResearchResult, ResearchTask, process_task
 
 
-def _make_task(**overrides) -> ResearchTask:
-    defaults = dict(
+def _make_task(**overrides: object) -> ResearchTask:
+    defaults: dict[str, object] = dict(
         topic="Test Topic",
         questions=["Q1?", "Q2?"],
         scope="test scope",
@@ -21,7 +19,7 @@ def _make_task(**overrides) -> ResearchTask:
         source_path=Path("/fake/queue/task.json"),
     )
     defaults.update(overrides)
-    return ResearchTask(**defaults)
+    return ResearchTask(**defaults)  # type: ignore[arg-type]
 
 
 def _make_config() -> MagicMock:

@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -30,7 +29,7 @@ class TestConvertNewsDigestLogged:
         lp_cls, lp_instance = mock_logged_process
         fake_output = tmp_path / "2026-08-03-digest.json"
 
-        with patch("app.news_digest_converter.convert_news_digest", return_value=fake_output) as mock_convert:
+        with patch("app.news_digest_converter.convert_news_digest", return_value=fake_output):
             from app.news_digest_converter import convert_news_digest
 
             # Simulate what the CLI handler does
@@ -107,7 +106,7 @@ class TestLoggedProcessRealBehavior:
         db_path = tmp_path / ".system-log.db"
 
         with pytest.raises(FileNotFoundError):
-            with LoggedProcess("convert-news-digest", source="ke-cron", db_path=db_path) as lp:
+            with LoggedProcess("convert-news-digest", source="ke-cron", db_path=db_path):
                 raise FileNotFoundError("test missing file")
 
     def test_error_recorded_on_exception(self, tmp_path):
@@ -117,7 +116,7 @@ class TestLoggedProcessRealBehavior:
         db_path = tmp_path / ".system-log.db"
 
         with pytest.raises(FileNotFoundError):
-            with LoggedProcess("convert-news-digest", source="ke-cron", db_path=db_path) as lp:
+            with LoggedProcess("convert-news-digest", source="ke-cron", db_path=db_path):
                 raise FileNotFoundError("test missing file")
 
         result = query_log(

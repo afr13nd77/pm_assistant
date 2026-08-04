@@ -230,8 +230,8 @@ def process_task(
 
         # Outcome is None — previous run crashed before step 8a, recompute (BL-200)
         logger.warning(
-            f"process_task: existing report has outcome=None, "
-            f"running _extract_and_classify to recover"
+            "process_task: existing report has outcome=None, "
+            "running _extract_and_classify to recover"
         )
         outcome, outcome_details, ideas_count, ideas_refs = _extract_and_classify(
             report_path=existing,
@@ -383,9 +383,9 @@ def process_task(
         logger.info("process_task: dry_run=True, skipping write and move")
 
     # 8a. Extract ideas and classify outcome (BL-198)
-    outcome: str | None = None
+    outcome: str | None = None  # type: ignore[no-redef]
     outcome_details = ""
-    ideas_refs: list[str] = []
+    ideas_refs = []
     extracted_ideas_count = 0
 
     if report_path and not dry_run:

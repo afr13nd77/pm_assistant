@@ -36,9 +36,9 @@ _NOTIFY_TTL_SECONDS = 300
 def _delete_message(bot_token: str, chat_id: str, message_id: int) -> None:
     """Delete a Telegram message after TTL expiry (called by threading.Timer)."""
     url = f"https://api.telegram.org/bot{bot_token}/deleteMessage"
-    payload = {"chat_id": chat_id, "message_id": message_id}
+    payload: dict[str, str | int] = {"chat_id": chat_id, "message_id": message_id}
     try:
-        resp = requests.post(url, json=payload, timeout=10)
+        resp = requests.post(url, json=payload, timeout=10)  # type: ignore[arg-type]
         resp.raise_for_status()
         logger.info("[BL-173] deleted notification message_id=%s", message_id)
     except Exception as e:
