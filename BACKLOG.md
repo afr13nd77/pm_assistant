@@ -1,8 +1,8 @@
 # Бэклог -- PM Assistant
 
 **Версии:** pm-bot 1.21.0 / knowledge-engine 1.22.0 / idea-pipeline 1.2.0 / web-ui 1.31.0 / shared 0.7.4
-**Обновлён:** 03.08.2026 (BL-199 — extract_ideas нод реализован)
-**Бэклог:** реализованные фичи (107), баги (29), идеи (51), итого (187)
+**Обновлён:** 04.08.2026 (BL-200 — багфиксы Signal Chain)
+**Бэклог:** реализованные фичи (108), баги (29), идеи (51), итого (188)
 
 ---
 
@@ -195,6 +195,7 @@
 | BL-194 | ✅ Research Runner — обработчик research-queue | knowledge-engine, shared | Модуль подхвата заданий из `raw/inbound/research-queue/` (JSON от `dispatch_report`), генерация аналитических отчётов через LLM (Variant B — internal), completeness check, запись в `wiki/reports/`. CLI `research-run`, cron 08:05 Пн-Пт. 48 тестов. Downstream (`check_pending_reports` → `extract_ideas`) уже реализован. Спека: docs/BL-194_research-runner/ |
 | BL-198 | ✅ Research Outcome — автоматический вердикт и UI отчётов | knowledge-engine, web-ui | Автоматический outcome LLM после генерации отчёта (idea/insight/not_relevant/error). `extract_ideas_full()` + `_extract_and_classify()` в research_runner. Кликабельный Reports нод в Research Queue UI, outcome-бейджи, drawer для отчётов. API: reports[] + outcome в processed[]. Нейминг отчётов: `{date}-{slug}.md`. 20 новых тестов. Спека: docs/BL-198_research-outcome/ |
 | BL-199 | ✅ extract_ideas нод в Research Queue UI | web-ui, knowledge-engine | Активация ghost-нода extract_ideas в пайплайн-графе. Кликабельный нод с бейджем количества идей. API: `extracted_ideas[]` в `/research-queue/status` — сбор idea-файлов по `ideas_refs` из отчётов, парсинг frontmatter + body (problem/solution/rationale). Карточки идей с domain/priority бейджами, drawer с деталями + Obsidian links. 12 новых тестов. Спека: docs/BL-199_extract-ideas-node/ |
+| BL-200 | ✅ Багфиксы Signal Chain — outcome, ideas count, logging | knowledge-engine | BUG-030: outcome recovery при повторном запуске research-runner (read_frontmatter → _extract_and_classify если outcome=null). BUG-031: ideas count в RunSummary по reaction вместо подстроки в filename. BUG-032: convert-news-digest обёрнут в LoggedProcess. 12 новых тестов. Спека: docs/BL-200_signal-chain-bugfixes/ |
 
 ### 6.2 Идеи
 

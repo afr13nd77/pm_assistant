@@ -895,7 +895,7 @@ class SignalOrchestrator:
             ),
             ideas=sum(
                 1 for i in all_items
-                if i.result_ref and "ideas" in str(i.result_ref)
+                if i.reaction == "idea" and i.result_ref
             ),
             reports=sum(
                 1 for i in all_items if i.status == "waiting_report"

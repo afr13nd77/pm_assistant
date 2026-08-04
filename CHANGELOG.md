@@ -5,6 +5,16 @@
 
 ---
 
+## 04.08.2026
+
+### knowledge-engine 1.22.1
+- **fix:** BUG-030 outcome=null при повторном запуске research-runner — recovery через `_extract_and_classify` если outcome отсутствует в frontmatter существующего отчёта
+- **fix:** BUG-031 ideas count в RunSummary всегда 0 — подсчёт по `reaction == "idea"` вместо подстроки `"ideas"` в filename
+- **fix:** BUG-032 convert-news-digest обёрнут в `LoggedProcess("convert-news-digest")` для видимости в system-log
+- **test:** 12 новых тестов (6 research_runner outcome recovery, 6 convert-news-digest logged)
+
+---
+
 ## 03.08.2026
 
 ### knowledge-engine 1.21.0

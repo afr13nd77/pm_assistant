@@ -10,7 +10,7 @@ from datetime import date
 from pathlib import Path
 
 from shared.file_writer import atomic_write
-from shared.frontmatter_utils import update_frontmatter
+from shared.frontmatter_utils import read_frontmatter, update_frontmatter
 from shared.llm_client import call_detailed
 from shared.vault_paths import (
     raw_research_queue,
@@ -194,10 +194,67 @@ def process_task(
         logger.info(f"process_task: report already exists: {existing}")
         if not dry_run:
             _move_task_file(task.source_path, "processed", vault_path)
+
+        # Read frontmatter to check if outcome was already computed (BL-200 / BUG-030)
+        try:
+            meta, _ = read_frontmatter(existing)
+            logger.info(
+                f"process_task: existing report frontmatter read, "
+                f"outcome={meta.get('outcome')}, completeness={meta.get('completeness')}"
+            )
+        except Exception as exc:
+            logger.error(f"process_task: failed to read frontmatter from {existing}: {exc}")
+            meta = {}
+
+        existing_outcome = meta.get("outcome")
+
+        if existing_outcome is not None:
+            # Outcome already computed — return early with real values
+            logger.info(
+                f"process_task: existing report has outcome={existing_outcome}, "
+                f"returning cached result"
+            )
+            return ResearchResult(
+                topic=task.topic,
+                report_path=str(existing),
+                completeness=meta.get("completeness", 0),
+                quality_warning=False,
+                ideas_count=meta.get("ideas_count", 0),
+                tokens_in=0,
+                tokens_out=0,
+                method=method,
+                error=None,
+                outcome=existing_outcome,
+                outcome_details=meta.get("outcome_details", ""),
+            )
+
+        # Outcome is None — previous run crashed before step 8a, recompute (BL-200)
+        logger.warning(
+            f"process_task: existing report has outcome=None, "
+            f"running _extract_and_classify to recover"
+        )
+        outcome, outcome_details, ideas_count, ideas_refs = _extract_and_classify(
+            report_path=existing,
+            task=task,
+            vault_path=vault_path,
+            config=config,
+        )
+        logger.info(
+            f"process_task: recovery classification done, outcome={outcome}, "
+            f"ideas_count={ideas_count}"
+        )
         return ResearchResult(
-            topic=task.topic, report_path=str(existing), completeness=0,
-            quality_warning=False, ideas_count=0, tokens_in=0, tokens_out=0,
-            method=method, error=None,
+            topic=task.topic,
+            report_path=str(existing),
+            completeness=meta.get("completeness", 0),
+            quality_warning=False,
+            ideas_count=ideas_count,
+            tokens_in=0,
+            tokens_out=0,
+            method=method,
+            error=None,
+            outcome=outcome,
+            outcome_details=outcome_details,
         )
 
     # 2. Notify start

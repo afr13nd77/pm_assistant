@@ -234,6 +234,11 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 - **Agent Observability (BL-190)**: мониторинг и аналитика агентной цепочки — Langfuse e2e trace, persistence решений агентов (iterations_history, gate_results), 3 HTTP-endpoints диагностики (signals/runs, signals/stats), CLI `signal-status`
 - **News Digest Converter (BL-191)**: конвертер daily-news markdown → JSON-дайджест для moderate-news pipeline, CLI `convert-news-digest`, cron 07:55 Пн-Пт
 
+#### Принудительный запуск News Moderator
+```
+docker exec knowledge-engine python -m app moderate-news --notify
+```
+
 ### idea-pipeline (v1.1.2)
 
 Оркестратор проработки идей через цепочку AI-агентов.

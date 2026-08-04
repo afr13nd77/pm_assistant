@@ -813,16 +813,22 @@ def main():
 
         from shared import vault_paths as _vp
         _vp.VAULT_PATH = pathlib.Path(vault_path)
+        from shared.system_log import LoggedProcess
+
         from .news_digest_converter import convert_news_digest
         logger.info(f"convert-news-digest: vault={vault_path}, date={args.date}")
         try:
-            result = convert_news_digest(vault_path, args.date)
-            if result:
-                logger.info(f"convert-news-digest: converted -> {result}")
-                print(f"Converted: {result}")
-            else:
-                logger.info("convert-news-digest: no conversion needed")
-                print("No conversion needed")
+            with LoggedProcess("convert-news-digest", source="ke-cron") as lp:
+                result = convert_news_digest(vault_path, args.date)
+                if result:
+                    lp.summary = f"Converted: {result.name}"
+                    lp.details = {"output_file": str(result)}
+                    logger.info(f"convert-news-digest: converted -> {result}")
+                    print(f"Converted: {result}")
+                else:
+                    lp.summary = "No conversion needed (file already exists)"
+                    logger.info("convert-news-digest: no conversion needed")
+                    print("No conversion needed")
         except FileNotFoundError as e:
             logger.error(f"convert-news-digest: {e}")
             print(str(e), file=sys.stderr)
