@@ -126,6 +126,11 @@ class ItemState:
     iterations_history: list[dict] = field(default_factory=list)
     gate_results: list[dict] = field(default_factory=list)
     reaction: str | None = None
+    # BL-201: scoring data for frontend display
+    relevance: int | None = None
+    reason: str | None = None
+    matched_entities: list[str] = field(default_factory=list)
+    source_url: str | None = None
 
 
 @dataclass
@@ -439,6 +444,12 @@ class SignalOrchestrator:
             ),
         })
         logger.info(f"Item '{title}': relevance={scoring.relevance}")
+
+        # BL-201: persist scoring data in run state
+        item_state.relevance = scoring.relevance
+        item_state.reason = scoring.reason
+        item_state.matched_entities = list(scoring.matched_entities) if scoring.matched_entities else []
+        item_state.source_url = item.get("source_url")
 
         # --- Step 2: Threshold check ---
         if scoring.relevance < self.config.relevance_threshold:

@@ -653,3 +653,158 @@
 .rq-ideas-list li:last-child {
   border-bottom: none;
 }
+
+/* ================================================================
+   BL-201: Signal Moderator
+   ================================================================ */
+
+/* Timestamp under badge */
+.rq-node__timestamp {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  letter-spacing: 0.02em;
+}
+
+/* Signal reaction badges */
+.rq-signal-reaction {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--rad);
+  text-transform: uppercase;
+  font-weight: 600;
+  white-space: nowrap;
+  display: inline-block;
+}
+
+.rq-signal-reaction--lg {
+  font-size: 12px;
+  padding: 4px 12px;
+}
+
+.rq-signal-reaction--skip {
+  background: rgba(128, 128, 128, 0.12);
+  color: var(--text-muted);
+}
+
+.rq-signal-reaction--idea {
+  background: rgba(52, 211, 153, 0.12);
+  color: var(--g);
+}
+
+.rq-signal-reaction--report {
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--cyan);
+}
+
+.rq-signal-reaction--error,
+.rq-signal-reaction--failed {
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--r);
+}
+
+.rq-signal-reaction--unknown,
+.rq-signal-reaction--pending {
+  background: rgba(128, 128, 128, 0.08);
+  color: var(--text-muted);
+}
+
+/* Score display */
+.rq-signal-score {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.rq-signal-score__sep {
+  color: var(--text-muted);
+  font-weight: 400;
+  margin: 0 1px;
+}
+
+/* Entities container */
+.rq-signal-entities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+/* Gate status */
+.rq-signal-gate--passed {
+  color: var(--g);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.rq-signal-gate--failed {
+  color: var(--r);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.rq-signal-failed-criteria {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.rq-signal-failed-criteria span {
+  display: block;
+  padding: 2px 0;
+}
+
+/* Iterations */
+.rq-signal-iterations {
+  margin-top: 4px;
+}
+
+.rq-signal-iteration {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rq-signal-iteration:last-child {
+  border-bottom: none;
+}
+
+.rq-signal-iteration__num {
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 24px;
+}
+
+.rq-signal-iteration__score {
+  color: var(--text-body);
+}
+
+.rq-signal-iteration__escalated {
+  font-size: 10px;
+  color: var(--a);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Run selector */
+.rq-signal-run-select {
+  font-family: var(--font);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  padding: 4px 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text-body);
+  border-radius: var(--rad);
+  cursor: pointer;
+  margin-right: 8px;
+}
+
+.rq-signal-run-select:focus {
+  border-color: var(--cyan);
+  outline: none;
+}

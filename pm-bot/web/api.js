@@ -568,6 +568,16 @@ var api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filename: filename })
     });
+  },
+
+  /** GET /api/v1/signals/runs?limit=N */
+  signalRuns: function(limit) {
+    return apiFetch('/signals/runs?limit=' + (limit || 10));
+  },
+
+  /** GET /api/v1/signals/runs/{runId} */
+  signalRunDetail: function(runId) {
+    return apiFetch('/signals/runs/' + encodeURIComponent(runId));
   }
 };
 

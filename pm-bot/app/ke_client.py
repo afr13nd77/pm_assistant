@@ -360,3 +360,23 @@ def research_queue_retry(filename: str) -> dict:
     logger.info("research_queue_retry: filename=%s", filename)
     return _post("/api/v1/research-queue/retry", _get_timeout("research_run"),
                  json={"filename": filename})
+
+
+# ---------------------------------------------------------------------------
+# 30. GET /api/v1/signals/runs
+# ---------------------------------------------------------------------------
+
+def signal_runs(limit: int = 10) -> dict:
+    """Get list of signal moderator runs."""
+    logger.info("signal_runs: limit=%s", limit)
+    return _get(f"/api/v1/signals/runs?limit={limit}", _get_timeout("default"))
+
+
+# ---------------------------------------------------------------------------
+# 31. GET /api/v1/signals/runs/{run_id}
+# ---------------------------------------------------------------------------
+
+def signal_run_detail(run_id: str) -> dict:
+    """Get detail of a specific signal run."""
+    logger.info("signal_run_detail: run_id=%s", run_id)
+    return _get(f"/api/v1/signals/runs/{run_id}", _get_timeout("default"))

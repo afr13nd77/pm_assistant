@@ -35,7 +35,7 @@
         <button class="rq-btn-close" @click="closeDrawer">&times;</button>
       </div>
       <div class="rq-drawer__body">
-        <template v-if="drawerTask._category !== 'idea'">
+        <template v-if="drawerTask._category !== 'idea' && drawerTask._category !== 'signal'">
         <div class="rq-drawer__field">
           <label>Вопросы</label>
           <ol><li v-for="q in drawerTask.questions">{{ q }}</li></ol>
@@ -185,6 +185,94 @@
           </div>
         </template>
 
+        <!-- Signal drawer (BL-201) -->
+        <template v-if="drawerTask._category === 'signal'">
+          <div class="rq-drawer__row">
+            <div class="rq-drawer__field">
+              <label>Relevance</label>
+              <span v-if="drawerTask.relevance != null">
+                <strong>{{ drawerTask.relevance }}</strong> / {{ signalThreshold }}
+              </span>
+              <span v-else>---</span>
+            </div>
+            <div class="rq-drawer__field">
+              <label>Reaction</label>
+              <span class="rq-signal-reaction rq-signal-reaction--lg"
+                    :class="'rq-signal-reaction--' + (drawerTask.reaction || 'unknown')">
+                {{ (drawerTask.reaction || '---').toUpperCase() }}
+              </span>
+            </div>
+          </div>
+
+          <div class="rq-drawer__field" v-if="drawerTask.reason">
+            <label>Reason</label>
+            <p class="rq-drawer__multiline">{{ drawerTask.reason }}</p>
+          </div>
+
+          <div class="rq-drawer__field" v-if="drawerTask.matched_entities && drawerTask.matched_entities.length">
+            <label>Matched Entities</label>
+            <div class="rq-signal-entities">
+              <span class="rq-tag" v-for="entity in drawerTask.matched_entities" :key="entity">
+                {{ entity }}
+              </span>
+            </div>
+          </div>
+
+          <div class="rq-drawer__field" v-if="drawerTask.source_url">
+            <label>Source</label>
+            <a :href="drawerTask.source_url" class="rq-report-link" target="_blank" rel="noopener">
+              {{ drawerTask.source_url }}
+            </a>
+          </div>
+
+          <template v-if="drawerTask.gate_results && drawerTask.gate_results.length">
+            <div class="rq-drawer__field" v-for="gate in drawerTask.gate_results" :key="gate.gate">
+              <label>{{ gate.gate === 'quality' ? 'Quality Gate' : 'Dedup Gate' }}</label>
+              <div>
+                <span :class="gate.passed ? 'rq-signal-gate--passed' : 'rq-signal-gate--failed'">
+                  {{ gate.passed ? 'PASSED' : 'FAILED' }}
+                </span>
+                <span v-if="gate.score != null"> — score: {{ gate.score }}</span>
+                <span v-if="gate.similarity != null"> — similarity: {{ gate.similarity }}</span>
+              </div>
+              <div v-if="gate.failed_criteria && gate.failed_criteria.length" class="rq-signal-failed-criteria">
+                <span v-for="c in gate.failed_criteria" :key="c">{{ c }}</span>
+              </div>
+            </div>
+          </template>
+
+          <div class="rq-drawer__field" v-if="drawerTask.iterations_history && drawerTask.iterations_history.length">
+            <label>Iterations ({{ drawerTask.iterations }})</label>
+            <div class="rq-signal-iterations">
+              <div class="rq-signal-iteration" v-for="(iter, idx) in drawerTask.iterations_history" :key="idx">
+                <span class="rq-signal-iteration__num">#{{ iter.attempt }}</span>
+                <span class="rq-signal-iteration__score">quality: {{ iter.quality_score }}</span>
+                <span v-if="iter.escalated" class="rq-signal-iteration__escalated">escalated</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="rq-drawer__field rq-drawer__field--error"
+               v-if="drawerTask.errors && drawerTask.errors.length">
+            <label>Errors</label>
+            <p v-for="(err, idx) in drawerTask.errors" :key="idx">{{ err }}</p>
+          </div>
+
+          <div class="rq-drawer__field"
+               v-if="drawerTask.quality_warnings && drawerTask.quality_warnings.length">
+            <label>Quality Warnings</label>
+            <p v-for="(w, idx) in drawerTask.quality_warnings" :key="idx">{{ w }}</p>
+          </div>
+
+          <div class="rq-drawer__field" v-if="drawerTask.result_ref">
+            <label>Result</label>
+            <a :href="'obsidian://open?vault=pm-vault&file=' + encodeURIComponent(drawerTask.result_ref)"
+               class="rq-report-link" target="_blank">
+              {{ drawerTask.result_ref }}
+            </a>
+          </div>
+        </template>
+
         <!-- Failed-specific fields -->
         <template v-if="drawerTask._category === 'failed'">
           <div class="rq-drawer__field rq-drawer__field--error">
@@ -220,10 +308,20 @@
         <section class="rq-pipeline-section">
           <div class="rq-pipeline" ref="pipeline">
             <!-- Row 1: main flow -->
-            <!-- Ghost: Signal Moderator -->
-            <div class="rq-node rq-node--ghost" data-node="signal-moderator" style="grid-column:1; grid-row:2;">
+            <!-- Signal Moderator (BL-201) -->
+            <div class="rq-node"
+                 :class="{
+                   'rq-node--ghost': !hasSignalData,
+                   'rq-node--active': hasSignalData && !hasSignalErrors,
+                   'rq-node--alert': hasSignalErrors
+                 }"
+                 data-node="signal-moderator"
+                 @click="hasSignalData && toggleNode('signal-moderator')"
+                 style="grid-column:1; grid-row:2;">
               <span class="material-symbols-outlined rq-node__icon">sensors</span>
               <div class="rq-node__title">Signal Moderator</div>
+              <div class="rq-node__badge" v-if="hasSignalData">{{ signalBadgeCount }}</div>
+              <div class="rq-node__timestamp" v-if="hasSignalData">{{ signalLastRunTime }}</div>
             </div>
 
             <!-- Queue (Pending) -->
@@ -298,14 +396,37 @@
         <section class="rq-task-list" v-if="expandedNode">
           <div class="rq-task-list__header">
             <h2>{{ expandedNodeTitle }} <span class="rq-count">({{ expandedTasks.length }})</span></h2>
+            <select v-if="expandedNode === 'signal-moderator' && signalRuns.length > 1"
+                    class="rq-signal-run-select"
+                    :value="selectedRunId"
+                    @change="selectSignalRun($event.target.value)">
+              <option v-for="run in signalRuns" :key="run.run_id" :value="run.run_id">
+                {{ run.run_id }} ({{ run.summary ? run.summary.total : 0 }} signals)
+              </option>
+            </select>
             <button class="rq-btn-close" @click="expandedNode = null">&times;</button>
           </div>
           <div class="rq-task-list__empty" v-if="expandedTasks.length === 0">
-            {{ expandedNode === 'extract-ideas' ? 'Нет извлечённых идей' : 'Нет заданий' }}
+            <template v-if="expandedNode === 'signal-moderator'">
+              {{ signalLoading ? 'Загрузка...' : 'Нет данных о прогонах Signal Moderator' }}
+            </template>
+            <template v-else>
+              {{ expandedNode === 'extract-ideas' ? 'Нет извлечённых идей' : 'Нет заданий' }}
+            </template>
           </div>
-          <div class="rq-task-card" v-for="task in expandedTasks" :key="task.filename" @click="openDrawer(task)">
+          <div class="rq-task-card" v-for="task in expandedTasks" :key="task._key || task.filename" @click="openDrawer(task)">
             <div class="rq-task-card__topic">{{ task.topic }}</div>
             <div class="rq-task-card__meta">
+              <template v-if="task._category === 'signal'">
+                <span class="rq-signal-reaction"
+                      :class="'rq-signal-reaction--' + (task.reaction || 'unknown')">
+                  {{ (task.reaction || 'pending').toUpperCase() }}
+                </span>
+                <span v-if="task.relevance != null" class="rq-signal-score">
+                  {{ task.relevance }}<span class="rq-signal-score__sep">/</span>{{ signalThreshold }}
+                </span>
+                <span v-if="task.source_url" class="rq-tag">source</span>
+              </template>
               <span v-if="task._category === 'idea' && task.domain" class="rq-tag rq-tag--domain">{{ task.domain }}</span>
               <span v-if="task._category === 'idea' && task.priority_hint" class="rq-outcome-badge" :class="'rq-priority--' + task.priority_hint">{{ task.priority_hint }}</span>
               <span v-if="task._category === 'idea' && task.report_ref" class="rq-task-card__report-ref">&larr; {{ task.report_ref.replace(/^\d{4}-\d{2}-\d{2}-/, '') }}</span>
@@ -367,11 +488,38 @@
           { id: 'reports-ei', from: 'reports', to: 'extract-ideas', direction: 'right', animated: false, alert: false },
           { id: 'proc-failed', from: 'processing', to: 'failed', direction: 'down', animated: false, alert: true },
         ],
+        signalRuns: [],
+        selectedRunId: null,
+        signalItems: [],
+        signalRunSummary: null,
+        signalRunStatus: null,
+        signalLastRun: null,
+        signalLoading: false,
+        signalThreshold: 7,
       };
     },
     computed: {
       hasPending: function() { return this.summary.pending > 0; },
       hasFailed: function() { return this.summary.failed > 0; },
+      hasSignalData: function() { return this.signalRuns.length > 0; },
+      hasSignalErrors: function() {
+        return this.signalLastRun && this.signalLastRun.summary &&
+               this.signalLastRun.summary.errors > 0;
+      },
+      hasSignalReports: function() {
+        return this.signalLastRun && this.signalLastRun.summary &&
+               this.signalLastRun.summary.reports > 0;
+      },
+      signalBadgeCount: function() {
+        if (!this.signalLastRun || !this.signalLastRun.summary) return 0;
+        return this.signalLastRun.summary.total || 0;
+      },
+      signalLastRunTime: function() {
+        if (!this.signalLastRun || !this.signalLastRun.started_at) return '';
+        var d = this.signalLastRun.started_at;
+        var m = d.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+        return m ? m[3] + '.' + m[2] + ' ' + m[4] + ':' + m[5] : '';
+      },
       expandedTasks: function() {
         switch (this.expandedNode) {
           case 'queue': return this.pending;
@@ -379,11 +527,12 @@
           case 'failed': return this.failed;
           case 'reports': return this.reports;
           case 'extract-ideas': return this.extractedIdeas;
+          case 'signal-moderator': return this.signalItems;
           default: return [];
         }
       },
       expandedNodeTitle: function() {
-        var titles = { queue: 'Pending', processed: 'Processed', failed: 'Failed', reports: 'Reports', 'extract-ideas': 'Extracted Ideas' };
+        var titles = { queue: 'Pending', processed: 'Processed', failed: 'Failed', reports: 'Reports', 'extract-ideas': 'Extracted Ideas', 'signal-moderator': 'Signal Moderator' };
         return titles[this.expandedNode] || '';
       },
     },
@@ -413,6 +562,52 @@
           }
         });
       },
+      loadSignalRuns: function() {
+        var self = this;
+        api.signalRuns(10).then(function(data) {
+          self.signalRuns = data.runs || [];
+          self.signalLastRun = self.signalRuns.length > 0 ? self.signalRuns[0] : null;
+          if (self.signalLastRun && self.signalLastRun.summary) {
+            self.edgeDefs[0].animated = self.signalLastRun.summary.reports > 0;
+            self.edgeDefs[0].alert = self.signalLastRun.summary.errors > 0;
+          }
+          if (self.expandedNode === 'signal-moderator' && !self.selectedRunId && self.signalLastRun) {
+            self.loadSignalRunDetail(self.signalLastRun.run_id);
+          }
+          Vue.nextTick(function() { self.recalcEdges(); });
+        }).catch(function(err) {
+          if (err.name !== 'AbortError') {
+            console.error('[research] loadSignalRuns error:', err);
+          }
+        });
+      },
+      loadSignalRunDetail: function(runId) {
+        var self = this;
+        self.signalLoading = true;
+        api.signalRunDetail(runId).then(function(data) {
+          self.signalLoading = false;
+          self.selectedRunId = runId;
+          self.signalRunSummary = data.summary || null;
+          self.signalRunStatus = data.run_status || 'unknown';
+          var items = data.items || {};
+          self.signalItems = Object.keys(items).map(function(key) {
+            var item = items[key];
+            item._key = key;
+            item._category = 'signal';
+            item.topic = item.title;
+            return item;
+          });
+        }).catch(function(err) {
+          self.signalLoading = false;
+          if (err.name !== 'AbortError') {
+            console.error('[research] loadSignalRunDetail error:', err);
+            self.showToast('Ошибка загрузки деталей прогона: ' + err.message, 'error');
+          }
+        });
+      },
+      selectSignalRun: function(runId) {
+        this.loadSignalRunDetail(runId);
+      },
       runAll: function() {
         var self = this;
         if (self.isRunning) return;
@@ -440,7 +635,15 @@
         });
       },
       toggleNode: function(type) {
-        this.expandedNode = this.expandedNode === type ? null : type;
+        if (this.expandedNode === type) {
+          this.expandedNode = null;
+        } else {
+          this.expandedNode = type;
+          if (type === 'signal-moderator' && this.signalLastRun) {
+            var targetRunId = this.selectedRunId || this.signalLastRun.run_id;
+            this.loadSignalRunDetail(targetRunId);
+          }
+        }
       },
       openDrawer: function(task) {
         this.drawerTask = task;
@@ -501,7 +704,8 @@
     mounted: function() {
       var self = this;
       self.loadStatus();
-      self.refreshTimer = setInterval(function() { self.loadStatus(); }, self.REFRESH_INTERVAL);
+      self.loadSignalRuns();
+      self.refreshTimer = setInterval(function() { self.loadStatus(); self.loadSignalRuns(); }, self.REFRESH_INTERVAL);
       window.addEventListener('resize', self.recalcEdges);
       // ResizeObserver for pipeline container
       if (window.ResizeObserver) {

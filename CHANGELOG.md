@@ -7,6 +7,18 @@
 
 ## 04.08.2026
 
+### knowledge-engine 1.23.0
+- **feat:** BL-201 ItemState расширен: `relevance`, `reason`, `matched_entities`, `source_url` — scoring-данные сохраняются в run JSON для frontend-отображения
+
+### pm-bot 1.26.0
+- **feat:** BL-201 Signal Moderator нод в Research Queue UI — активация ghost-нода в полноценный интерактивный нод
+- **feat:** Proxy chain для signal endpoints: `ke_client.signal_runs()`, `signal_run_detail()` → `vault_api.py` → `api.js`
+- **feat:** Карточки сигналов с reaction-бейджами (SKIP/IDEA/REPORT/ERROR), score/threshold display
+- **feat:** Drawer с деталями сигнала: relevance scoring, reason, matched entities, source URL, quality/dedup gates, iterations history
+- **feat:** Селектор прогонов (dropdown) для переключения между историческими run-ами
+- **feat:** Edge-анимация sm→queue при reports > 0, alert-стиль нода при errors > 0
+- **feat:** CSS: 15 новых классов с prefix `rq-signal-` для dual-theme (matrix + light)
+
 ### knowledge-engine 1.22.1
 - **fix:** BUG-030 outcome=null при повторном запуске research-runner — recovery через `_extract_and_classify` если outcome отсутствует в frontmatter существующего отчёта
 - **fix:** BUG-031 ideas count в RunSummary всегда 0 — подсчёт по `reaction == "idea"` вместо подстроки `"ideas"` в filename

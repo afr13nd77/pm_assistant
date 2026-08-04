@@ -4762,3 +4762,50 @@ def research_queue_retry_proxy(req: ResearchRetryProxyRequest):
             "POST /api/v1/research-queue/retry -- error: %s", exc, exc_info=True
         )
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Signal Moderator proxy  (BL-201)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/signals/runs")
+def signal_runs_proxy(limit: int = Query(default=10, ge=1, le=100)):
+    """Proxy: list signal moderator runs from KE."""
+    logger.info("GET /api/v1/signals/runs -- start, limit=%s", limit)
+    try:
+        data = ke_client.signal_runs(limit)
+        logger.info(
+            "GET /api/v1/signals/runs -- success, count=%s",
+            len(data.get("runs", [])),
+        )
+        return data
+    except requests.RequestException as exc:
+        logger.error("GET /api/v1/signals/runs -- KE error: %s", exc)
+        raise HTTPException(status_code=502, detail=f"KE API error: {exc}")
+    except Exception as exc:
+        logger.error(
+            "GET /api/v1/signals/runs -- error: %s", exc, exc_info=True
+        )
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/v1/signals/runs/{run_id}")
+def signal_run_detail_proxy(run_id: str):
+    """Proxy: get signal run detail from KE."""
+    logger.info("GET /api/v1/signals/runs/%s -- start", run_id)
+    try:
+        data = ke_client.signal_run_detail(run_id)
+        logger.info(
+            "GET /api/v1/signals/runs/%s -- success, items=%s",
+            run_id,
+            len(data.get("items", {})),
+        )
+        return data
+    except requests.RequestException as exc:
+        logger.error("GET /api/v1/signals/runs/%s -- KE error: %s", run_id, exc)
+        raise HTTPException(status_code=502, detail=f"KE API error: {exc}")
+    except Exception as exc:
+        logger.error(
+            "GET /api/v1/signals/runs/%s -- error: %s", run_id, exc, exc_info=True
+        )
+        raise HTTPException(status_code=500, detail=str(exc))
