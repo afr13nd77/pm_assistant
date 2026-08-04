@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from shared import settings
+from shared import settings, vault_paths
 
 from .agent_loop import AgentLoop
 from .idea_extractor import extract_ideas
@@ -17,11 +17,16 @@ from .quality_gate import QualityGate
 from .signal_memory import SignalMemory, SignalRecord
 from .signal_moderator import (
     AnalysisResult,
+    ReportResult,
+    SignalData,
     _write_processed_md,
     _write_skipped_md,
     analyze_signal,
     dispatch_idea,
     dispatch_report,
+    dispatch_signal,
+    extract_signals,
+    generate_analysis_report,
     score_signal,
 )
 
@@ -342,6 +347,10 @@ class SignalOrchestrator:
             item.setdefault("date", digest_date)
             item.setdefault("source", digest_source)
 
+        # Load effective relevance threshold (BL-203, AC-09, AC-10)
+        threshold = self._load_relevance_threshold()
+        self._effective_threshold = threshold
+
         # 5. Process each item
         processed_items: list[dict] = []
         skipped_items: list[dict] = []
@@ -435,11 +444,12 @@ class SignalOrchestrator:
         scoring = score_signal(
             item, business_context, memory_context, self.config
         )
+        effective_threshold = getattr(self, '_effective_threshold', self.config.relevance_threshold)
         _safe_end_span(score_span, metadata={
             "relevance": scoring.relevance,
             "decision": (
                 "continue"
-                if scoring.relevance >= self.config.relevance_threshold
+                if scoring.relevance >= effective_threshold
                 else "skip"
             ),
         })
@@ -452,7 +462,8 @@ class SignalOrchestrator:
         item_state.source_url = item.get("source_url")
 
         # --- Step 2: Threshold check ---
-        if scoring.relevance < self.config.relevance_threshold:
+        effective_threshold = getattr(self, '_effective_threshold', self.config.relevance_threshold)
+        if scoring.relevance < effective_threshold:
             item_state.status = "skipped"
             item_state.reaction = "skip"  # BL-190
             item_state.completed_at = datetime.now().isoformat()
@@ -473,7 +484,7 @@ class SignalOrchestrator:
             ))
             logger.info(
                 f"Item '{title}': skipped (relevance "
-                f"{scoring.relevance} < {self.config.relevance_threshold})"
+                f"{scoring.relevance} < {effective_threshold})"
             )
             _safe_end_span(item_span, metadata={
                 "status": item_state.status,
@@ -481,9 +492,9 @@ class SignalOrchestrator:
             })
             return
 
-        # --- Step 3: Analysis with AgentLoop (AC-17..AC-19) ---
+        # --- Step 3: Report generation with AgentLoop (BL-203) ---
         item_state.status = "analyzing"
-        item_state.current_step = "analyze_signal"
+        item_state.current_step = "generate_analysis_report"
 
         competitor_profile = None
         competitor_name = ""
@@ -505,7 +516,7 @@ class SignalOrchestrator:
         loop = AgentLoop(max_iterations=self.config.max_retries)
 
         def step_fn(**kwargs: Any) -> dict:
-            result = analyze_signal(
+            result = generate_analysis_report(
                 item=item,
                 scoring=scoring,
                 business_context=business_context,
@@ -517,8 +528,8 @@ class SignalOrchestrator:
             )
             return result.__dict__
 
-        analyze_span = _safe_span(item_span, f"analyze:{item_key}")
-        analysis_dict, loop_history = loop.run(
+        analyze_span = _safe_span(item_span, f"report:{item_key}")
+        report_dict, loop_history = loop.run(
             step_fn=step_fn,
             quality_fn=self.gate.check_analysis_quality,
             escalation_group=self.config.escalation_group,
@@ -534,7 +545,7 @@ class SignalOrchestrator:
             "escalated": any(it.escalated for it in loop_history),
         })
 
-        # BL-190: Record iterations_history
+        # Record iterations_history
         for iteration in loop_history:
             item_state.iterations_history.append({
                 "attempt": iteration.attempt,
@@ -548,11 +559,11 @@ class SignalOrchestrator:
                 "operation": (
                     "signal_analyze_escalation"
                     if iteration.escalated
-                    else "signal_analyze"
+                    else "signal_report_generate"
                 ),
             })
 
-        # BL-190: Record quality gate result from last iteration
+        # Record quality gate result from last iteration
         if loop_history:
             last_q = loop_history[-1].quality
             item_state.gate_results.append({
@@ -568,65 +579,124 @@ class SignalOrchestrator:
                 ),
             })
 
-        # Reconstruct AnalysisResult from dict (filter private keys for ctor)
-        ctor_keys = {
-            "reaction", "analysis", "threat_level",
-            "idea_draft", "report_brief",
-        }
-        analysis = AnalysisResult(
-            **{k: v for k, v in analysis_dict.items() if k in ctor_keys}
+        # Build ReportResult
+        report = ReportResult(
+            content=report_dict.get("content", ""),
+            threat_level=report_dict.get("threat_level", "medium"),
         )
-        if analysis_dict.get("_quality_warning"):
-            analysis._quality_warning = True
+        if report_dict.get("_quality_warning"):
+            report._quality_warning = True
             item_state.quality_warnings.append(
-                "analysis quality below threshold"
+                "report quality below threshold"
             )
-        analysis._attempts = len(loop_history)
+        report._attempts = len(loop_history)
         item_state.iterations = len(loop_history)
+        item_state.reaction = "signal"
 
-        # BL-190: Record reaction
-        item_state.reaction = analysis.reaction
+        # --- Step 4: Save report to wiki (BL-203) ---
+        item_state.current_step = "save_report"
+        title_for_slug = item.get("title", "untitled")
+        report_slug = re.sub(r"[^a-zA-Zа-яА-Яё0-9]", "-", title_for_slug)[:50]
+        report_slug = re.sub(r"-+", "-", report_slug).strip("-").lower()
+        today = datetime.now().strftime("%Y-%m-%d")
+        report_filename = f"{today}-{report_slug}-report.md"
 
-        # --- Step 4: Domain auto-correction (AC-23) ---
-        if analysis.idea_draft:
-            is_correct, suggested = self.gate.check_domain(analysis.idea_draft)
-            if not is_correct and suggested:
-                logger.info(
-                    f"Domain auto-corrected: "
-                    f"{analysis.idea_draft.get('domain')} -> {suggested}"
-                )
-                analysis.idea_draft["domain"] = suggested
+        wiki_signals_dir = vault_paths.wiki_signals()
+        report_path = wiki_signals_dir / report_filename
 
-        # --- Step 5: Dispatch ---
-        item_state.status = "dispatching"
-        item_state.current_step = f"dispatch_{analysis.reaction}"
-
-        # BL-190: Gate span wraps dispatch decisions
-        gate_span = _safe_span(item_span, f"gate:{item_key}")
-
-        if analysis.reaction == "idea":
-            self._handle_idea(item, analysis, item_state, notify, dry_run)
-        elif analysis.reaction == "report":
-            self._handle_report(
-                item, analysis, item_state, notify, dry_run,
-                competitor=competitor_name,
+        if not dry_run:
+            report_frontmatter = (
+                f"---\n"
+                f"type: signal-report\n"
+                f'title: "Анализ: {item.get("title", "")[:80]}"\n'
+                f'signal_date: "{today}"\n'
+                f'run_id: "{self.run_state.run_id}"\n'
+                f'source_url: "{item.get("source_url", "")}"\n'
+                f'source: "{item.get("source", "")}"\n'
+                f"threat_level: {report.threat_level}\n"
+                f"completeness: {item_state.gate_results[-1].get('score', 0) if item_state.gate_results else 0}\n"
+                f'created: "{today}"\n'
+                f"signals_extracted: 0\n"
+                f"---\n\n"
             )
+            try:
+                report_path.write_text(
+                    report_frontmatter + report.content,
+                    encoding="utf-8",
+                )
+                logger.info(f"_process_item: saved report to {report_path}")
+            except Exception as e:
+                logger.error(f"_process_item: failed to save report: {e}")
 
-        _safe_end_span(gate_span, metadata={
-            "gates": [g["gate"] for g in item_state.gate_results],
-            "all_passed": all(
-                g["passed"] for g in item_state.gate_results
-            ),
+        # --- Step 5: Extract signals (BL-203) ---
+        item_state.status = "extracting"
+        item_state.current_step = "extract_signals"
+
+        extract_span = _safe_span(item_span, f"extract-signals:{item_key}")
+        signals = extract_signals(
+            report_path=report_path,
+            vault_path=self.vault_path,
+            business_context=business_context,
+            config=self.config,
+        )
+        _safe_end_span(extract_span, metadata={"signals_count": len(signals)})
+        logger.info(f"_process_item: extracted {len(signals)} signals")
+
+        # Update report frontmatter with signals count
+        if not dry_run and signals and report_path.exists():
+            try:
+                content = report_path.read_text(encoding="utf-8")
+                content = content.replace(
+                    "signals_extracted: 0",
+                    f"signals_extracted: {len(signals)}",
+                )
+                report_path.write_text(content, encoding="utf-8")
+            except Exception as e:
+                logger.warning(f"_process_item: failed to update signals_extracted: {e}")
+
+        # --- Step 6: Dispatch signals (BL-203) ---
+        item_state.status = "dispatching"
+        item_state.current_step = "dispatch_signals"
+
+        dispatch_span = _safe_span(item_span, f"dispatch:{item_key}")
+        dispatched_ids: list[str] = []
+
+        for i, signal in enumerate(signals):
+            # Domain auto-correction
+            if signal.draft_idea:
+                is_correct, suggested = self.gate.check_domain(signal.draft_idea)
+                if not is_correct and suggested:
+                    logger.info(
+                        f"Signal[{i}] domain auto-corrected: "
+                        f"{signal.draft_idea.get('domain')} -> {suggested}"
+                    )
+                    signal.draft_idea["domain"] = suggested
+
+            signal_id = dispatch_signal(
+                signal_data=signal,
+                report_ref=report_filename,
+                item=item,
+                scoring=scoring,
+                vault_path=self.vault_path,
+                run_id=self.run_state.run_id,
+                dry_run=dry_run,
+            )
+            if signal_id:
+                dispatched_ids.append(signal_id)
+                logger.info(f"_process_item: dispatched signal[{i}] id={signal_id}")
+
+        _safe_end_span(dispatch_span, metadata={
+            "dispatched": len(dispatched_ids),
+            "signal_ids": dispatched_ids,
         })
 
-        # BL-190: Dispatch span
-        dispatch_span = _safe_span(item_span, f"dispatch:{item_key}", metadata={
-            "reaction": item_state.reaction,
-            "result_ref": item_state.result_ref,
-        })
-        _safe_end_span(dispatch_span)
+        item_state.result_ref = ",".join(dispatched_ids) if dispatched_ids else None
 
-        # --- Step 6: Record in memory ---
+        if not signals:
+            item_state.reaction = "no_signals"
+            logger.info(f"_process_item: no signals extracted for '{title}'")
+
+        # --- Step 7: Record in memory ---
         quality_scores = [
             h.quality.score
             for h in loop_history
@@ -634,6 +704,7 @@ class SignalOrchestrator:
         ]
         best_quality = max(quality_scores) if quality_scores else 0
 
+        reaction_for_memory = "signal" if dispatched_ids else "no_signals"
         self.memory.record_signal(SignalRecord(
             date=item.get("date", datetime.now().strftime("%Y-%m-%d")),
             title=item.get("title", ""),
@@ -641,33 +712,35 @@ class SignalOrchestrator:
             source=item.get("source"),
             source_url=item.get("source_url"),
             relevance=scoring.relevance,
-            reaction=analysis.reaction,
-            result_ref=item_state.result_ref,
+            reaction=reaction_for_memory,
+            result_ref=dispatched_ids[0] if dispatched_ids else None,
             entities=scoring.matched_entities,
             quality_score=best_quality,
             attempts=len(loop_history),
         ))
 
-        # --- Step 7: Complete ---
-        if item_state.status != "waiting_report":
-            item_state.status = "completed"
+        # --- Step 8: Complete ---
+        item_state.status = "completed"
         item_state.completed_at = datetime.now().isoformat()
 
         processed_items.append({
             "title": item.get("title", ""),
-            "reaction": analysis.reaction,
+            "reaction": reaction_for_memory,
             "result_ref": item_state.result_ref or "",
             "quality_score": best_quality,
+            "signals_count": len(dispatched_ids),
         })
 
-        # BL-190: End item span
+        # End item span
         _safe_end_span(item_span, metadata={
             "status": item_state.status,
             "reaction": item_state.reaction,
+            "signals_count": len(dispatched_ids),
         })
 
         logger.info(
-            f"Item '{title}': {analysis.reaction}, "
+            f"Item '{title}': {reaction_for_memory}, "
+            f"signals={len(dispatched_ids)}, "
             f"ref={item_state.result_ref}"
         )
 
@@ -996,6 +1069,28 @@ class SignalOrchestrator:
             f"Business context loaded: {len(self._business_context)} chars"
         )
         return self._business_context
+
+    def _load_relevance_threshold(self) -> int:
+        """Load relevance threshold from user-prefs with fallback to config (BL-203, AC-09, AC-10)."""
+        logger.info("_load_relevance_threshold: loading threshold")
+        prefs_path = Path(self.vault_path) / ".pm-user-prefs.json"
+        try:
+            if prefs_path.exists():
+                prefs = json.loads(prefs_path.read_text(encoding="utf-8"))
+                mod = prefs.get("moderator", {})
+                if "relevance_threshold" in mod:
+                    val = int(mod["relevance_threshold"])
+                    val = max(1, min(10, val))
+                    logger.info(
+                        f"_load_relevance_threshold: from user-prefs, value={val}"
+                    )
+                    return val
+        except Exception as e:
+            logger.warning(f"_load_relevance_threshold: error reading user-prefs: {e}")
+
+        fallback = self.config.relevance_threshold
+        logger.info(f"_load_relevance_threshold: fallback to config, value={fallback}")
+        return fallback
 
     def _load_competitor_profile(self, entity: str) -> str | None:
         """Прочитать wiki/reports/Competitor-Info-{entity}.md."""
