@@ -174,6 +174,18 @@ def wiki_service_index() -> Path:
     return _ensure_dir(VAULT_PATH / "wiki" / "_index")
 
 
+def raw_signals() -> Path:
+    """raw/inbound/signals/ — иммутабельные raw JSON сигналов."""
+    logger.info("raw_signals: resolving raw/inbound/signals/ directory")
+    return _ensure_dir(VAULT_PATH / "raw" / "inbound" / "signals")
+
+
+def wiki_signals() -> Path:
+    """wiki/reports/signals/ — wiki-копии сигналов + аналитические отчёты."""
+    logger.info("wiki_signals: resolving wiki/reports/signals/ directory")
+    return _ensure_dir(VAULT_PATH / "wiki" / "reports" / "signals")
+
+
 def templates() -> Path:
     return _ensure_dir(VAULT_PATH / "templates")
 
@@ -232,6 +244,7 @@ def ensure_structure() -> None:
         raw_misc,
         raw_competitors,
         raw_metrics,
+        raw_signals,  # BL-203: Signal-артефакты
     ]
     for fn in raw_dirs:
         path = fn()
