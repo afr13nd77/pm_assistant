@@ -22,7 +22,14 @@ from shared.vault_paths import (
 from .idea_extractor import extract_ideas_full
 from .notifier import send_telegram
 from .quality_gate import QualityGate
-from .signal_moderator import AnalysisResult, dispatch_idea
+from .signal_moderator import (
+    AnalysisResult,
+    ScoringResult,
+    dispatch_idea,
+    dispatch_signal,
+    extract_signals,
+    SignalData,
+)
 from .signal_orchestrator import ModeratorConfig, load_config_from_settings
 
 logger = logging.getLogger(__name__)
@@ -466,19 +473,9 @@ def _extract_and_classify(
     vault_path: str,
     config: ModeratorConfig,
 ) -> tuple[str, str, int, list[str]]:
-    """Extract ideas from a report and classify the research outcome (BL-198).
+    """Extract signals from a report and classify the research outcome (BL-203).
 
-    Loads business context, calls extract_ideas_full() to get ideas plus the
-    no_ideas_reason, classifies the outcome (idea | insight | not_relevant),
-    dispatches each extracted idea into the vault, and persists the outcome
-    both in the report's frontmatter and in the moved processed/ JSON task
-    file.
-
-    Never raises: any failure is caught, logged, and reported as
-    outcome="error" so a broken idea-extraction step can never leave the
-    already-saved report or already-moved task file in an inconsistent state.
-
-    Returns: (outcome, outcome_details, ideas_count, ideas_refs)
+    Returns: (outcome, outcome_details, signals_count, signal_refs)
     """
     logger.info(f"_extract_and_classify: starting for {report_path.name}")
 
@@ -498,50 +495,51 @@ def _extract_and_classify(
         else:
             logger.info(f"_extract_and_classify: business context file not found: {bc_path}")
 
-        ideas, no_ideas_reason = extract_ideas_full(
+        signals = extract_signals(
             report_path, vault_path, business_context, config,
         )
         logger.info(
-            f"_extract_and_classify: extract_ideas_full done, ideas={len(ideas)}, "
-            f"no_ideas_reason={no_ideas_reason[:80] if no_ideas_reason else 'N/A'}"
+            f"_extract_and_classify: extract_signals done, signals={len(signals)}"
         )
 
-        if ideas:
-            outcome = "idea"
+        if signals:
+            outcome = "signal"
             outcome_details = ""
         else:
-            outcome = _classify_by_reason(no_ideas_reason)
-            outcome_details = no_ideas_reason[:500]
+            outcome = "insight"
+            outcome_details = "No actionable signals extracted from report"
 
-        # Dispatch each extracted idea into the vault (AC-08)
-        ideas_refs: list[str] = []
-        for idea in ideas:
-            idea_title = idea.get("title", "")[:60]
-            logger.info(f"_extract_and_classify: dispatching idea '{idea_title}'")
-            ref = dispatch_idea(
-                item={"title": task.topic, "date": date.today().isoformat()},
-                analysis=AnalysisResult(
-                    reaction="idea",
-                    analysis=idea.get("rationale", ""),
-                    idea_draft=idea,
-                ),
+        # Dispatch each extracted signal into the vault (BL-203, AC-12)
+        signal_refs: list[str] = []
+        for signal in signals:
+            signal_title = signal.title[:60]
+            logger.info(f"_extract_and_classify: dispatching signal '{signal_title}'")
+            ref = dispatch_signal(
+                signal_data=signal,
+                report_ref=report_path.name,
+                item={
+                    "title": task.topic,
+                    "date": date.today().isoformat(),
+                    "source": "research-report",
+                    "source_url": "",
+                },
+                scoring=ScoringResult(relevance=0, reason="from research"),
                 vault_path=vault_path,
-                notify=True,
-                dry_run=False,
+                run_id=f"research-{date.today().isoformat()}",
             )
             if ref:
-                ideas_refs.append(ref)
+                signal_refs.append(ref)
             else:
                 logger.warning(
-                    f"_extract_and_classify: dispatch_idea returned None for '{idea_title}'"
+                    f"_extract_and_classify: dispatch_signal returned None for '{signal_title}'"
                 )
 
         # Persist outcome in report frontmatter
         update_frontmatter(report_path, {
             "outcome": outcome,
             "outcome_details": outcome_details,
-            "ideas_count": len(ideas),
-            "ideas_refs": ideas_refs,
+            "signals_count": len(signals),
+            "signal_refs": signal_refs,
         })
         logger.info(f"_extract_and_classify: frontmatter updated, outcome={outcome}")
 
@@ -549,14 +547,14 @@ def _extract_and_classify(
         _update_processed_json(task.source_path, {
             "outcome": outcome,
             "outcome_details": outcome_details,
-            "ideas_count": len(ideas),
-            "ideas_refs": ideas_refs,
+            "signals_count": len(signals),
+            "signal_refs": signal_refs,
         })
 
         logger.info(
-            f"_extract_and_classify: done, outcome={outcome}, ideas_count={len(ideas)}"
+            f"_extract_and_classify: done, outcome={outcome}, signals_count={len(signals)}"
         )
-        return outcome, outcome_details, len(ideas), ideas_refs
+        return outcome, outcome_details, len(signals), signal_refs
 
     except Exception as exc:
         logger.error(f"_extract_and_classify: failed: {exc}", exc_info=True)
@@ -564,8 +562,8 @@ def _extract_and_classify(
             update_frontmatter(report_path, {
                 "outcome": "error",
                 "outcome_details": str(exc)[:200],
-                "ideas_count": 0,
-                "ideas_refs": [],
+                "signals_count": 0,
+                "signal_refs": [],
             })
             logger.info("_extract_and_classify: recorded outcome=error in frontmatter")
         except Exception as fm_exc:

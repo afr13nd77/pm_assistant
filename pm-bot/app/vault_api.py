@@ -35,7 +35,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
-from shared import domain_config
+from shared import domain_config, vault_paths
+from shared.frontmatter_utils import read_frontmatter, update_frontmatter
 from shared.vault_paths import (
     VAULT_PATH,
     all_domains,
@@ -87,6 +88,7 @@ _cache = _VaultCache(ttl_seconds=30.0)
 _caldav_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="caldav")
 
 _jira_sync_lock = threading.Lock()
+_signal_approve_lock = threading.Lock()
 
 app = FastAPI(title="PM Vault API", version="0.1.0")
 app.add_middleware(
@@ -1002,6 +1004,7 @@ def get_ideas(domain: str | None = Query(default=None)):
     for f in files:
         try:
             note = parse_note(f)
+            idea_status = note.get("status", "Новая")
             results.append(
                 {
                     "filename": note["filename"],
@@ -1009,7 +1012,7 @@ def get_ideas(domain: str | None = Query(default=None)):
                     "updated": note.get("updated", note["date"]),
                     "title": note["title"],
                     "tags": _parse_tags(note.get("tags", "")),
-                    "status": note.get("status", "Новая"),
+                    "status": idea_status,
                     "body": note["body"],
                     "domain": _domain_from_path(f),
                     "id": note.get("id", ""),
@@ -1021,7 +1024,6 @@ def get_ideas(domain: str | None = Query(default=None)):
         except Exception as exc:
             logger.error("GET /api/v1/ideas — failed to parse %s: %s", f.name, exc)
             continue
-
     results.sort(key=lambda x: x["date"], reverse=True)
     logger.info("GET /api/v1/ideas — returning %d notes", len(results))
     _cache.set(cache_key, results)
@@ -3833,6 +3835,7 @@ async def overview_queue():
 
         readiness = _calculate_readiness(note.get("body", ""))
         status = note.get("status", "")
+
         filename = note.get("filename", "")
         title = note.get("title", idea_path.stem)
         idea_id = filename.replace(".md", "") if filename else idea_path.stem
@@ -4575,39 +4578,99 @@ async def update_todo(todo_id: str, req: TodoUpdateRequest):
 # ---------------------------------------------------------------------------
 
 
+def _news_neighbours(
+    sorted_dates: list[str], current_date: str | None
+) -> tuple[str | None, str | None]:
+    """Return (prev_date, next_date) for *current_date* within a sorted list of date strings."""
+    if not current_date or current_date not in sorted_dates:
+        return (None, None)
+    idx = sorted_dates.index(current_date)
+    prev_d = sorted_dates[idx - 1] if idx > 0 else None
+    next_d = sorted_dates[idx + 1] if idx < len(sorted_dates) - 1 else None
+    return (prev_d, next_d)
+
+
 @app.get("/api/v1/today/news")
-async def get_today_news(refresh: bool = False):
-    """Ежедневные новости: парсинг последнего daily-news файла из vault."""
-    logger.info(f"GET /today/news — start, refresh={refresh}")
+async def get_today_news(
+    refresh: bool = False,
+    date: str = Query(default=None, description="Дата в формате YYYY-MM-DD"),
+):
+    """Ежедневные новости: парсинг daily-news файла из vault (конкретная дата или последний)."""
+    logger.info(f"GET /today/news — start, refresh={refresh}, date={date}")
     try:
-        if refresh:
-            _cache.invalidate("today:news")
-
-        cached = _cache.get("today:news")
-        if cached is not None:
-            logger.info("GET /today/news — returning cached")
-            return cached
-
-        from datetime import date
+        from datetime import date as date_type
 
         from shared.vault_paths import wiki_daily_news
 
         from .today_parsers import find_latest_file, parse_news
 
+        # Validate date parameter format
+        date_param = date  # rename to avoid shadowing
+        if date_param is not None:
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", date_param):
+                logger.warning(f"GET /today/news — invalid date format: {date_param}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid date format: '{date_param}'. Expected YYYY-MM-DD.",
+                )
+
+        # Cache key depends on date parameter
+        cache_key = f"today:news:{date_param}" if date_param else "today:news"
+
+        if refresh:
+            _cache.invalidate(cache_key)
+            logger.info(f"GET /today/news — cache invalidated for key={cache_key}")
+
+        cached = _cache.get(cache_key)
+        if cached is not None:
+            logger.info(f"GET /today/news — returning cached, key={cache_key}")
+            return cached
+
         news_dir = wiki_daily_news()
-        today = date.today()
+        today = date_type.today()
 
-        file_path, is_today = find_latest_file(news_dir, "news", today)
+        # --- Collect all available news dates for prev/next navigation ---
+        all_dates: list[str] = []
+        if news_dir.is_dir():
+            for f in news_dir.iterdir():
+                if f.is_file() and f.name.endswith("-news.md"):
+                    d = f.stem[:10]
+                    if re.match(r"^\d{4}-\d{2}-\d{2}$", d):
+                        all_dates.append(d)
+        all_dates.sort()
+        logger.info(f"GET /today/news — found {len(all_dates)} news files in vault")
 
+        # --- Resolve the target file ---
+        file_path: Path | None = None
+        is_today = False
+
+        if date_param:
+            # Direct lookup by date
+            target = news_dir / f"{date_param}-news.md"
+            if target.is_file():
+                file_path = target
+                logger.info(f"GET /today/news — found file for date={date_param}")
+            else:
+                logger.info(f"GET /today/news — no file for date={date_param}")
+            is_today = date_param == str(today)
+        else:
+            # Original behaviour: find latest file
+            file_path, is_today = find_latest_file(news_dir, "news", today)
+
+        # --- Build response ---
         if file_path is None:
+            file_date = date_param  # preserve requested date (or None)
+            prev_date, next_date = _news_neighbours(all_dates, file_date)
             result: dict[str, Any] = {
-                "date": None,
+                "date": file_date,
                 "filename": None,
-                "is_today": False,
+                "is_today": is_today if date_param else False,
+                "prev_date": prev_date,
+                "next_date": next_date,
                 "categories": {"competitors": [], "ai_llm": []},
             }
-            _cache.set("today:news", result)
-            logger.info("GET /today/news — no news files found")
+            _cache.set(cache_key, result)
+            logger.info(f"GET /today/news — no news file, date={file_date}")
             return result
 
         text = file_path.read_text(encoding="utf-8")
@@ -4615,17 +4678,25 @@ async def get_today_news(refresh: bool = False):
 
         # Extract date from filename (YYYY-MM-DD-news.md)
         file_date = file_path.stem[:10]  # "2026-07-21"
+        prev_date, next_date = _news_neighbours(all_dates, file_date)
 
         result = {
             "date": file_date,
             "filename": file_path.name,
             "is_today": is_today,
+            "prev_date": prev_date,
+            "next_date": next_date,
             "categories": parsed["categories"],
         }
 
-        _cache.set("today:news", result)
-        logger.info(f"GET /today/news — success, date={file_date}, is_today={is_today}")
+        _cache.set(cache_key, result)
+        logger.info(
+            f"GET /today/news — success, date={file_date}, is_today={is_today}, "
+            f"prev={prev_date}, next={next_date}"
+        )
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"GET /today/news — error: {e}")
         raise HTTPException(status_code=500, detail="Failed to read daily news")
@@ -4809,3 +4880,290 @@ def signal_run_detail_proxy(run_id: str):
             "GET /api/v1/signals/runs/%s -- error: %s", run_id, exc, exc_info=True
         )
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Signal Triage: list / detail / approve / dismiss (BL-203)
+# ---------------------------------------------------------------------------
+
+
+def _validate_signal_id(signal_id: str) -> bool:
+    """Validate signal_id format: YYYY-MM-DD-slug, no path traversal."""
+    logger.info(f"_validate_signal_id: validating '{signal_id}'")
+    if not signal_id or ".." in signal_id or "/" in signal_id or "\\" in signal_id:
+        logger.warning(f"_validate_signal_id: invalid signal_id '{signal_id}'")
+        return False
+    if len(signal_id) > 100:
+        logger.warning(f"_validate_signal_id: signal_id too long ({len(signal_id)})")
+        return False
+    return True
+
+
+@app.get("/api/v1/signals/list")
+async def signals_list(
+    status: str | None = None,
+    date: str | None = None,
+    limit: int = 50,
+):
+    """List Signal artifacts with optional filters (BL-203)."""
+    logger.info(f"GET /api/v1/signals/list -- status={status}, date={date}, limit={limit}")
+    try:
+        signals_dir = vault_paths.wiki_signals()
+        signals = []
+
+        if not signals_dir.exists():
+            logger.info("signals_list: signals directory does not exist")
+            return {"signals": [], "total": 0}
+
+        for md_file in sorted(signals_dir.glob("*.md"), reverse=True):
+            # Skip report files (they have -report.md suffix)
+            if md_file.name.endswith("-report.md"):
+                continue
+
+            try:
+                fm = read_frontmatter(md_file)
+                if not fm or fm.get("type") != "signal":
+                    continue
+
+                # Apply filters
+                if status and fm.get("status") != status:
+                    continue
+                if date and fm.get("signal_date") != date:
+                    continue
+
+                signal_id = md_file.stem
+                signals.append({
+                    "signal_id": signal_id,
+                    "title": fm.get("title", ""),
+                    "source": fm.get("source", ""),
+                    "source_url": fm.get("source_url", ""),
+                    "relevance_score": fm.get("relevance_score", 0),
+                    "threat_level": fm.get("threat_level", "low"),
+                    "status": fm.get("status", "pending"),
+                    "signal_date": fm.get("signal_date", ""),
+                    "has_draft_idea": False,  # Will check raw JSON below
+                    "report_ref": fm.get("report_ref", ""),
+                    "result_ref": fm.get("result_ref", ""),
+                    "created": fm.get("created", ""),
+                })
+            except Exception as e:
+                logger.warning(f"signals_list: error reading {md_file.name}: {e}")
+                continue
+
+        # Check has_draft_idea from raw JSON
+        raw_dir = vault_paths.raw_signals()
+        for s in signals:
+            raw_path = raw_dir / f"{s['signal_id']}.json"
+            if raw_path.exists():
+                try:
+                    raw_data = json.loads(raw_path.read_text(encoding="utf-8"))
+                    s["has_draft_idea"] = raw_data.get("draft_idea") is not None
+                except Exception:
+                    pass
+
+        # Apply limit
+        signals = signals[:limit]
+
+        logger.info(f"signals_list: returning {len(signals)} signals")
+        return {"signals": signals, "total": len(signals)}
+
+    except Exception as exc:
+        logger.error(f"GET /api/v1/signals/list -- error: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/v1/signals/{signal_id}")
+async def signal_detail(signal_id: str):
+    """Get Signal details by ID (BL-203)."""
+    logger.info(f"GET /api/v1/signals/{signal_id}")
+
+    if not _validate_signal_id(signal_id):
+        raise HTTPException(status_code=400, detail=f"Invalid signal_id: {signal_id}")
+
+    try:
+        wiki_path = vault_paths.wiki_signals() / f"{signal_id}.md"
+        if not wiki_path.exists():
+            logger.warning(f"signal_detail: not found: {wiki_path}")
+            raise HTTPException(status_code=404, detail=f"Signal not found: {signal_id}")
+
+        fm = read_frontmatter(wiki_path)
+        body = wiki_path.read_text(encoding="utf-8")
+
+        # Parse body sections
+        analysis = ""
+        recommended_action = ""
+        analysis_match = re.search(r"## Анализ\s*\n(.*?)(?=\n## |\Z)", body, re.DOTALL)
+        if analysis_match:
+            analysis = analysis_match.group(1).strip()
+        rec_match = re.search(r"## Рекомендация\s*\n(.*?)(?=\n## |\Z)", body, re.DOTALL)
+        if rec_match:
+            recommended_action = rec_match.group(1).strip()
+
+        # Read draft_idea from raw JSON
+        draft_idea = None
+        raw_path = vault_paths.raw_signals() / f"{signal_id}.json"
+        if raw_path.exists():
+            try:
+                raw_data = json.loads(raw_path.read_text(encoding="utf-8"))
+                draft_idea = raw_data.get("draft_idea")
+            except Exception as e:
+                logger.warning(f"signal_detail: failed to read raw JSON: {e}")
+
+        result = {
+            "signal_id": signal_id,
+            "title": fm.get("title", ""),
+            "source": fm.get("source", ""),
+            "source_url": fm.get("source_url", ""),
+            "relevance_score": fm.get("relevance_score", 0),
+            "threat_level": fm.get("threat_level", "low"),
+            "status": fm.get("status", "pending"),
+            "signal_date": fm.get("signal_date", ""),
+            "analysis": analysis,
+            "recommended_action": recommended_action,
+            "draft_idea": draft_idea,
+            "report_ref": fm.get("report_ref", ""),
+            "result_ref": fm.get("result_ref", ""),
+            "created": fm.get("created", ""),
+        }
+
+        logger.info(f"signal_detail: returning details for {signal_id}")
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"GET /api/v1/signals/{signal_id} -- error: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/api/v1/signals/{signal_id}/approve")
+async def signal_approve(signal_id: str):
+    """Approve a pending signal, creating an IDEA (BL-203, AC-06)."""
+    logger.info(f"POST /api/v1/signals/{signal_id}/approve")
+
+    if not _validate_signal_id(signal_id):
+        raise HTTPException(status_code=400, detail=f"Invalid signal_id: {signal_id}")
+
+    with _signal_approve_lock:
+        try:
+            wiki_path = vault_paths.wiki_signals() / f"{signal_id}.md"
+            if not wiki_path.exists():
+                raise HTTPException(status_code=404, detail=f"Signal not found: {signal_id}")
+
+            fm = read_frontmatter(wiki_path)
+            current_status = fm.get("status", "")
+            if current_status != "pending":
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Signal status is '{current_status}', expected 'pending'"
+                )
+
+            # Read draft_idea from raw JSON
+            raw_path = vault_paths.raw_signals() / f"{signal_id}.json"
+            draft_idea = None
+            if raw_path.exists():
+                try:
+                    raw_data = json.loads(raw_path.read_text(encoding="utf-8"))
+                    draft_idea = raw_data.get("draft_idea")
+                except Exception as e:
+                    logger.error(f"signal_approve: failed to read raw JSON: {e}")
+
+            if not draft_idea:
+                raise HTTPException(status_code=400, detail="Signal has no draft_idea")
+
+            # Dispatch idea using existing dispatch_idea from signal_moderator
+            from knowledge_engine.app.signal_moderator import (
+                AnalysisResult,
+                dispatch_idea,
+            )
+
+            analysis = AnalysisResult(
+                reaction="idea",
+                analysis=fm.get("title", ""),
+                threat_level=fm.get("threat_level", "low"),
+                idea_draft=draft_idea,
+            )
+
+            idea_ref = dispatch_idea(
+                item={
+                    "title": draft_idea.get("title", fm.get("title", "")),
+                    "date": fm.get("signal_date", ""),
+                    "source_url": fm.get("source_url", ""),
+                    "source": fm.get("source", ""),
+                },
+                analysis=analysis,
+                vault_path=str(VAULT_PATH),
+                notify=True,
+                dry_run=False,
+            )
+
+            # Update wiki frontmatter
+            update_frontmatter(wiki_path, {
+                "status": "approved",
+                "result_ref": idea_ref or "",
+            })
+
+            _cache.invalidate()
+            logger.info(
+                f"signal_approve: approved {signal_id}, idea_ref={idea_ref}"
+            )
+
+            return {
+                "status": "ok",
+                "signal_id": signal_id,
+                "idea_ref": idea_ref or "",
+                "new_status": "approved",
+            }
+
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.error(
+                f"POST /api/v1/signals/{signal_id}/approve -- error: {exc}",
+                exc_info=True,
+            )
+            raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/api/v1/signals/{signal_id}/dismiss")
+async def signal_dismiss(signal_id: str):
+    """Dismiss a pending signal (BL-203, AC-07)."""
+    logger.info(f"POST /api/v1/signals/{signal_id}/dismiss")
+
+    if not _validate_signal_id(signal_id):
+        raise HTTPException(status_code=400, detail=f"Invalid signal_id: {signal_id}")
+
+    try:
+        wiki_path = vault_paths.wiki_signals() / f"{signal_id}.md"
+        if not wiki_path.exists():
+            raise HTTPException(status_code=404, detail=f"Signal not found: {signal_id}")
+
+        fm = read_frontmatter(wiki_path)
+        current_status = fm.get("status", "")
+        if current_status != "pending":
+            raise HTTPException(
+                status_code=409,
+                detail=f"Signal status is '{current_status}', expected 'pending'"
+            )
+
+        # Update wiki frontmatter only (raw JSON is immutable — C-0002)
+        update_frontmatter(wiki_path, {"status": "dismissed"})
+
+        _cache.invalidate()
+        logger.info(f"signal_dismiss: dismissed {signal_id}")
+
+        return {
+            "status": "ok",
+            "signal_id": signal_id,
+            "new_status": "dismissed",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(
+            f"POST /api/v1/signals/{signal_id}/dismiss -- error: {exc}",
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail=str(exc))
+
