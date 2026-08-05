@@ -1426,6 +1426,10 @@ def signals_runs(limit: int = Query(default=10, ge=1, le=100)):
                         "reaction": item.reaction,
                         "iterations": item.iterations,
                         "errors": len(item.errors),
+                        "source_url": item.source_url,
+                        "result_ref": item.result_ref,
+                        "relevance": item.relevance,
+                        "reason": item.reason,
                     })
 
                 summary = asdict(state.summary) if state.summary else {}

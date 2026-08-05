@@ -21,7 +21,6 @@ from .signal_moderator import (
     SignalData,
     _write_processed_md,
     _write_skipped_md,
-    analyze_signal,
     dispatch_idea,
     dispatch_report,
     dispatch_signal,

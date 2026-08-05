@@ -4,7 +4,6 @@ AC-01: score_signal returns relevance 0-10
 AC-02: reason is 1 sentence / SignalData has 13 fields (BL-203)
 AC-03: matched_entities is a list
 AC-04: _write_skipped_md writes skipped to wiki/signals/
-AC-05: analyze_signal determines reaction (idea/report)
 AC-06: idea_draft contains title, problem, solution, domain
 AC-07: report_brief contains topic, questions, scope
 AC-08: dispatch_idea creates idea in vault
@@ -29,13 +28,11 @@ from app.signal_moderator import (
     ReportResult,
     ScoringResult,
     SignalData,
-    _build_analysis_prompt,
     _build_scoring_prompt,
     _load_prompt,
     _parse_json_response,
     _write_processed_md,
     _write_skipped_md,
-    analyze_signal,
     dispatch_idea,
     dispatch_report,
     dispatch_signal,
@@ -55,44 +52,10 @@ News: {news_item}
 Return JSON.
 """
 
-ANALYZE_PROMPT_TEMPLATE = """\
-Context: {business_context}
-Competitor: {competitor_profile}
-{memory_history}
-News: {news_item}
-Return JSON.
-"""
-
 SAMPLE_SCORE_RESPONSE = json.dumps({
     "relevance": 8,
     "reason": "Directly related to OTA competitors",
     "matched_entities": ["Booking.com", "search-engine"],
-})
-
-SAMPLE_ANALYZE_IDEA_RESPONSE = json.dumps({
-    "reaction": "idea",
-    "analysis": "Booking.com launched a new feature that directly impacts our search ranking. "
-                "This creates both a threat and an opportunity for Sutochno.ru.",
-    "threat_level": "medium",
-    "idea_draft": {
-        "title": "Improve search ranking algorithm",
-        "problem": "Competitors gaining advantage through better ranking",
-        "solution": "Implement ML-based ranking model",
-        "domain": "search-engine",
-    },
-    "report_brief": None,
-})
-
-SAMPLE_ANALYZE_REPORT_RESPONSE = json.dumps({
-    "reaction": "report",
-    "analysis": "New market entrant requires strategic analysis of their technology stack.",
-    "threat_level": "high",
-    "idea_draft": None,
-    "report_brief": {
-        "topic": "Analysis of new market entrant",
-        "questions": ["What technology stack do they use?", "What is their pricing strategy?"],
-        "scope": "Russian OTA market competitive landscape",
-    },
 })
 
 SAMPLE_ITEM = {
@@ -206,39 +169,6 @@ class TestBuildScoringPrompt:
     def test_empty_template_returns_empty(self, mock_load: MagicMock):
         result = _build_scoring_prompt(SAMPLE_ITEM, "ctx", "mem")
         assert result == ""
-
-
-# ---------------------------------------------------------------------------
-# _build_analysis_prompt tests
-# ---------------------------------------------------------------------------
-
-
-class TestBuildAnalysisPrompt:
-    @patch("app.signal_moderator._load_prompt", return_value=ANALYZE_PROMPT_TEMPLATE)
-    def test_substitutes_all_placeholders(self, mock_load: MagicMock):
-        scoring = ScoringResult(relevance=8, reason="relevant", matched_entities=["Booking.com"])
-        result = _build_analysis_prompt(
-            SAMPLE_ITEM, scoring, "biz ctx", "competitor info", "history"
-        )
-        assert "biz ctx" in result
-        assert "competitor info" in result
-        assert "history" in result
-        assert "Booking.com launches" in result
-
-    @patch("app.signal_moderator._load_prompt", return_value=ANALYZE_PROMPT_TEMPLATE)
-    def test_none_competitor_replaced_with_default(self, mock_load: MagicMock):
-        scoring = ScoringResult()
-        result = _build_analysis_prompt(SAMPLE_ITEM, scoring, "ctx", None, "")
-        assert "Нет данных" in result
-
-    @patch("app.signal_moderator._load_prompt", return_value=ANALYZE_PROMPT_TEMPLATE)
-    def test_critique_appended(self, mock_load: MagicMock):
-        scoring = ScoringResult()
-        result = _build_analysis_prompt(
-            SAMPLE_ITEM, scoring, "ctx", None, "", critique="Fix the analysis"
-        )
-        assert "Предыдущая попытка не прошла проверку" in result
-        assert "Fix the analysis" in result
 
 
 # ---------------------------------------------------------------------------
@@ -356,162 +286,6 @@ class TestScoreSignal:
 
         result = score_signal(SAMPLE_ITEM, "context", "memory", mock_config)
         assert result.matched_entities == []
-
-
-# ---------------------------------------------------------------------------
-# analyze_signal tests
-# ---------------------------------------------------------------------------
-
-
-class TestAnalyzeSignal:
-    @patch("app.signal_moderator._load_prompt", return_value=ANALYZE_PROMPT_TEMPLATE)
-    @patch("app.signal_moderator.call_detailed")
-    def test_returns_idea_reaction(
-        self, mock_call: MagicMock, mock_prompt: MagicMock, mock_config: MagicMock
-    ):
-        """AC-05: analyze_signal determines reaction='idea'."""
-        mock_call.return_value = (SAMPLE_ANALYZE_IDEA_RESPONSE, {"used": "claude"})
-        scoring = ScoringResult(relevance=8, reason="relevant", matched_entities=["Booking.com"])
-
-        result = analyze_signal(
-            SAMPLE_ITEM, scoring, "ctx", None, "", mock_config
-        )
-
-        assert isinstance(result, AnalysisResult)
-        assert result.reaction == "idea"
-
-    @patch("app.signal_moderator._load_prompt", return_value=ANALYZE_PROMPT_TEMPLATE)
-    @patch("app.signal_moderator.call_detailed")
-    def test_idea_draft_has_required_fields(
-        self, mock_call: MagicMock, mock_prompt: MagicMock, mock_config: MagicMock
-    ):
-        """AC-06: idea_draft contains title, problem, solution, domain."""
-        mock_call.return_value = (SAMPLE_ANALYZE_IDEA_RESPONSE, {"used": "claude"})
-        scoring = ScoringResult()
-
-        result = analyze_signal(SAMPLE_ITEM, scoring, "ctx", None, "", mock_config)
-
-        assert result.idea_draft is not None
-        assert "title" in result.idea_draft
-        assert "problem" in result.idea_draft
-        assert "solution" in result.idea_draft
-        assert "domain" in result.idea_draft
-
-    @patch("app.signal_moderator._load_prompt", return_value=ANALYZE_PROMPT_TEMPLATE)
-    @patch("app.signal_moderator.call_detailed")
-    def test_returns_report_reaction(
-        self, mock_call: MagicMock, mock_prompt: MagicMock, mock_config: MagicMock
-    ):
-        """AC-05: analyze_signal determines reaction='report'."""
-        mock_call.return_value = (SAMPLE_ANALYZE_REPORT_RESPONSE, {"used": "claude"})
-        scoring = ScoringResult()
-
-        result = analyze_signal(SAMPLE_ITEM, scoring, "ctx", None, "", mock_config)
-
-        assert result.reaction == "report"
-        assert result.report_brief is not None
-
-    @patch("app.signal_moderator._load_prompt", return_value=ANALYZE_PROMPT_TEMPLATE)
-    @patch("app.signal_moderator.call_detailed")
-    def test_report_brief_has_required_fields(
-        self, mock_call: MagicMock, mock_prompt: MagicMock, mock_config: MagicMock
-    ):
-        """AC-07: report_brief contains topic, questions, scope."""
-        mock_call.return_value = (SAMPLE_ANALYZE_REPORT_RESPONSE, {"used": "claude"})
-        scoring = ScoringResult()
-
-        result = analyze_signal(SAMPLE_ITEM, scoring, "ctx", None, "", mock_config)
-
-        assert result.report_brief is not None
-        assert "topic" in result.report_brief
-        assert "questions" in result.report_brief
-        assert "scope" in result.report_brief
-
-    @patch("app.signal_moderator._load_prompt", return_value=ANALYZE_PROMPT_TEMPLATE)
-    @patch("app.signal_moderator.call_detailed")
-    def test_escalation_uses_correct_operation(
-        self, mock_call: MagicMock, mock_prompt: MagicMock, mock_config: MagicMock
-    ):
-        """When operation_group=signal_escalation, use signal_analyze_escalation operation."""
-        mock_call.return_value = (SAMPLE_ANALYZE_IDEA_RESPONSE, {"used": "claude"})
-        scoring = ScoringResult()
-
-        analyze_signal(
-            SAMPLE_ITEM, scoring, "ctx", None, "", mock_config,
-            operation_group="signal_escalation",
-        )
-
-        call_args = mock_call.call_args
-        assert call_args.kwargs.get("operation") == "signal_analyze_escalation" or \
-               call_args[1].get("operation") == "signal_analyze_escalation" or \
-               (len(call_args[0]) > 0 and call_args[0][0] == "signal_analyze_escalation")
-
-    @patch("app.signal_moderator._load_prompt", return_value=ANALYZE_PROMPT_TEMPLATE)
-    @patch("app.signal_moderator.call_detailed")
-    def test_normal_uses_signal_analyze_operation(
-        self, mock_call: MagicMock, mock_prompt: MagicMock, mock_config: MagicMock
-    ):
-        """Without escalation, use signal_analyze operation."""
-        mock_call.return_value = (SAMPLE_ANALYZE_IDEA_RESPONSE, {"used": "claude"})
-        scoring = ScoringResult()
-
-        analyze_signal(SAMPLE_ITEM, scoring, "ctx", None, "", mock_config)
-
-        call_args = mock_call.call_args
-        assert call_args.kwargs.get("operation") == "signal_analyze" or \
-               call_args[1].get("operation") == "signal_analyze" or \
-               (len(call_args[0]) > 0 and call_args[0][0] == "signal_analyze")
-
-    @patch("app.signal_moderator._load_prompt", return_value=ANALYZE_PROMPT_TEMPLATE)
-    @patch("app.signal_moderator.call_detailed")
-    def test_llm_error_returns_default(
-        self, mock_call: MagicMock, mock_prompt: MagicMock, mock_config: MagicMock
-    ):
-        """LLM failure should not raise, returns default AnalysisResult."""
-        mock_call.side_effect = RuntimeError("Provider error")
-        scoring = ScoringResult()
-
-        result = analyze_signal(SAMPLE_ITEM, scoring, "ctx", None, "", mock_config)
-
-        assert isinstance(result, AnalysisResult)
-        assert "LLM call error" in result.analysis
-
-    @patch("app.signal_moderator._load_prompt", return_value=ANALYZE_PROMPT_TEMPLATE)
-    @patch("app.signal_moderator.call_detailed")
-    def test_invalid_reaction_defaults_to_idea(
-        self, mock_call: MagicMock, mock_prompt: MagicMock, mock_config: MagicMock
-    ):
-        """Invalid reaction value should default to 'idea'."""
-        response = json.dumps({
-            "reaction": "invalid_value",
-            "analysis": "test",
-            "threat_level": "low",
-        })
-        mock_call.return_value = (response, {"used": "claude"})
-        scoring = ScoringResult()
-
-        result = analyze_signal(SAMPLE_ITEM, scoring, "ctx", None, "", mock_config)
-        assert result.reaction == "idea"
-
-    @patch("app.signal_moderator._load_prompt", return_value=ANALYZE_PROMPT_TEMPLATE)
-    @patch("app.signal_moderator.call_detailed")
-    def test_critique_passed_to_prompt(
-        self, mock_call: MagicMock, mock_prompt: MagicMock, mock_config: MagicMock
-    ):
-        """Critique from AgentLoop should be included in prompt."""
-        mock_call.return_value = (SAMPLE_ANALYZE_IDEA_RESPONSE, {"used": "claude"})
-        scoring = ScoringResult()
-
-        analyze_signal(
-            SAMPLE_ITEM, scoring, "ctx", None, "", mock_config,
-            critique="Previous attempt was too vague",
-        )
-
-        call_args = mock_call.call_args
-        messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
-        prompt_text = messages[0]["content"]
-        assert "Предыдущая попытка не прошла проверку" in prompt_text
-        assert "Previous attempt was too vague" in prompt_text
 
 
 # ---------------------------------------------------------------------------

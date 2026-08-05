@@ -1,8 +1,8 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.21.0 / knowledge-engine 1.22.0 / idea-pipeline 1.2.0 / web-ui 1.31.0 / shared 0.7.4
-**Обновлён:** 04.08.2026 (BL-201 — Signal Moderator нод в Research Queue UI)
-**Бэклог:** реализованные фичи (108), баги (29), идеи (51), итого (188)
+**Версии:** pm-bot 1.27.0 / knowledge-engine 1.24.0 / idea-pipeline 1.2.0 / web-ui 1.32.0 / shared 0.7.4
+**Обновлён:** 05.08.2026 (BL-203 — Signal-First Pipeline, HITL Triage)
+**Бэклог:** реализованные фичи (110), баги (29), идеи (51), итого (190)
 
 ---
 
@@ -197,6 +197,8 @@
 | BL-199 | ✅ extract_ideas нод в Research Queue UI | web-ui, knowledge-engine | Активация ghost-нода extract_ideas в пайплайн-графе. Кликабельный нод с бейджем количества идей. API: `extracted_ideas[]` в `/research-queue/status` — сбор idea-файлов по `ideas_refs` из отчётов, парсинг frontmatter + body (problem/solution/rationale). Карточки идей с domain/priority бейджами, drawer с деталями + Obsidian links. 12 новых тестов. Спека: docs/BL-199_extract-ideas-node/ |
 | BL-200 | ✅ Багфиксы Signal Chain — outcome, ideas count, logging | knowledge-engine | BUG-030: outcome recovery при повторном запуске research-runner (read_frontmatter → _extract_and_classify если outcome=null). BUG-031: ideas count в RunSummary по reaction вместо подстроки в filename. BUG-032: convert-news-digest обёрнут в LoggedProcess. 12 новых тестов. Спека: docs/BL-200_signal-chain-bugfixes/ |
 | BL-201 | ✅ Signal Moderator нод в Research Queue UI | knowledge-engine, pm-bot, web-ui | Активация ghost-нода Signal Moderator в пайплайн-графе research.html. Расширение ItemState (relevance, reason, matched_entities, source_url). Proxy chain: ke_client → vault_api → api.js. Карточки сигналов с reaction-бейджами (SKIP/IDEA/REPORT/ERROR), score/threshold. Drawer с деталями: scoring, reason, entities, gates, iterations. Селектор прогонов. Edge-анимация при reports > 0. Dual-theme (matrix + light). Спека: docs/BL-201_signal-moderator-node/ |
+| BL-202 | ✅ Откат BL-202 Signal-Idea endpoints | knowledge-engine, pm-bot, web-ui | Откат архитектурного подхода BL-202 (статус "Сигнал" для идей). Удалены endpoints signalIdeaDetail/Approve/Dismiss из vault_api.py, ke_client.py, api.js. Подготовка к BL-203 (Signal-First Pipeline). Спека: docs/BL-203_signal-first-pipeline/ |
+| BL-203 | ✅ Signal-First Pipeline — HITL Triage для News Moderator | knowledge-engine, pm-bot, web-ui, shared | Перестройка pipeline News Moderator: LLM создаёт Signal (не IDEA), PM решает через HITL triage в today.html. Новый артефакт Signal (`raw/inbound/signals/` + `wiki/reports/signals/`). Новые функции: `generate_analysis_report()`, `extract_signals()`, `dispatch_signal()`. 4 API endpoints triage. Settings: relevance_threshold slider. Миграция existing IDEA "Сигнал" → "Отсев". 27 задач, 7 фаз. Спека: docs/BL-203_signal-first-pipeline/ |
 
 ### 6.2 Идеи
 
@@ -384,8 +386,8 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 108 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-192, BL-194..BL-195, BL-198..BL-201 |
+| ✅ Реализовано | 110 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-192, BL-194..BL-195, BL-198..BL-203 |
 | ✅ Баги исправлены | 29 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165, BL-193, BUG-027, BUG-028 |
 | Идея | 51 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-188, BL-196..BL-197 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **187** | |
+| **Итого** | **190** | |

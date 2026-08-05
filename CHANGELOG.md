@@ -5,6 +5,37 @@
 
 ---
 
+## 05.08.2026
+
+### knowledge-engine 1.24.0
+- **feat:** BL-203 Signal-First Pipeline — перестройка News Moderator pipeline
+- **feat:** `generate_analysis_report()` — генерация аналитического отчёта по новости через LLM (AgentLoop + QualityGate)
+- **feat:** `extract_signals()` — извлечение уникальных сигналов из отчёта через LLM с dedup
+- **feat:** `dispatch_signal()` — создание Signal-документов в `raw/inbound/signals/` (JSON) + `wiki/reports/signals/` (MD)
+- **feat:** Новые промпты: `signal_report_generate.txt`, `signal_extract.txt`
+- **feat:** `_load_relevance_threshold()` — порог скоринга из user-prefs с fallback на config
+- **feat:** `QualityGate` расширен: completeness check для аналитических отчётов
+- **refactor:** Удалены legacy-функции `analyze_signal()`, `_build_analysis_prompt()` и промпт `signal_analyze.txt`
+- **refactor:** Откат BL-202: удалены endpoints signalIdeaDetail/Approve/Dismiss
+- **feat:** Миграционный скрипт `migrate_signal_ideas.py` — IDEA со статусом "Сигнал" → "Отсев"
+- **test:** 67 тестов signal_moderator, 68 signal_orchestrator, 59 research_runner, 28 signal triage endpoints, 9 migrate_signal_ideas
+
+### pm-bot 1.27.0
+- **feat:** BL-203 Signal triage API: GET /api/v1/signals/list, GET /signals/{id}, POST /signals/{id}/approve, POST /signals/{id}/dismiss
+- **feat:** today.html: панель Signal triage (фильтры all/pending/approved/dismissed, карточки, approve/dismiss с 409 conflict handling)
+- **feat:** settings.html: слайдер SIGNAL MODERATOR (relevance_threshold 1-10)
+- **feat:** api.js: signalsList(), signalDetail(), signalApprove(), signalDismiss()
+- **refactor:** Откат BL-202 API methods: signalIdeaDetail, signalIdeaApprove, signalIdeaDismiss удалены
+- **fix:** vault_api.py: 4 вызова read_frontmatter() в signal endpoints исправлены (tuple unpacking)
+- **test:** 28 тестов signal triage endpoints (test_signal_triage_endpoints.py)
+
+### web-ui 1.32.0
+- **feat:** BL-203 today.html: Signal triage панель — карточки сигналов с threat level, score, status badges
+- **feat:** CSS: секция 18 (BL-203) в style-today.css — 10 новых классов с prefix `today-signal-`
+- **feat:** settings.html: секция SIGNAL MODERATOR с range slider
+
+---
+
 ## 04.08.2026
 
 ### knowledge-engine 1.23.0

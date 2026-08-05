@@ -224,6 +224,8 @@ def main():
                                  help="Score and analyze without writing to vault")
     moderate_parser.add_argument("--threshold", type=int, default=None,
                                  help="Override relevance threshold (default from settings)")
+    moderate_parser.add_argument("--digest", default=None,
+                                 help="Path to specific digest JSON (default: auto-detect latest)")
 
     trend_parser = subparsers.add_parser(
         "trend-detect",
@@ -1057,7 +1059,7 @@ def main():
         from shared.system_log import LoggedProcess
 
         from .signal_orchestrator import SignalOrchestrator, load_config_from_settings
-        logger.info(f"moderate-news: starting, vault={vault_path}, notify={args.notify}, dry_run={args.dry_run}, threshold={args.threshold}")
+        logger.info(f"moderate-news: starting, vault={vault_path}, digest={args.digest}, notify={args.notify}, dry_run={args.dry_run}, threshold={args.threshold}")
 
         config = load_config_from_settings()
         if args.threshold is not None:
@@ -1066,7 +1068,7 @@ def main():
         with LoggedProcess("signal-moderator", source="ke-cron") as lp:
             orchestrator = SignalOrchestrator(vault_path, config)
             result = orchestrator.process_digest(
-                digest_path=None,
+                digest_path=args.digest,
                 notify=args.notify,
                 dry_run=args.dry_run,
             )

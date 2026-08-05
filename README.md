@@ -190,7 +190,7 @@ Jira-статусы не нормализуются — Jira является и
 
 ## Компоненты
 
-### pm-bot (v1.19.0)
+### pm-bot (v1.27.0)
 
 Telegram-бот + Vault API + Web UI сервер. Точка входа для всех взаимодействий.
 
@@ -206,7 +206,7 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 - APScheduler: enrichment reminders (daily), daily alert (пн-пт 18:00)
 - SQLite: дедупликация enrichment-напоминаний (cooldown 24ч)
 
-### knowledge-engine (v1.18.0)
+### knowledge-engine (v1.24.0)
 
 Сервис обогащения и синтеза знаний.
 
@@ -233,6 +233,7 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 - **News Moderator (BL-189)**: агентная цепочка анализа новостей — скоринг релевантности → содержательный анализ (AgentLoop + QualityGate) → dispatch идея/отчёт → извлечение идей → persistent SQLite memory → weekly trend detection
 - **Agent Observability (BL-190)**: мониторинг и аналитика агентной цепочки — Langfuse e2e trace, persistence решений агентов (iterations_history, gate_results), 3 HTTP-endpoints диагностики (signals/runs, signals/stats), CLI `signal-status`
 - **News Digest Converter (BL-191)**: конвертер daily-news markdown → JSON-дайджест для moderate-news pipeline, CLI `convert-news-digest`, cron 07:55 Пн-Пт
+- **Signal-First Pipeline (BL-203)**: перестройка News Moderator — LLM создаёт Signal (не IDEA), PM решает через HITL triage. Новые функции: `generate_analysis_report()`, `extract_signals()`, `dispatch_signal()`. Signal хранится в `raw/inbound/signals/` (JSON) + `wiki/reports/signals/` (MD). Triage через today.html: approve → dispatch_idea(), dismiss → отклонение. Настраиваемый порог через settings.html
 
 #### Принудительный запуск News Moderator
 ```
@@ -268,7 +269,7 @@ Cron-контейнер для периодических задач:
 - News Moderator: Пн-Пт 08:00
 - Trend detect: Пн 06:00
 
-### shared (v0.7.0)
+### shared (v0.7.4)
 
 Общий модуль, единый источник для pm-bot, knowledge-engine и idea-pipeline.
 
