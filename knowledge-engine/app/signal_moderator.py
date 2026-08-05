@@ -545,6 +545,8 @@ def dispatch_signal(
         "threat_level": signal_data.threat_level,
         "recommended_action": signal_data.recommended_action,
         "draft_idea": signal_data.draft_idea,
+        "original_title": item.get("title", ""),
+        "original_summary": item.get("summary", ""),
         "signal_date": today,
         "run_id": run_id,
         "status": "pending",

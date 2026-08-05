@@ -58,6 +58,41 @@ def _safe_end_span(span, **kwargs):
         logger.warning(f"Langfuse span end failed: {e}")
 
 
+def _extract_report_section(content: str, heading: str) -> str:
+    """Extract text under a markdown heading from report content.
+
+    Looks for ``## ... heading ...`` (fuzzy — ``##`` line containing *heading*),
+    then captures everything up to the next ``##``.  Falls back to the first 500
+    chars of *content* when the heading is not found.  Result is capped at 1000
+    chars to avoid bloating the QualityGate prompt.
+    """
+    if not content:
+        logger.info(
+            f"_extract_report_section: heading={heading!r}, "
+            f"found='no (empty content)', len=0"
+        )
+        return ""
+    pattern = rf"^##\s*.*{re.escape(heading)}.*$"
+    match = re.search(pattern, content, re.MULTILINE | re.IGNORECASE)
+    if not match:
+        fallback = content[:500]
+        logger.info(
+            f"_extract_report_section: heading={heading!r}, "
+            f"found='no', len={len(fallback)}"
+        )
+        return fallback
+    start = match.end()
+    next_heading = re.search(r"^##\s", content[start:], re.MULTILINE)
+    end = start + next_heading.start() if next_heading else len(content)
+    section = content[start:end].strip()
+    section = section[:1000]
+    logger.info(
+        f"_extract_report_section: heading={heading!r}, "
+        f"found='yes', len={len(section)}"
+    )
+    return section
+
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -525,7 +560,22 @@ class SignalOrchestrator:
                 critique=kwargs.get("critique"),
                 operation_group=kwargs.get("operation_group"),
             )
-            return result.__dict__
+            d = result.__dict__.copy()
+            d["title"] = item.get("title", "")
+            d["domain"] = item.get("domain", "general")
+            d["problem"] = _extract_report_section(
+                result.content, "Угрозы и возможности"
+            )
+            d["solution"] = _extract_report_section(
+                result.content, "Рекомендуемые действия"
+            )
+            logger.info(
+                f"step_fn: enriched dict for QualityGate, "
+                f"title={d['title'][:60]!r}, domain={d['domain']!r}, "
+                f"problem_len={len(d['problem'])}, "
+                f"solution_len={len(d['solution'])}"
+            )
+            return d
 
         analyze_span = _safe_span(item_span, f"report:{item_key}")
         report_dict, loop_history = loop.run(

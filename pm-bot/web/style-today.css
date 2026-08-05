@@ -665,7 +665,7 @@
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(560px, 94vw);
+  width: min(680px, 94vw);
   background: var(--surface);
   border-left: 1px solid var(--border);
   transform: translateX(105%);

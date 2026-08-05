@@ -1183,7 +1183,10 @@
           console.warn('[settings] invalid relevance threshold:', val);
           return;
         }
-        api.saveUserPrefs({moderator: {relevance_threshold: val}}).then(function(res) {
+        var payload = buildPrefsPayload();
+        payload.moderator = {relevance_threshold: val};
+        console.log('[settings] saveRelevanceThreshold: sending full payload with moderator.relevance_threshold=' + val);
+        api.saveUserPrefs(payload).then(function(res) {
           console.log('[settings] relevance threshold saved:', val);
         }).catch(function(err) {
           console.error('[settings] save relevance threshold error:', err.message);

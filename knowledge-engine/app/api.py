@@ -261,11 +261,11 @@ def _parse_idea_body(body: str) -> dict:
 
 
 def _build_reports_list(vault_path: str, limit: int = 50) -> list[dict]:
-    """Scan wiki/reports/ for research reports with frontmatter (BL-198)."""
+    """Scan wiki/signals/ for signal reports with frontmatter (BL-198)."""
     logger.info("_build_reports_list: scanning")
-    reports_dir = _vp.wiki_reports()
+    reports_dir = _vp.wiki_signals()
     if not reports_dir.exists():
-        logger.info("_build_reports_list: reports dir does not exist")
+        logger.info("_build_reports_list: signals dir does not exist")
         return []
 
     from shared.frontmatter_utils import read_frontmatter
@@ -276,23 +276,23 @@ def _build_reports_list(vault_path: str, limit: int = 50) -> list[dict]:
             break
         try:
             meta, _ = read_frontmatter(f)
-            if meta.get("type") != "research-report":
+            if meta.get("type") != "signal-report":
                 continue
             reports.append({
                 "filename": f.name,
-                "topic": meta.get("topic", f.stem),
-                "date": meta.get("date", ""),
+                "topic": meta.get("title", f.stem),
+                "date": meta.get("signal_date") or meta.get("created", ""),
                 "outcome": meta.get("outcome"),
                 "outcome_details": meta.get("outcome_details", ""),
                 "ideas_count": meta.get("ideas_count", 0),
                 "completeness": meta.get("completeness"),
-                "signal_source": meta.get("signal_source", ""),
+                "signal_source": meta.get("source_url") or meta.get("signal_source", ""),
                 "ideas_refs": meta.get("ideas_refs", []) if meta.get("ideas_count", 0) > 0 else [],
             })
         except Exception as exc:
             logger.warning(f"_build_reports_list: failed to read {f.name}: {exc}")
 
-    logger.info(f"_build_reports_list: found {len(reports)} research reports")
+    logger.info(f"_build_reports_list: found {len(reports)} signal reports")
     return reports
 
 

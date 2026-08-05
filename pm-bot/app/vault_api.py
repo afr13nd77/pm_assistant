@@ -1690,6 +1690,9 @@ def list_reports(type: str | None = None):
 
     try:
         files = [f for f in folder.glob("*.md") if not _is_service_file(f)]
+        signals_dir = folder / "signals"
+        if signals_dir.exists():
+            files.extend(f for f in signals_dir.glob("*.md") if not _is_service_file(f))
         logger.info(f"GET /api/v1/reports — found {len(files)} files total")
     except Exception as exc:
         logger.error(f"GET /api/v1/reports — error listing files: {exc}")
@@ -1754,6 +1757,8 @@ def get_report_by_filename(filename: str):
     folder = wiki_reports()
     filepath = folder / filename
 
+    if not filepath.exists():
+        filepath = folder / "signals" / filename
     if not filepath.exists():
         logger.info(
             "GET /api/v1/reports/%s — file not found", filename
@@ -3046,7 +3051,15 @@ def put_user_prefs(body: UserPrefs):
         current = _read_user_prefs()
         body.caldav_password = current.get("caldav_password", "")
         logger.info("PUT /api/v1/user-prefs — caldav_password sentinel detected, preserving current value")
-    prefs = body.model_dump()
+    # Merge validated fields into existing prefs to preserve extra keys
+    # (e.g. "moderator") that are not part of the UserPrefs Pydantic model
+    # but are stored in .pm-user-prefs.json and used by other components
+    # (knowledge-engine signal_orchestrator reads moderator.relevance_threshold).
+    existing = _read_user_prefs()
+    validated = body.model_dump()
+    existing.update(validated)
+    prefs = existing
+    logger.info("PUT /api/v1/user-prefs — merged %d validated fields into existing prefs (preserving extra keys)", len(validated))
     try:
         _write_user_prefs(prefs)
     except Exception as exc:
@@ -4999,15 +5012,59 @@ async def signal_detail(signal_id: str):
         if rec_match:
             recommended_action = rec_match.group(1).strip()
 
-        # Read draft_idea from raw JSON
+        # Read draft_idea, news_title, news_summary from raw JSON
         draft_idea = None
+        news_title = ""
+        news_summary = ""
         raw_path = vault_paths.raw_signals() / f"{signal_id}.json"
         if raw_path.exists():
             try:
                 raw_data = json.loads(raw_path.read_text(encoding="utf-8"))
                 draft_idea = raw_data.get("draft_idea")
+                news_title = raw_data.get("original_title", "") or raw_data.get("title", "")
+                news_summary = raw_data.get("original_summary", "") or raw_data.get("summary", "")
             except Exception as e:
                 logger.warning(f"signal_detail: failed to read raw JSON: {e}")
+
+        # Fallback: look up original news in digest files by source_url
+        if not news_summary:
+            src_url = fm.get("source_url", "")
+            if src_url:
+                news_dir = VAULT_PATH / "raw" / "inbound" / "news"
+                if news_dir.exists():
+                    for digest_file in sorted(news_dir.glob("*-digest.json"), reverse=True):
+                        try:
+                            digest_data = json.loads(digest_file.read_text(encoding="utf-8"))
+                            for di_item in digest_data.get("items", []):
+                                if di_item.get("source_url") == src_url:
+                                    news_title = news_title or di_item.get("title", "")
+                                    news_summary = di_item.get("summary", "")
+                                    logger.info(f"signal_detail: found news in digest {digest_file.name}")
+                                    break
+                            if news_summary:
+                                break
+                        except Exception as e:
+                            logger.warning(f"signal_detail: failed to read digest {digest_file.name}: {e}")
+
+        # Load report content if report_ref exists
+        report_content = ""
+        report_ref = fm.get("report_ref", "")
+        if report_ref:
+            report_path = vault_paths.wiki_signals() / report_ref
+            if report_path.exists():
+                try:
+                    report_text = report_path.read_text(encoding="utf-8")
+                    # Strip frontmatter
+                    fm_end = report_text.find("---", report_text.find("---") + 3)
+                    if fm_end != -1:
+                        report_content = report_text[fm_end + 3:].strip()
+                    else:
+                        report_content = report_text.strip()
+                    logger.info(f"signal_detail: loaded report content from {report_ref}, len={len(report_content)}")
+                except Exception as e:
+                    logger.warning(f"signal_detail: failed to read report {report_ref}: {e}")
+            else:
+                logger.warning(f"signal_detail: report_ref file not found: {report_path}")
 
         result = {
             "signal_id": signal_id,
@@ -5022,6 +5079,9 @@ async def signal_detail(signal_id: str):
             "recommended_action": recommended_action,
             "draft_idea": draft_idea,
             "report_ref": fm.get("report_ref", ""),
+            "report_content": report_content,
+            "news_title": news_title,
+            "news_summary": news_summary,
             "result_ref": fm.get("result_ref", ""),
             "created": fm.get("created", ""),
         }

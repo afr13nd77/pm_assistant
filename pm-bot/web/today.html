@@ -591,11 +591,28 @@
           }
           body += '</div></div>';
 
+          // Original news
+          if (detail.news_title || detail.news_summary) {
+            body += '<div class="drawer-section"><div class="drawer-section-head">Исходная новость</div><div class="drawer-section-body">';
+            if (detail.news_title) {
+              body += '<div style="font-weight:700;margin-bottom:6px">' + self.escapeHtml(detail.news_title) + '</div>';
+            }
+            if (detail.news_summary) {
+              body += '<div>' + self.escapeHtml(detail.news_summary) + '</div>';
+            }
+            body += '</div></div>';
+          }
+
           // Scoring
           body += '<div class="drawer-section"><div class="drawer-section-head">Скоринг</div><div class="drawer-section-body">'
                + '<span style="font-weight:700">Relevance: ' + (detail.relevance_score || 0) + '/10</span>'
                + ' · <span style="color:' + self.signalThreatColor(detail.threat_level) + ';font-weight:700">Угроза: ' + self.signalThreatLabel(detail.threat_level) + '</span>'
                + '</div></div>';
+
+          // Report content
+          if (detail.report_content) {
+            body += '<div class="drawer-section"><div class="drawer-section-head">Отчёт</div><div class="drawer-section-body">' + self.renderMarkdown(detail.report_content) + '</div></div>';
+          }
 
           // Analysis
           if (detail.analysis) {
