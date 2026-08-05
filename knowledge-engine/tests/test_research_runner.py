@@ -763,18 +763,17 @@ class TestRunAll:
 class TestOutcome:
     @patch("app.research_runner._update_processed_json")
     @patch("app.research_runner.update_frontmatter")
-    @patch("app.research_runner.dispatch_idea")
-    @patch("app.research_runner.extract_ideas_full")
-    def test_outcome_idea_dispatches_ideas(
+    @patch("app.research_runner.dispatch_signal")
+    @patch("app.research_runner.extract_signals")
+    def test_outcome_signal_dispatches_signals(
         self, mock_extract, mock_dispatch, mock_fm, mock_proc, tmp_path,
     ):
-        mock_extract.return_value = (
-            [
-                {"title": "Idea 1", "rationale": "r1"},
-                {"title": "Idea 2", "rationale": "r2"},
-            ],
-            "",
-        )
+        from app.signal_moderator import SignalData
+
+        mock_extract.return_value = [
+            SignalData(title="Signal 1", analysis="a1"),
+            SignalData(title="Signal 2", analysis="a2"),
+        ]
         mock_dispatch.side_effect = ["ref1", "ref2"]
 
         report_path = tmp_path / "report.md"
@@ -784,6 +783,11 @@ class TestOutcome:
             source_path=tmp_path / "task.json",
         )
 
+        # Create business context file expected by _extract_and_classify
+        bc_dir = tmp_path / "wiki" / "concepts"
+        bc_dir.mkdir(parents=True, exist_ok=True)
+        (bc_dir / "business-context-brief.md").write_text("bc", encoding="utf-8")
+
         outcome, details, count, refs = _extract_and_classify(
             report_path=report_path,
             task=task,
@@ -791,55 +795,29 @@ class TestOutcome:
             config=ModeratorConfig(),
         )
 
-        assert outcome == "idea"
+        assert outcome == "signal"
         assert count == 2
         assert refs == ["ref1", "ref2"]
         assert mock_dispatch.call_count == 2
 
+        # Verify dispatch_signal called with source="research-report"
+        for call_args in mock_dispatch.call_args_list:
+            assert call_args[1]["item"]["source"] == "research-report"
+
         mock_fm.assert_called_once()
         fm_path, fm_data = mock_fm.call_args[0]
         assert fm_path == report_path
-        assert fm_data["outcome"] == "idea"
-        assert fm_data["ideas_count"] == 2
+        assert fm_data["outcome"] == "signal"
+        assert fm_data["signals_count"] == 2
 
     @patch("app.research_runner._update_processed_json")
     @patch("app.research_runner.update_frontmatter")
-    @patch("app.research_runner.dispatch_idea")
-    @patch("app.research_runner.extract_ideas_full")
-    def test_outcome_not_relevant(
+    @patch("app.research_runner.dispatch_signal")
+    @patch("app.research_runner.extract_signals")
+    def test_outcome_no_signals_insight(
         self, mock_extract, mock_dispatch, mock_fm, mock_proc, tmp_path,
     ):
-        mock_extract.return_value = ([], "не наш профиль, другая отрасль")
-
-        report_path = tmp_path / "report.md"
-        report_path.write_text("content", encoding="utf-8")
-        task = ResearchTask(
-            topic="T", questions=["Q1"], scope="s",
-            source_path=tmp_path / "task.json",
-        )
-
-        outcome, details, count, refs = _extract_and_classify(
-            report_path=report_path,
-            task=task,
-            vault_path=str(tmp_path),
-            config=ModeratorConfig(),
-        )
-
-        assert outcome == "not_relevant"
-        assert "не наш профиль" in details
-        assert count == 0
-        mock_dispatch.assert_not_called()
-
-    @patch("app.research_runner._update_processed_json")
-    @patch("app.research_runner.update_frontmatter")
-    @patch("app.research_runner.dispatch_idea")
-    @patch("app.research_runner.extract_ideas_full")
-    def test_outcome_insight_default(
-        self, mock_extract, mock_dispatch, mock_fm, mock_proc, tmp_path,
-    ):
-        mock_extract.return_value = (
-            [], "тема интересная но без конкретных идей для продукта",
-        )
+        mock_extract.return_value = []
 
         report_path = tmp_path / "report.md"
         report_path.write_text("content", encoding="utf-8")
@@ -856,10 +834,46 @@ class TestOutcome:
         )
 
         assert outcome == "insight"
+        assert "No actionable signals" in details
+        assert count == 0
         mock_dispatch.assert_not_called()
 
+    @patch("app.research_runner._update_processed_json")
     @patch("app.research_runner.update_frontmatter")
-    @patch("app.research_runner.extract_ideas_full")
+    @patch("app.research_runner.dispatch_signal")
+    @patch("app.research_runner.extract_signals")
+    def test_outcome_empty_signals_list(
+        self, mock_extract, mock_dispatch, mock_fm, mock_proc, tmp_path,
+    ):
+        """When extract_signals() returns [], outcome should be 'insight'."""
+        mock_extract.return_value = []
+
+        report_path = tmp_path / "report.md"
+        report_path.write_text("content", encoding="utf-8")
+        task = ResearchTask(
+            topic="T", questions=["Q1"], scope="s",
+            source_path=tmp_path / "task.json",
+        )
+
+        outcome, details, count, refs = _extract_and_classify(
+            report_path=report_path,
+            task=task,
+            vault_path=str(tmp_path),
+            config=ModeratorConfig(),
+        )
+
+        assert outcome == "insight"
+        assert count == 0
+        assert refs == []
+        mock_dispatch.assert_not_called()
+
+        mock_fm.assert_called_once()
+        fm_path, fm_data = mock_fm.call_args[0]
+        assert fm_data["signals_count"] == 0
+        assert fm_data["signal_refs"] == []
+
+    @patch("app.research_runner.update_frontmatter")
+    @patch("app.research_runner.extract_signals")
     @patch("app.research_runner._move_task_file")
     @patch("app.research_runner._write_report")
     @patch("app.research_runner._run_completeness_check")
@@ -870,7 +884,7 @@ class TestOutcome:
         self, mock_check, mock_ctx, mock_gen, mock_comp, mock_write, mock_move,
         mock_extract, mock_fm,
     ):
-        """A crash inside idea extraction/classification must never poison the
+        """A crash inside signal extraction/classification must never poison the
         already-written report or the overall ResearchResult.error field."""
         mock_check.return_value = None
         mock_ctx.return_value = {"business_context": "", "competitor_context": ""}
@@ -934,15 +948,15 @@ class TestOutcome:
         mock_processed.return_value = proc_dir
 
         _update_processed_json(Path("/tmp/task.json"), {
-            "outcome": "idea",
+            "outcome": "signal",
             "outcome_details": "",
-            "ideas_count": 2,
-            "ideas_refs": ["ref1", "ref2"],
+            "signals_count": 2,
+            "signal_refs": ["ref1", "ref2"],
         })
 
         data = json.loads(proc_file.read_text(encoding="utf-8"))
-        assert data["outcome"] == "idea"
-        assert data["ideas_count"] == 2
-        assert data["ideas_refs"] == ["ref1", "ref2"]
+        assert data["outcome"] == "signal"
+        assert data["signals_count"] == 2
+        assert data["signal_refs"] == ["ref1", "ref2"]
         # original fields preserved
         assert data["topic"] == "T"

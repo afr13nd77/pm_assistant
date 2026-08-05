@@ -1,7 +1,7 @@
-"""Tests for signal_moderator module (T-10).
+"""Tests for signal_moderator module (T-10, T-20).
 
 AC-01: score_signal returns relevance 0-10
-AC-02: reason is 1 sentence
+AC-02: reason is 1 sentence / SignalData has 13 fields (BL-203)
 AC-03: matched_entities is a list
 AC-04: _write_skipped_md writes skipped to wiki/signals/
 AC-05: analyze_signal determines reaction (idea/report)
@@ -9,6 +9,8 @@ AC-06: idea_draft contains title, problem, solution, domain
 AC-07: report_brief contains topic, questions, scope
 AC-08: dispatch_idea creates idea in vault
 AC-10: idea contains source=signal, signal_date, signal_source
+AC-15: dispatch_signal creates raw JSON + wiki MD (BL-203)
+AC-16: dispatch_signal dry_run creates no files (BL-203)
 AC-30: dispatch_idea sends Telegram notification
 AC-31: dispatch_report sends Telegram notification
 AC-43: Input format news_item: title + summary + source
@@ -24,7 +26,9 @@ import pytest
 
 from app.signal_moderator import (
     AnalysisResult,
+    ReportResult,
     ScoringResult,
+    SignalData,
     _build_analysis_prompt,
     _build_scoring_prompt,
     _load_prompt,
@@ -34,6 +38,9 @@ from app.signal_moderator import (
     analyze_signal,
     dispatch_idea,
     dispatch_report,
+    dispatch_signal,
+    extract_signals,
+    generate_analysis_report,
     score_signal,
 )
 
@@ -859,3 +866,482 @@ class TestDataclasses:
         )
         assert r.reaction == "idea"
         assert r.idea_draft["title"] == "test"
+
+    def test_report_result_defaults(self):
+        r = ReportResult()
+        assert r.content == ""
+        assert r.threat_level == "medium"
+        assert r._quality_warning is False
+        assert r._attempts == 1
+
+    def test_report_result_with_values(self):
+        r = ReportResult(content="# Report", threat_level="high")
+        assert r.content == "# Report"
+        assert r.threat_level == "high"
+
+    def test_signal_data_defaults(self):
+        s = SignalData()
+        assert s.title == ""
+        assert s.analysis == ""
+        assert s.threat_level == "low"
+        assert s.recommended_action == ""
+        assert s.draft_idea is None
+        assert s.domain == "general"
+        assert s.priority_hint == "medium"
+        assert s.rationale == ""
+
+    def test_signal_data_with_values(self):
+        s = SignalData(
+            title="Test Signal",
+            analysis="Analysis text",
+            threat_level="high",
+            recommended_action="Act immediately",
+            draft_idea={"title": "Idea", "problem": "P", "solution": "S", "domain": "search-engine"},
+            domain="search-engine",
+            priority_hint="high",
+            rationale="Critical competitor move",
+        )
+        assert s.title == "Test Signal"
+        assert s.threat_level == "high"
+        assert s.draft_idea["domain"] == "search-engine"
+        assert s.priority_hint == "high"
+
+
+# ---------------------------------------------------------------------------
+# generate_analysis_report tests (BL-203)
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateAnalysisReport:
+    def test_success(self, monkeypatch, mock_config):
+        """generate_analysis_report returns ReportResult with content and threat_level."""
+        md_content = '# Report\nSome analysis.\n<report_meta>{"threat_level": "high"}</report_meta>'
+        monkeypatch.setattr(
+            "app.signal_moderator.call_detailed",
+            lambda **kw: (md_content, {"used": "claude"}),
+        )
+        monkeypatch.setattr(
+            "app.signal_moderator._load_prompt",
+            lambda name: "prompt {business_context} {competitor_profile} {memory_history} {news_item}",
+        )
+
+        result = generate_analysis_report(
+            item={"title": "Test", "summary": "Test summary", "source": "TestSource"},
+            scoring=ScoringResult(relevance=8, reason="test", matched_entities=[]),
+            business_context="test context",
+            competitor_profile="competitor info",
+            memory_history="memory",
+            config=mock_config,
+        )
+        assert isinstance(result, ReportResult)
+        assert "Report" in result.content
+        assert result.threat_level == "high"
+
+    def test_no_meta_tag_fallback(self, monkeypatch, mock_config):
+        """When <report_meta> tag is missing, threat_level defaults to 'medium'."""
+        monkeypatch.setattr(
+            "app.signal_moderator.call_detailed",
+            lambda **kw: ("Just a report without meta", {"used": "claude"}),
+        )
+        monkeypatch.setattr(
+            "app.signal_moderator._load_prompt",
+            lambda name: "prompt {business_context} {competitor_profile} {memory_history} {news_item}",
+        )
+
+        result = generate_analysis_report(
+            item={"title": "Test", "summary": "s", "source": "src"},
+            scoring=ScoringResult(relevance=5, reason="r", matched_entities=[]),
+            business_context="ctx",
+            competitor_profile=None,
+            memory_history="",
+            config=mock_config,
+        )
+        assert result.threat_level == "medium"
+
+    def test_llm_error_returns_error_result(self, monkeypatch, mock_config):
+        """LLM error returns ReportResult with error message (not raised)."""
+        def raise_err(**kw):
+            raise RuntimeError("LLM unavailable")
+
+        monkeypatch.setattr("app.signal_moderator.call_detailed", raise_err)
+        monkeypatch.setattr(
+            "app.signal_moderator._load_prompt",
+            lambda name: "prompt {business_context} {competitor_profile} {memory_history} {news_item}",
+        )
+
+        result = generate_analysis_report(
+            item={"title": "t", "summary": "s", "source": "src"},
+            scoring=ScoringResult(relevance=5, reason="r", matched_entities=[]),
+            business_context="ctx",
+            competitor_profile=None,
+            memory_history="",
+            config=mock_config,
+        )
+        assert isinstance(result, ReportResult)
+        assert "LLM call error" in result.content
+        assert result.threat_level == "medium"
+
+    def test_empty_prompt_returns_default(self, monkeypatch, mock_config):
+        """When prompt template is empty/missing, return default ReportResult."""
+        monkeypatch.setattr("app.signal_moderator._load_prompt", lambda name: "")
+
+        result = generate_analysis_report(
+            item={"title": "t", "summary": "s", "source": "src"},
+            scoring=ScoringResult(),
+            business_context="ctx",
+            competitor_profile=None,
+            memory_history="",
+            config=mock_config,
+        )
+        assert "Empty prompt template" in result.content
+
+    def test_escalation_operation(self, monkeypatch, mock_config):
+        """With operation_group='signal_escalation', use escalation operation."""
+        captured = {}
+
+        def mock_call(**kw):
+            captured.update(kw)
+            return ("Report content", {"used": "claude"})
+
+        monkeypatch.setattr("app.signal_moderator.call_detailed", mock_call)
+        monkeypatch.setattr(
+            "app.signal_moderator._load_prompt",
+            lambda name: "prompt {business_context} {competitor_profile} {memory_history} {news_item}",
+        )
+
+        generate_analysis_report(
+            item={"title": "t", "summary": "s", "source": "src"},
+            scoring=ScoringResult(),
+            business_context="ctx",
+            competitor_profile=None,
+            memory_history="",
+            config=mock_config,
+            operation_group="signal_escalation",
+        )
+        assert captured["operation"] == "signal_analyze_escalation"
+
+    def test_content_stripped_from_meta(self, monkeypatch, mock_config):
+        """Content before <report_meta> tag is returned, meta tag itself is stripped."""
+        resp = '# Title\n\nBody content.\n<report_meta>{"threat_level": "low"}</report_meta>'
+        monkeypatch.setattr(
+            "app.signal_moderator.call_detailed",
+            lambda **kw: (resp, {"used": "claude"}),
+        )
+        monkeypatch.setattr(
+            "app.signal_moderator._load_prompt",
+            lambda name: "prompt {business_context} {competitor_profile} {memory_history} {news_item}",
+        )
+
+        result = generate_analysis_report(
+            item={"title": "t", "summary": "s", "source": "src"},
+            scoring=ScoringResult(),
+            business_context="ctx",
+            competitor_profile=None,
+            memory_history="",
+            config=mock_config,
+        )
+        assert "<report_meta>" not in result.content
+        assert "Body content" in result.content
+        assert result.threat_level == "low"
+
+
+# ---------------------------------------------------------------------------
+# extract_signals tests (BL-203)
+# ---------------------------------------------------------------------------
+
+
+class TestExtractSignals:
+    def test_success(self, tmp_path, monkeypatch, mock_config):
+        """extract_signals returns list of SignalData from LLM JSON response."""
+        report_path = tmp_path / "report.md"
+        report_path.write_text("# Report\nContent here", encoding="utf-8")
+
+        json_resp = json.dumps({"signals": [
+            {"title": "Signal 1", "analysis": "A1", "threat_level": "high",
+             "recommended_action": "Act", "draft_idea": {"title": "I1", "problem": "P", "solution": "S", "domain": "general"},
+             "domain": "general", "priority_hint": "high", "rationale": "R1"},
+            {"title": "Signal 2", "analysis": "A2", "threat_level": "low",
+             "recommended_action": "Monitor", "draft_idea": None,
+             "domain": "search-engine", "priority_hint": "low", "rationale": "R2"},
+        ]})
+        monkeypatch.setattr(
+            "app.signal_moderator.call_detailed",
+            lambda **kw: (json_resp, {"used": "claude"}),
+        )
+        monkeypatch.setattr(
+            "app.signal_moderator._load_prompt",
+            lambda name: "prompt {business_context} {report_content}",
+        )
+
+        result = extract_signals(report_path, str(tmp_path), "ctx", mock_config)
+        assert len(result) == 2
+        assert isinstance(result[0], SignalData)
+        assert result[0].title == "Signal 1"
+        assert result[0].threat_level == "high"
+        assert result[1].draft_idea is None
+
+    def test_empty_signals(self, tmp_path, monkeypatch, mock_config):
+        """When LLM returns empty signals list, return empty list."""
+        report_path = tmp_path / "report.md"
+        report_path.write_text("# Report\nContent", encoding="utf-8")
+
+        json_resp = json.dumps({"signals": [], "no_signals_reason": "Nothing actionable"})
+        monkeypatch.setattr(
+            "app.signal_moderator.call_detailed",
+            lambda **kw: (json_resp, {"used": "claude"}),
+        )
+        monkeypatch.setattr(
+            "app.signal_moderator._load_prompt",
+            lambda name: "prompt {business_context} {report_content}",
+        )
+
+        result = extract_signals(report_path, str(tmp_path), "ctx", mock_config)
+        assert result == []
+
+    def test_invalid_json(self, tmp_path, monkeypatch, mock_config):
+        """When LLM returns invalid JSON, return empty list."""
+        report_path = tmp_path / "report.md"
+        report_path.write_text("# Report\nContent", encoding="utf-8")
+
+        monkeypatch.setattr(
+            "app.signal_moderator.call_detailed",
+            lambda **kw: ("not json at all {broken", {"used": "claude"}),
+        )
+        monkeypatch.setattr(
+            "app.signal_moderator._load_prompt",
+            lambda name: "prompt {business_context} {report_content}",
+        )
+
+        result = extract_signals(report_path, str(tmp_path), "ctx", mock_config)
+        assert result == []
+
+    def test_missing_report_file(self, tmp_path, monkeypatch, mock_config):
+        """When report file doesn't exist, return empty list."""
+        report_path = tmp_path / "nonexistent.md"
+
+        result = extract_signals(report_path, str(tmp_path), "ctx", mock_config)
+        assert result == []
+
+    def test_llm_error(self, tmp_path, monkeypatch, mock_config):
+        """LLM error returns empty list."""
+        report_path = tmp_path / "report.md"
+        report_path.write_text("# Report\nContent", encoding="utf-8")
+
+        def raise_err(**kw):
+            raise RuntimeError("LLM down")
+
+        monkeypatch.setattr("app.signal_moderator.call_detailed", raise_err)
+        monkeypatch.setattr(
+            "app.signal_moderator._load_prompt",
+            lambda name: "prompt {business_context} {report_content}",
+        )
+
+        result = extract_signals(report_path, str(tmp_path), "ctx", mock_config)
+        assert result == []
+
+    def test_skips_invalid_entries(self, tmp_path, monkeypatch, mock_config):
+        """Signals without required title/analysis are skipped."""
+        report_path = tmp_path / "report.md"
+        report_path.write_text("# Report", encoding="utf-8")
+
+        json_resp = json.dumps({"signals": [
+            {"title": "", "analysis": "A1", "threat_level": "low"},
+            {"title": "Valid", "analysis": "A2"},
+            "not_a_dict",
+        ]})
+        monkeypatch.setattr(
+            "app.signal_moderator.call_detailed",
+            lambda **kw: (json_resp, {"used": "claude"}),
+        )
+        monkeypatch.setattr(
+            "app.signal_moderator._load_prompt",
+            lambda name: "prompt {business_context} {report_content}",
+        )
+
+        result = extract_signals(report_path, str(tmp_path), "ctx", mock_config)
+        assert len(result) == 1
+        assert result[0].title == "Valid"
+
+    def test_invalid_threat_level_defaults_to_low(self, tmp_path, monkeypatch, mock_config):
+        """Invalid threat_level values default to 'low'."""
+        report_path = tmp_path / "report.md"
+        report_path.write_text("# Report", encoding="utf-8")
+
+        json_resp = json.dumps({"signals": [
+            {"title": "S1", "analysis": "A1", "threat_level": "critical"},
+        ]})
+        monkeypatch.setattr(
+            "app.signal_moderator.call_detailed",
+            lambda **kw: (json_resp, {"used": "claude"}),
+        )
+        monkeypatch.setattr(
+            "app.signal_moderator._load_prompt",
+            lambda name: "prompt {business_context} {report_content}",
+        )
+
+        result = extract_signals(report_path, str(tmp_path), "ctx", mock_config)
+        assert result[0].threat_level == "low"
+
+
+# ---------------------------------------------------------------------------
+# dispatch_signal tests (BL-203)
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchSignal:
+    def _make_signal(self, **overrides) -> SignalData:
+        defaults = dict(
+            title="Test Signal",
+            analysis="Analysis text",
+            threat_level="medium",
+            recommended_action="Monitor",
+            draft_idea={"title": "Idea", "problem": "P", "solution": "S", "domain": "general"},
+            domain="general",
+            priority_hint="medium",
+            rationale="R",
+        )
+        defaults.update(overrides)
+        return SignalData(**defaults)
+
+    def _make_scoring(self) -> ScoringResult:
+        return ScoringResult(relevance=7, reason="Relevant", matched_entities=["ota"])
+
+    def _setup_vault_paths(self, monkeypatch, tmp_path):
+        """Monkeypatch vault_paths to use tmp_path directories."""
+        raw_dir = tmp_path / "raw" / "inbound" / "signals"
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        wiki_dir = tmp_path / "wiki" / "reports" / "signals"
+        wiki_dir.mkdir(parents=True, exist_ok=True)
+
+        monkeypatch.setattr("shared.vault_paths.raw_signals", lambda: raw_dir)
+        monkeypatch.setattr("shared.vault_paths.wiki_signals", lambda: wiki_dir)
+        return raw_dir, wiki_dir
+
+    def test_creates_raw_and_wiki(self, tmp_path, monkeypatch):
+        """AC-15: dispatch_signal creates both raw JSON and wiki MD files."""
+        raw_dir, wiki_dir = self._setup_vault_paths(monkeypatch, tmp_path)
+
+        signal = self._make_signal()
+        scoring = self._make_scoring()
+        item = {"title": "News", "date": "2026-08-01", "source": "TestSrc", "source_url": "https://example.com"}
+
+        result = dispatch_signal(signal, "report.md", item, scoring, str(tmp_path), "run-001")
+
+        assert result is not None
+        raw_files = list(raw_dir.glob("*.json"))
+        wiki_files = list(wiki_dir.glob("*.md"))
+        assert len(raw_files) == 1
+        assert len(wiki_files) == 1
+
+    def test_raw_json_schema(self, tmp_path, monkeypatch):
+        """Raw JSON contains all required fields (AC-02)."""
+        raw_dir, wiki_dir = self._setup_vault_paths(monkeypatch, tmp_path)
+
+        signal = self._make_signal(title="Schema Test", threat_level="high")
+        scoring = ScoringResult(relevance=9, reason="Critical", matched_entities=["booking"])
+        item = {"title": "News", "date": "2026-08-01", "source": "Src", "source_url": "https://x.com"}
+
+        dispatch_signal(signal, "report.md", item, scoring, str(tmp_path), "run-002")
+
+        raw_files = list(raw_dir.glob("*.json"))
+        assert len(raw_files) == 1
+        data = json.loads(raw_files[0].read_text(encoding="utf-8"))
+
+        # Check all fields from dispatch_signal raw_data dict
+        required = [
+            "title", "source_url", "source", "relevance_score",
+            "analysis", "threat_level", "recommended_action", "draft_idea",
+            "signal_date", "run_id", "status", "report_ref", "created_at",
+        ]
+        for fld in required:
+            assert fld in data, f"Missing field: {fld}"
+
+        assert data["title"] == "Schema Test"
+        assert data["relevance_score"] == 9
+        assert data["report_ref"] == "report.md"
+        assert data["run_id"] == "run-002"
+        assert data["status"] == "pending"
+
+    def test_wiki_md_has_frontmatter(self, tmp_path, monkeypatch):
+        """Wiki MD file contains YAML frontmatter with signal metadata."""
+        raw_dir, wiki_dir = self._setup_vault_paths(monkeypatch, tmp_path)
+
+        signal = self._make_signal(title="Wiki Test")
+        scoring = self._make_scoring()
+        item = {"title": "News", "date": "2026-08-01", "source": "Src", "source_url": "https://x.com"}
+
+        dispatch_signal(signal, "report.md", item, scoring, str(tmp_path), "run-004")
+
+        wiki_files = list(wiki_dir.glob("*.md"))
+        assert len(wiki_files) == 1
+        content = wiki_files[0].read_text(encoding="utf-8")
+
+        assert content.startswith("---\n")
+        assert "type: signal" in content
+        assert "status: pending" in content
+        assert "# Wiki Test" in content
+
+    def test_dry_run(self, tmp_path, monkeypatch):
+        """AC-16: In dry_run mode, no files are created but signal_id is returned."""
+        raw_dir, wiki_dir = self._setup_vault_paths(monkeypatch, tmp_path)
+
+        signal = self._make_signal(title="Dry Run")
+        scoring = ScoringResult(relevance=3, reason="Low", matched_entities=[])
+        item = {"title": "News", "date": "2026-08-01", "source": "Src"}
+
+        result = dispatch_signal(signal, "r.md", item, scoring, str(tmp_path), "run-003", dry_run=True)
+
+        # Returns signal_id even in dry_run
+        assert result is not None
+        assert "dry-run" in result.lower() or isinstance(result, str)
+
+        raw_files = list(raw_dir.glob("*.json"))
+        wiki_files = list(wiki_dir.glob("*.md"))
+        assert len(raw_files) == 0
+        assert len(wiki_files) == 0
+
+    def test_returns_signal_id_string(self, tmp_path, monkeypatch):
+        """dispatch_signal returns signal_id (str) on success."""
+        self._setup_vault_paths(monkeypatch, tmp_path)
+
+        signal = self._make_signal(title="ID Test")
+        scoring = self._make_scoring()
+        item = {"title": "News", "date": "2026-08-01", "source": "Src"}
+
+        result = dispatch_signal(signal, "ref.md", item, scoring, str(tmp_path), "run-005")
+
+        assert isinstance(result, str)
+        assert "id-test" in result
+
+    def test_draft_idea_section_in_wiki(self, tmp_path, monkeypatch):
+        """Wiki MD contains draft idea section when draft_idea is present."""
+        raw_dir, wiki_dir = self._setup_vault_paths(monkeypatch, tmp_path)
+
+        signal = self._make_signal(
+            title="With Idea",
+            draft_idea={"title": "Great Idea", "problem": "The Problem", "solution": "The Solution", "domain": "pricing"},
+        )
+        scoring = self._make_scoring()
+        item = {"title": "News", "date": "2026-08-01", "source": "Src"}
+
+        dispatch_signal(signal, "ref.md", item, scoring, str(tmp_path), "run-006")
+
+        wiki_files = list(wiki_dir.glob("*.md"))
+        content = wiki_files[0].read_text(encoding="utf-8")
+        assert "Great Idea" in content
+        assert "The Problem" in content
+        assert "The Solution" in content
+
+    def test_no_draft_idea_section_when_none(self, tmp_path, monkeypatch):
+        """Wiki MD omits draft idea section when draft_idea is None."""
+        raw_dir, wiki_dir = self._setup_vault_paths(monkeypatch, tmp_path)
+
+        signal = self._make_signal(title="No Idea", draft_idea=None)
+        scoring = self._make_scoring()
+        item = {"title": "News", "date": "2026-08-01", "source": "Src"}
+
+        dispatch_signal(signal, "ref.md", item, scoring, str(tmp_path), "run-007")
+
+        wiki_files = list(wiki_dir.glob("*.md"))
+        content = wiki_files[0].read_text(encoding="utf-8")
+        assert "Черновик идеи" not in content

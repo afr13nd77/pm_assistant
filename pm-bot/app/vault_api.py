@@ -4921,7 +4921,7 @@ async def signals_list(
                 continue
 
             try:
-                fm = read_frontmatter(md_file)
+                fm, _body = read_frontmatter(md_file)
                 if not fm or fm.get("type") != "signal":
                     continue
 
@@ -4986,7 +4986,7 @@ async def signal_detail(signal_id: str):
             logger.warning(f"signal_detail: not found: {wiki_path}")
             raise HTTPException(status_code=404, detail=f"Signal not found: {signal_id}")
 
-        fm = read_frontmatter(wiki_path)
+        fm, _body = read_frontmatter(wiki_path)
         body = wiki_path.read_text(encoding="utf-8")
 
         # Parse body sections
@@ -5050,7 +5050,7 @@ async def signal_approve(signal_id: str):
             if not wiki_path.exists():
                 raise HTTPException(status_code=404, detail=f"Signal not found: {signal_id}")
 
-            fm = read_frontmatter(wiki_path)
+            fm, _body = read_frontmatter(wiki_path)
             current_status = fm.get("status", "")
             if current_status != "pending":
                 raise HTTPException(
@@ -5138,7 +5138,7 @@ async def signal_dismiss(signal_id: str):
         if not wiki_path.exists():
             raise HTTPException(status_code=404, detail=f"Signal not found: {signal_id}")
 
-        fm = read_frontmatter(wiki_path)
+        fm, _body = read_frontmatter(wiki_path)
         current_status = fm.get("status", "")
         if current_status != "pending":
             raise HTTPException(

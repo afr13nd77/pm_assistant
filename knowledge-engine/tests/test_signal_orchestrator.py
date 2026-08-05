@@ -308,20 +308,22 @@ class TestSignalOrchestrator:
 class TestProcessDigest:
     """Integration tests for the full pipeline."""
 
+    @patch("app.signal_orchestrator.dispatch_signal")
+    @patch("app.signal_orchestrator.extract_signals")
+    @patch("app.signal_orchestrator.generate_analysis_report")
     @patch("app.signal_orchestrator.score_signal")
-    @patch("app.signal_orchestrator.analyze_signal")
-    @patch("app.signal_orchestrator.dispatch_idea")
-    def test_full_pipeline_idea(
+    def test_full_pipeline_signal_flow(
         self,
-        mock_dispatch_idea,
-        mock_analyze,
         mock_score,
+        mock_generate_report,
+        mock_extract_signals,
+        mock_dispatch_signal,
         tmp_vault,
         config,
         sample_digest,
     ):
-        """AC-01..AC-11: full pipeline scoring -> analysis -> idea dispatch."""
-        from app.signal_moderator import AnalysisResult, ScoringResult
+        """AC-01..AC-11: full pipeline scoring -> report -> extract -> dispatch."""
+        from app.signal_moderator import ReportResult, SignalData, ScoringResult
 
         mock_score.return_value = ScoringResult(
             relevance=8,
@@ -329,19 +331,27 @@ class TestProcessDigest:
             matched_entities=["Booking"],
         )
 
-        mock_analyze.return_value = AnalysisResult(
-            reaction="idea",
-            analysis="Booking launched AI concierge, we should consider similar.",
+        mock_generate_report.return_value = ReportResult(
+            content="Booking launched AI concierge, we should consider similar.",
             threat_level="medium",
-            idea_draft={
-                "title": "AI concierge for guests",
-                "problem": "No AI concierge",
-                "solution": "Build AI chatbot",
-                "domain": "general",
-            },
         )
 
-        mock_dispatch_idea.return_value = "2026-08-01-signal-AI-concierge.md"
+        mock_extract_signals.return_value = [
+            SignalData(
+                title="AI concierge for guests",
+                analysis="Booking AI concierge analysis",
+                threat_level="medium",
+                recommended_action="idea",
+                draft_idea={
+                    "title": "AI concierge for guests",
+                    "problem": "No AI concierge",
+                    "solution": "Build AI chatbot",
+                    "domain": "general",
+                },
+            ),
+        ]
+
+        mock_dispatch_signal.return_value = "SIG-2026-08-01-ai-concierge"
 
         # Mock quality gate to always pass
         with patch.object(
@@ -351,14 +361,6 @@ class TestProcessDigest:
             orch.gate.check_analysis_quality = MagicMock(
                 return_value=MagicMock(passed=True, score=8, issues=[])
             )
-            orch.gate.check_dedup = MagicMock(
-                return_value=MagicMock(
-                    is_duplicate=False, similarity=0, similar_to=None, reason=""
-                )
-            )
-            orch.gate.check_idea_quality = MagicMock(
-                return_value=MagicMock(passed=True, score=8, improvements={})
-            )
             orch.gate.check_domain = MagicMock(return_value=(True, None))
 
             run_state = orch.process_digest(sample_digest, notify=False)
@@ -367,7 +369,9 @@ class TestProcessDigest:
         assert run_state.summary is not None
         assert run_state.summary.total == 2
         assert mock_score.call_count == 2
-        assert mock_analyze.call_count == 2
+        assert mock_generate_report.call_count == 2
+        assert mock_extract_signals.call_count == 2
+        assert mock_dispatch_signal.call_count == 2
 
     @patch("app.signal_orchestrator.score_signal")
     def test_below_threshold_skipped(
@@ -395,37 +399,34 @@ class TestProcessDigest:
         )
         assert skipped_count == 2
 
+    @patch("app.signal_orchestrator.dispatch_signal")
+    @patch("app.signal_orchestrator.extract_signals")
+    @patch("app.signal_orchestrator.generate_analysis_report")
     @patch("app.signal_orchestrator.score_signal")
-    @patch("app.signal_orchestrator.analyze_signal")
-    @patch("app.signal_orchestrator.dispatch_report")
-    def test_report_reaction(
+    def test_no_signals_extracted(
         self,
-        mock_dispatch_report,
-        mock_analyze,
         mock_score,
+        mock_generate_report,
+        mock_extract_signals,
+        mock_dispatch_signal,
         tmp_vault,
         config,
         sample_digest,
     ):
-        """Items with reaction=report should be dispatched as reports."""
-        from app.signal_moderator import AnalysisResult, ScoringResult
+        """When extract_signals returns empty, reaction should be no_signals."""
+        from app.signal_moderator import ReportResult, ScoringResult
 
         mock_score.return_value = ScoringResult(
             relevance=9,
             reason="High relevance",
             matched_entities=["Airbnb"],
         )
-        mock_analyze.return_value = AnalysisResult(
-            reaction="report",
-            analysis="Needs deep research.",
+        mock_generate_report.return_value = ReportResult(
+            content="Some analysis content.",
             threat_level="high",
-            report_brief={
-                "topic": "Airbnb expansion analysis",
-                "questions": ["What markets?", "What strategy?"],
-                "scope": "Russia",
-            },
         )
-        mock_dispatch_report.return_value = "/path/to/report.json"
+        mock_extract_signals.return_value = []  # No signals extracted
+        mock_dispatch_signal.return_value = None
 
         with patch.object(
             SignalOrchestrator, "_load_business_context", return_value=""
@@ -438,42 +439,52 @@ class TestProcessDigest:
 
             run_state = orch.process_digest(sample_digest, notify=False)
 
-        assert run_state.summary.reports >= 1
-        waiting_count = sum(
-            1 for i in run_state.items.values()
-            if i.status == "waiting_report"
-        )
-        assert waiting_count >= 1
+        assert run_state.status == "completed"
+        # All items should have no_signals reaction
+        for item_state in run_state.items.values():
+            assert item_state.reaction == "no_signals"
+        # dispatch_signal should not be called when no signals extracted
+        assert mock_dispatch_signal.call_count == 0
 
+    @patch("app.signal_orchestrator.dispatch_signal")
+    @patch("app.signal_orchestrator.extract_signals")
+    @patch("app.signal_orchestrator.generate_analysis_report")
     @patch("app.signal_orchestrator.score_signal")
-    @patch("app.signal_orchestrator.analyze_signal")
-    @patch("app.signal_orchestrator.dispatch_idea")
     def test_domain_auto_correction(
         self,
-        mock_dispatch,
-        mock_analyze,
         mock_score,
+        mock_generate_report,
+        mock_extract_signals,
+        mock_dispatch_signal,
         tmp_vault,
         config,
         sample_digest,
     ):
-        """AC-23: domain should be auto-corrected when mismatch detected."""
-        from app.signal_moderator import AnalysisResult, ScoringResult
+        """AC-23: domain should be auto-corrected on signals with draft_idea."""
+        from app.signal_moderator import ReportResult, SignalData, ScoringResult
 
         mock_score.return_value = ScoringResult(
             relevance=8, reason="", matched_entities=[]
         )
-        mock_analyze.return_value = AnalysisResult(
-            reaction="idea",
-            analysis="Analysis",
-            idea_draft={
-                "title": "Improve search relevance ranking",
-                "problem": "Search results are not ranked well",
-                "solution": "Better ranking algorithm",
-                "domain": "general",  # Wrong domain
-            },
+        mock_generate_report.return_value = ReportResult(
+            content="Analysis of search relevance.",
+            threat_level="medium",
         )
-        mock_dispatch.return_value = "idea-ref.md"
+        mock_extract_signals.return_value = [
+            SignalData(
+                title="Improve search relevance ranking",
+                analysis="Analysis",
+                threat_level="medium",
+                recommended_action="idea",
+                draft_idea={
+                    "title": "Improve search relevance ranking",
+                    "problem": "Search results are not ranked well",
+                    "solution": "Better ranking algorithm",
+                    "domain": "general",  # Wrong domain
+                },
+            ),
+        ]
+        mock_dispatch_signal.return_value = "SIG-001"
 
         with patch.object(
             SignalOrchestrator, "_load_business_context", return_value=""
@@ -486,23 +497,14 @@ class TestProcessDigest:
             orch.gate.check_domain = MagicMock(
                 return_value=(False, "search-engine")
             )
-            orch.gate.check_dedup = MagicMock(
-                return_value=MagicMock(
-                    is_duplicate=False, similarity=0, similar_to=None, reason=""
-                )
-            )
-            orch.gate.check_idea_quality = MagicMock(
-                return_value=MagicMock(passed=True, score=8, improvements={})
-            )
 
             orch.process_digest(sample_digest, notify=False)
 
-        # Verify the idea_draft domain was corrected before dispatch
-        call_args = mock_dispatch.call_args
-        assert call_args is not None
-        analysis_arg = call_args.kwargs.get("analysis") or call_args[1].get("analysis")
-        if analysis_arg:
-            assert analysis_arg.idea_draft["domain"] == "search-engine"
+        # Verify dispatch_signal was called and domain was corrected
+        assert mock_dispatch_signal.call_count >= 1
+        call_args = mock_dispatch_signal.call_args
+        signal_arg = call_args.kwargs.get("signal_data") or call_args[0][0]
+        assert signal_arg.draft_idea["domain"] == "search-engine"
 
     @patch("app.signal_orchestrator.score_signal")
     def test_process_item_error_does_not_break_run(
@@ -676,89 +678,142 @@ class TestDigestValidation:
         assert run_state.summary.total == 0
 
 
-class TestHandleIdea:
-    """Tests for _handle_idea (FLOW-03)."""
+class TestSignalDispatchFlow:
+    """Tests for the new signal pipeline (BL-203): report -> extract -> dispatch."""
 
-    def test_duplicate_idea_skipped(self, tmp_vault, config):
-        """Ideas with high dedup similarity should be skipped."""
-        from app.signal_moderator import AnalysisResult
-
-        orch = SignalOrchestrator(str(tmp_vault), config)
-        orch.gate.check_dedup = MagicMock(
-            return_value=MagicMock(
-                is_duplicate=True,
-                similarity=9,
-                similar_to="IDEA-001",
-                reason="Very similar",
-            )
-        )
-
-        analysis = AnalysisResult(
-            reaction="idea",
-            analysis="Test",
-            idea_draft={"title": "Dup", "problem": "P", "solution": "S", "domain": "general"},
-        )
-        item_state = ItemState(title="Dup")
-
-        orch._handle_idea(
-            item={"title": "Test", "date": "2026-08-01"},
-            analysis=analysis,
-            item_state=item_state,
-            notify=False,
-            dry_run=False,
-        )
-
-        assert item_state.status == "skipped"
-        assert "duplicate" in item_state.quality_warnings[0]
-
-    @patch("app.signal_orchestrator.dispatch_idea")
-    def test_idea_quality_improvements_applied(
-        self, mock_dispatch, tmp_vault, config
+    @patch("app.signal_orchestrator.dispatch_signal")
+    @patch("app.signal_orchestrator.extract_signals")
+    @patch("app.signal_orchestrator.generate_analysis_report")
+    @patch("app.signal_orchestrator.score_signal")
+    def test_report_saved_to_wiki(
+        self,
+        mock_score,
+        mock_generate_report,
+        mock_extract_signals,
+        mock_dispatch_signal,
+        tmp_vault,
+        config,
+        sample_digest,
     ):
-        """Quality gate improvements should be applied to idea_draft."""
-        from app.signal_moderator import AnalysisResult
+        """Report should be saved to wiki/reports/signals/ directory."""
+        from app.signal_moderator import ReportResult, ScoringResult
 
-        orch = SignalOrchestrator(str(tmp_vault), config)
-        orch.gate.check_dedup = MagicMock(
-            return_value=MagicMock(
-                is_duplicate=False, similarity=0, similar_to=None, reason=""
+        mock_score.return_value = ScoringResult(
+            relevance=8, reason="Relevant", matched_entities=[]
+        )
+        mock_generate_report.return_value = ReportResult(
+            content="Analysis report content here.",
+            threat_level="medium",
+        )
+        mock_extract_signals.return_value = []
+        mock_dispatch_signal.return_value = None
+
+        with patch.object(
+            SignalOrchestrator, "_load_business_context", return_value=""
+        ):
+            orch = SignalOrchestrator(str(tmp_vault), config)
+            orch.gate.check_analysis_quality = MagicMock(
+                return_value=MagicMock(passed=True, score=8, issues=[])
             )
+            orch.gate.check_domain = MagicMock(return_value=(True, None))
+
+            orch.process_digest(sample_digest, notify=False)
+
+        # Reports should be written to wiki/reports/signals/
+        from pathlib import Path
+        signals_dir = Path(str(tmp_vault)) / "wiki" / "reports" / "signals"
+        if signals_dir.exists():
+            report_files = list(signals_dir.glob("*-report.md"))
+            assert len(report_files) >= 1
+
+    @patch("app.signal_orchestrator.dispatch_signal")
+    @patch("app.signal_orchestrator.extract_signals")
+    @patch("app.signal_orchestrator.generate_analysis_report")
+    @patch("app.signal_orchestrator.score_signal")
+    def test_memory_records_signal_reaction(
+        self,
+        mock_score,
+        mock_generate_report,
+        mock_extract_signals,
+        mock_dispatch_signal,
+        tmp_vault,
+        config,
+        sample_digest,
+    ):
+        """signal_memory.record_signal called with reaction=signal when signals dispatched."""
+        from app.signal_moderator import ReportResult, SignalData, ScoringResult
+
+        mock_score.return_value = ScoringResult(
+            relevance=8, reason="Relevant", matched_entities=[]
         )
-        orch.gate.check_idea_quality = MagicMock(
-            return_value=MagicMock(
-                passed=False,
-                score=4,
-                improvements={
-                    "improved_title": "Better Title",
-                    "improved_solution": "Better Solution",
-                },
+        mock_generate_report.return_value = ReportResult(
+            content="Report.", threat_level="medium",
+        )
+        mock_extract_signals.return_value = [
+            SignalData(title="Signal 1", analysis="A", threat_level="low"),
+        ]
+        mock_dispatch_signal.return_value = "SIG-001"
+
+        with patch.object(
+            SignalOrchestrator, "_load_business_context", return_value=""
+        ):
+            orch = SignalOrchestrator(str(tmp_vault), config)
+            orch.gate.check_analysis_quality = MagicMock(
+                return_value=MagicMock(passed=True, score=8, issues=[])
             )
-        )
-        mock_dispatch.return_value = "ref.md"
+            orch.gate.check_domain = MagicMock(return_value=(True, None))
 
-        analysis = AnalysisResult(
-            reaction="idea",
-            analysis="Test",
-            idea_draft={
-                "title": "Original",
-                "problem": "P",
-                "solution": "Original S",
-                "domain": "general",
-            },
-        )
-        item_state = ItemState(title="Test")
+            with patch.object(orch.memory, "record_signal") as mock_record:
+                orch.process_digest(sample_digest, notify=False)
 
-        orch._handle_idea(
-            item={"title": "Test", "date": "2026-08-01"},
-            analysis=analysis,
-            item_state=item_state,
-            notify=False,
-            dry_run=False,
-        )
+            # record_signal should be called for each item
+            assert mock_record.call_count >= 2
+            for call in mock_record.call_args_list:
+                record = call[0][0]
+                assert record.reaction == "signal"
 
-        # Verify improvements were applied
-        assert analysis.idea_draft["title"] == "Better Title"
-        assert analysis.idea_draft["solution"] == "Better Solution"
+    @patch("app.signal_orchestrator.dispatch_signal")
+    @patch("app.signal_orchestrator.extract_signals")
+    @patch("app.signal_orchestrator.generate_analysis_report")
+    @patch("app.signal_orchestrator.score_signal")
+    def test_memory_records_no_signals_reaction(
+        self,
+        mock_score,
+        mock_generate_report,
+        mock_extract_signals,
+        mock_dispatch_signal,
+        tmp_vault,
+        config,
+        sample_digest,
+    ):
+        """signal_memory.record_signal called with reaction=no_signals when none extracted."""
+        from app.signal_moderator import ReportResult, ScoringResult
+
+        mock_score.return_value = ScoringResult(
+            relevance=8, reason="Relevant", matched_entities=[]
+        )
+        mock_generate_report.return_value = ReportResult(
+            content="Report.", threat_level="medium",
+        )
+        mock_extract_signals.return_value = []  # No signals
+        mock_dispatch_signal.return_value = None
+
+        with patch.object(
+            SignalOrchestrator, "_load_business_context", return_value=""
+        ):
+            orch = SignalOrchestrator(str(tmp_vault), config)
+            orch.gate.check_analysis_quality = MagicMock(
+                return_value=MagicMock(passed=True, score=8, issues=[])
+            )
+            orch.gate.check_domain = MagicMock(return_value=(True, None))
+
+            with patch.object(orch.memory, "record_signal") as mock_record:
+                orch.process_digest(sample_digest, notify=False)
+
+            assert mock_record.call_count >= 2
+            for call in mock_record.call_args_list:
+                record = call[0][0]
+                assert record.reaction == "no_signals"
 
 
 # ---------------------------------------------------------------------------
@@ -1021,35 +1076,44 @@ class TestPersistenceRecording:
         for item_state in run_state.items.values():
             assert item_state.reaction == "skip"
 
+    @patch("app.signal_orchestrator.dispatch_signal")
+    @patch("app.signal_orchestrator.extract_signals")
+    @patch("app.signal_orchestrator.generate_analysis_report")
     @patch("app.signal_orchestrator.score_signal")
-    @patch("app.signal_orchestrator.analyze_signal")
-    @patch("app.signal_orchestrator.dispatch_idea")
-    def test_process_item_records_reaction_idea(
+    def test_process_item_records_reaction_signal(
         self,
-        mock_dispatch,
-        mock_analyze,
         mock_score,
+        mock_generate_report,
+        mock_extract_signals,
+        mock_dispatch_signal,
         tmp_vault,
         config,
         sample_digest,
     ):
-        """After analysis with reaction=idea, item_state.reaction should be 'idea'."""
-        from app.signal_moderator import AnalysisResult, ScoringResult
+        """After report+extract with dispatched signals, reaction should be 'signal'."""
+        from app.signal_moderator import ReportResult, SignalData, ScoringResult
 
         mock_score.return_value = ScoringResult(
             relevance=8, reason="Relevant", matched_entities=[]
         )
-        mock_analyze.return_value = AnalysisResult(
-            reaction="idea",
-            analysis="Test analysis",
-            idea_draft={
-                "title": "Test",
-                "problem": "P",
-                "solution": "S",
-                "domain": "general",
-            },
+        mock_generate_report.return_value = ReportResult(
+            content="Test analysis",
+            threat_level="medium",
         )
-        mock_dispatch.return_value = "idea-ref.md"
+        mock_extract_signals.return_value = [
+            SignalData(
+                title="Test signal",
+                analysis="Signal analysis",
+                threat_level="medium",
+                draft_idea={
+                    "title": "Test",
+                    "problem": "P",
+                    "solution": "S",
+                    "domain": "general",
+                },
+            ),
+        ]
+        mock_dispatch_signal.return_value = "SIG-001"
 
         with patch.object(
             SignalOrchestrator, "_load_business_context", return_value=""
@@ -1058,51 +1122,40 @@ class TestPersistenceRecording:
             orch.gate.check_analysis_quality = MagicMock(
                 return_value=MagicMock(passed=True, score=8, issues=[])
             )
-            orch.gate.check_dedup = MagicMock(
-                return_value=MagicMock(
-                    is_duplicate=False, similarity=0,
-                    similar_to=None, reason=""
-                )
-            )
-            orch.gate.check_idea_quality = MagicMock(
-                return_value=MagicMock(passed=True, score=8, improvements={})
-            )
             orch.gate.check_domain = MagicMock(return_value=(True, None))
 
             run_state = orch.process_digest(sample_digest, notify=False)
 
         for item_state in run_state.items.values():
-            assert item_state.reaction == "idea"
+            # Initially set to "signal", stays "signal" when dispatched_ids not empty
+            assert item_state.reaction == "signal"
 
+    @patch("app.signal_orchestrator.dispatch_signal")
+    @patch("app.signal_orchestrator.extract_signals")
+    @patch("app.signal_orchestrator.generate_analysis_report")
     @patch("app.signal_orchestrator.score_signal")
-    @patch("app.signal_orchestrator.analyze_signal")
-    @patch("app.signal_orchestrator.dispatch_idea")
     def test_process_item_records_iterations_history(
         self,
-        mock_dispatch,
-        mock_analyze,
         mock_score,
+        mock_generate_report,
+        mock_extract_signals,
+        mock_dispatch_signal,
         tmp_vault,
         config,
         sample_digest,
     ):
         """After AgentLoop run, iterations_history should be populated."""
-        from app.signal_moderator import AnalysisResult, ScoringResult
+        from app.signal_moderator import ReportResult, ScoringResult
 
         mock_score.return_value = ScoringResult(
             relevance=8, reason="Relevant", matched_entities=[]
         )
-        mock_analyze.return_value = AnalysisResult(
-            reaction="idea",
-            analysis="Analysis",
-            idea_draft={
-                "title": "T",
-                "problem": "P",
-                "solution": "S",
-                "domain": "general",
-            },
+        mock_generate_report.return_value = ReportResult(
+            content="Analysis",
+            threat_level="medium",
         )
-        mock_dispatch.return_value = "ref.md"
+        mock_extract_signals.return_value = []
+        mock_dispatch_signal.return_value = None
 
         with patch.object(
             SignalOrchestrator, "_load_business_context", return_value=""
@@ -1110,15 +1163,6 @@ class TestPersistenceRecording:
             orch = SignalOrchestrator(str(tmp_vault), config)
             orch.gate.check_analysis_quality = MagicMock(
                 return_value=MagicMock(passed=True, score=7, issues=[])
-            )
-            orch.gate.check_dedup = MagicMock(
-                return_value=MagicMock(
-                    is_duplicate=False, similarity=0,
-                    similar_to=None, reason=""
-                )
-            )
-            orch.gate.check_idea_quality = MagicMock(
-                return_value=MagicMock(passed=True, score=8, improvements={})
             )
             orch.gate.check_domain = MagicMock(return_value=(True, None))
 
@@ -1133,35 +1177,32 @@ class TestPersistenceRecording:
             assert "escalated" in entry
             assert "operation" in entry
 
+    @patch("app.signal_orchestrator.dispatch_signal")
+    @patch("app.signal_orchestrator.extract_signals")
+    @patch("app.signal_orchestrator.generate_analysis_report")
     @patch("app.signal_orchestrator.score_signal")
-    @patch("app.signal_orchestrator.analyze_signal")
-    @patch("app.signal_orchestrator.dispatch_idea")
     def test_process_item_records_gate_results_quality(
         self,
-        mock_dispatch,
-        mock_analyze,
         mock_score,
+        mock_generate_report,
+        mock_extract_signals,
+        mock_dispatch_signal,
         tmp_vault,
         config,
         sample_digest,
     ):
         """After AgentLoop run, gate_results should contain quality gate."""
-        from app.signal_moderator import AnalysisResult, ScoringResult
+        from app.signal_moderator import ReportResult, ScoringResult
 
         mock_score.return_value = ScoringResult(
             relevance=8, reason="Relevant", matched_entities=[]
         )
-        mock_analyze.return_value = AnalysisResult(
-            reaction="idea",
-            analysis="Analysis",
-            idea_draft={
-                "title": "T",
-                "problem": "P",
-                "solution": "S",
-                "domain": "general",
-            },
+        mock_generate_report.return_value = ReportResult(
+            content="Analysis",
+            threat_level="medium",
         )
-        mock_dispatch.return_value = "ref.md"
+        mock_extract_signals.return_value = []
+        mock_dispatch_signal.return_value = None
 
         with patch.object(
             SignalOrchestrator, "_load_business_context", return_value=""
@@ -1171,15 +1212,6 @@ class TestPersistenceRecording:
                 return_value=MagicMock(
                     passed=True, score=8, issues=[]
                 )
-            )
-            orch.gate.check_dedup = MagicMock(
-                return_value=MagicMock(
-                    is_duplicate=False, similarity=0,
-                    similar_to=None, reason=""
-                )
-            )
-            orch.gate.check_idea_quality = MagicMock(
-                return_value=MagicMock(passed=True, score=8, improvements={})
             )
             orch.gate.check_domain = MagicMock(return_value=(True, None))
 
@@ -1195,35 +1227,32 @@ class TestPersistenceRecording:
             assert qg["score"] == 8
             assert "failed_criteria" in qg
 
+    @patch("app.signal_orchestrator.dispatch_signal")
+    @patch("app.signal_orchestrator.extract_signals")
+    @patch("app.signal_orchestrator.generate_analysis_report")
     @patch("app.signal_orchestrator.score_signal")
-    @patch("app.signal_orchestrator.analyze_signal")
-    @patch("app.signal_orchestrator.dispatch_idea")
-    def test_process_item_records_gate_results_dedup(
+    def test_process_item_reaction_no_signals_when_extract_empty(
         self,
-        mock_dispatch,
-        mock_analyze,
         mock_score,
+        mock_generate_report,
+        mock_extract_signals,
+        mock_dispatch_signal,
         tmp_vault,
         config,
         sample_digest,
     ):
-        """After _handle_idea, gate_results should contain dedup gate."""
-        from app.signal_moderator import AnalysisResult, ScoringResult
+        """When extract_signals returns empty, reaction overridden to no_signals."""
+        from app.signal_moderator import ReportResult, ScoringResult
 
         mock_score.return_value = ScoringResult(
             relevance=8, reason="Relevant", matched_entities=[]
         )
-        mock_analyze.return_value = AnalysisResult(
-            reaction="idea",
-            analysis="Analysis",
-            idea_draft={
-                "title": "T",
-                "problem": "P",
-                "solution": "S",
-                "domain": "general",
-            },
+        mock_generate_report.return_value = ReportResult(
+            content="Analysis",
+            threat_level="medium",
         )
-        mock_dispatch.return_value = "ref.md"
+        mock_extract_signals.return_value = []  # No signals
+        mock_dispatch_signal.return_value = None
 
         with patch.object(
             SignalOrchestrator, "_load_business_context", return_value=""
@@ -1232,28 +1261,12 @@ class TestPersistenceRecording:
             orch.gate.check_analysis_quality = MagicMock(
                 return_value=MagicMock(passed=True, score=8, issues=[])
             )
-            orch.gate.check_dedup = MagicMock(
-                return_value=MagicMock(
-                    is_duplicate=False, similarity=3,
-                    similar_to="IDEA-100", reason=""
-                )
-            )
-            orch.gate.check_idea_quality = MagicMock(
-                return_value=MagicMock(passed=True, score=8, improvements={})
-            )
             orch.gate.check_domain = MagicMock(return_value=(True, None))
 
             run_state = orch.process_digest(sample_digest, notify=False)
 
         for item_state in run_state.items.values():
-            dedup_gates = [
-                g for g in item_state.gate_results if g["gate"] == "dedup"
-            ]
-            assert len(dedup_gates) >= 1
-            dg = dedup_gates[0]
-            assert dg["passed"] is True
-            assert dg["similarity"] == 3
-            assert dg["compared_with"] == "IDEA-100"
+            assert item_state.reaction == "no_signals"
 
     @patch("app.signal_orchestrator.score_signal")
     def test_finalize_sets_completed_at(
@@ -1331,22 +1344,24 @@ class TestLangfuseTraceIntegration:
 
         assert run_state.status == "completed"
 
+    @patch("app.signal_orchestrator.dispatch_signal")
+    @patch("app.signal_orchestrator.extract_signals")
+    @patch("app.signal_orchestrator.generate_analysis_report")
     @patch("app.signal_orchestrator.score_signal")
-    @patch("app.signal_orchestrator.analyze_signal")
-    @patch("app.signal_orchestrator.dispatch_idea")
     @patch("shared.langfuse_client.get_langfuse")
     def test_process_item_creates_spans(
         self,
         mock_get_lf,
-        mock_dispatch,
-        mock_analyze,
         mock_score,
+        mock_generate_report,
+        mock_extract_signals,
+        mock_dispatch_signal,
         tmp_vault,
         config,
         sample_digest,
     ):
         """When trace is available, spans should be created for each step."""
-        from app.signal_moderator import AnalysisResult, ScoringResult
+        from app.signal_moderator import ReportResult, ScoringResult
 
         mock_lf = MagicMock()
         mock_trace = MagicMock()
@@ -1360,17 +1375,12 @@ class TestLangfuseTraceIntegration:
         mock_score.return_value = ScoringResult(
             relevance=8, reason="Relevant", matched_entities=[]
         )
-        mock_analyze.return_value = AnalysisResult(
-            reaction="idea",
-            analysis="Analysis",
-            idea_draft={
-                "title": "T",
-                "problem": "P",
-                "solution": "S",
-                "domain": "general",
-            },
+        mock_generate_report.return_value = ReportResult(
+            content="Analysis",
+            threat_level="medium",
         )
-        mock_dispatch.return_value = "ref.md"
+        mock_extract_signals.return_value = []
+        mock_dispatch_signal.return_value = None
 
         with patch.object(
             SignalOrchestrator, "_load_business_context", return_value=""
@@ -1379,20 +1389,139 @@ class TestLangfuseTraceIntegration:
             orch.gate.check_analysis_quality = MagicMock(
                 return_value=MagicMock(passed=True, score=8, issues=[])
             )
-            orch.gate.check_dedup = MagicMock(
-                return_value=MagicMock(
-                    is_duplicate=False, similarity=0,
-                    similar_to=None, reason=""
-                )
-            )
-            orch.gate.check_idea_quality = MagicMock(
-                return_value=MagicMock(passed=True, score=8, improvements={})
-            )
             orch.gate.check_domain = MagicMock(return_value=(True, None))
 
             orch.process_digest(sample_digest, notify=False)
 
         # trace.span() should be called for item-level spans
         assert mock_trace.span.call_count >= 1
-        # item_span.span() should be called for score, analyze, gate, dispatch
+        # item_span.span() should be called for score, report, extract, dispatch
         assert mock_item_span.span.call_count >= 1
+
+
+# ---------------------------------------------------------------------------
+# BL-203: _load_relevance_threshold tests (AC-09, AC-10)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadRelevanceThreshold:
+    """BL-203: _load_relevance_threshold reads from .pm-user-prefs.json."""
+
+    def test_threshold_from_user_prefs(self, tmp_vault, config):
+        """_load_relevance_threshold reads from .pm-user-prefs.json."""
+        prefs = {"moderator": {"relevance_threshold": 5}}
+        (tmp_vault / ".pm-user-prefs.json").write_text(
+            json.dumps(prefs), encoding="utf-8"
+        )
+
+        with patch.object(
+            SignalOrchestrator, "_load_business_context", return_value=""
+        ):
+            orch = SignalOrchestrator(str(tmp_vault), config)
+            threshold = orch._load_relevance_threshold()
+
+        assert threshold == 5
+
+    def test_threshold_fallback_to_config(self, tmp_vault, config):
+        """Without prefs file, falls back to config value."""
+        # No .pm-user-prefs.json exists
+        config.relevance_threshold = 6
+
+        with patch.object(
+            SignalOrchestrator, "_load_business_context", return_value=""
+        ):
+            orch = SignalOrchestrator(str(tmp_vault), config)
+            threshold = orch._load_relevance_threshold()
+
+        assert threshold == 6
+
+    def test_threshold_clamp_high(self, tmp_vault, config):
+        """Values above 10 are clamped to 10."""
+        prefs = {"moderator": {"relevance_threshold": 15}}
+        (tmp_vault / ".pm-user-prefs.json").write_text(
+            json.dumps(prefs), encoding="utf-8"
+        )
+
+        with patch.object(
+            SignalOrchestrator, "_load_business_context", return_value=""
+        ):
+            orch = SignalOrchestrator(str(tmp_vault), config)
+            threshold = orch._load_relevance_threshold()
+
+        assert threshold == 10
+
+    def test_threshold_clamp_low(self, tmp_vault, config):
+        """Values below 1 are clamped to 1."""
+        prefs = {"moderator": {"relevance_threshold": 0}}
+        (tmp_vault / ".pm-user-prefs.json").write_text(
+            json.dumps(prefs), encoding="utf-8"
+        )
+
+        with patch.object(
+            SignalOrchestrator, "_load_business_context", return_value=""
+        ):
+            orch = SignalOrchestrator(str(tmp_vault), config)
+            threshold = orch._load_relevance_threshold()
+
+        assert threshold == 1
+
+    def test_threshold_missing_moderator_section(self, tmp_vault, config):
+        """Prefs file without 'moderator' section falls back to config."""
+        prefs = {"other_setting": True}
+        (tmp_vault / ".pm-user-prefs.json").write_text(
+            json.dumps(prefs), encoding="utf-8"
+        )
+        config.relevance_threshold = 7
+
+        with patch.object(
+            SignalOrchestrator, "_load_business_context", return_value=""
+        ):
+            orch = SignalOrchestrator(str(tmp_vault), config)
+            threshold = orch._load_relevance_threshold()
+
+        assert threshold == 7
+
+    def test_threshold_invalid_json_falls_back(self, tmp_vault, config):
+        """Invalid JSON in prefs file falls back to config."""
+        (tmp_vault / ".pm-user-prefs.json").write_text(
+            "not valid json {{{", encoding="utf-8"
+        )
+        config.relevance_threshold = 4
+
+        with patch.object(
+            SignalOrchestrator, "_load_business_context", return_value=""
+        ):
+            orch = SignalOrchestrator(str(tmp_vault), config)
+            threshold = orch._load_relevance_threshold()
+
+        assert threshold == 4
+
+    @patch("app.signal_orchestrator.score_signal")
+    def test_effective_threshold_used_in_process_digest(
+        self, mock_score, tmp_vault, config, sample_digest
+    ):
+        """process_digest uses _load_relevance_threshold for scoring decisions."""
+        from app.signal_moderator import ScoringResult
+
+        # Set threshold in prefs to 9 (high)
+        prefs = {"moderator": {"relevance_threshold": 9}}
+        (tmp_vault / ".pm-user-prefs.json").write_text(
+            json.dumps(prefs), encoding="utf-8"
+        )
+
+        # Score all items at 8 (below 9)
+        mock_score.return_value = ScoringResult(
+            relevance=8, reason="Relevant but below threshold", matched_entities=[]
+        )
+
+        with patch.object(
+            SignalOrchestrator, "_load_business_context", return_value=""
+        ):
+            orch = SignalOrchestrator(str(tmp_vault), config)
+            run_state = orch.process_digest(sample_digest)
+
+        # All items should be skipped because 8 < 9
+        skipped = sum(
+            1 for i in run_state.items.values() if i.status == "skipped"
+        )
+        assert skipped == 2

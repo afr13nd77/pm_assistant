@@ -72,6 +72,10 @@ def _make_run_json(
                     }
                 ],
                 "reaction": "idea",
+                "relevance": 8,
+                "reason": "Matches OTA segment",
+                "matched_entities": ["ota"],
+                "source_url": "https://example.com/news/123",
             }
         }
     if summary is None:
@@ -222,7 +226,7 @@ class TestSignalsRuns:
         assert data["runs"][0]["run_id"] == "2026-08-01-0800"
 
     def test_signals_runs_includes_items_summary(self, client, tmp_path):
-        """items содержат key, title, status, reaction, iterations, errors."""
+        """items содержат key, title, status, reaction, iterations, errors, source_url, result_ref, relevance, reason."""
         _write_run_file(tmp_path, _make_run_json("2026-08-03-0800"))
 
         resp = client.get("/api/v1/signals/runs")
@@ -238,6 +242,10 @@ class TestSignalsRuns:
         assert item["reaction"] == "idea"
         assert item["iterations"] == 2
         assert item["errors"] == 0  # len([]) == 0
+        assert item["source_url"] == "https://example.com/news/123"
+        assert item["result_ref"] == "ideas/test.md"
+        assert item["relevance"] == 8
+        assert item["reason"] == "Matches OTA segment"
 
     def test_signals_runs_calculates_duration_ms(self, client, tmp_path):
         """started_at + completed_at -> корректный duration_ms."""
