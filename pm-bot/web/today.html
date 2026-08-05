@@ -62,9 +62,9 @@
             <div class="metric-ico" style="color:var(--b)"><span class="material-symbols-outlined">summarize</span></div>
             <div><div class="metric-number">{{ reportReady }}</div><div class="metric-label">Отчёт готов</div></div>
           </div>
-          <div class="today-metric" @click="scrollTo('newsPanel')">
-            <div class="metric-ico" style="color:var(--a)"><span class="material-symbols-outlined">lightbulb</span></div>
-            <div><div class="metric-number">{{ todayIdeasCount }}</div><div class="metric-label">Новых идей</div></div>
+          <div class="today-metric" @click="scrollTo('signalsPanel')">
+            <div class="metric-ico" style="color:var(--a)"><span class="material-symbols-outlined">notifications_active</span></div>
+            <div><div class="metric-number">{{ pendingSignalsCount }}</div><div class="metric-label">Сигналов</div></div>
           </div>
           <button class="today-btn quick-note" @click="captureDrawerOpen = true">+ Быстрая заметка</button>
         </section>
@@ -174,9 +174,18 @@
               <!-- NEWS PANEL -->
               <article class="panel" id="newsPanel">
                 <div class="panel-inner">
-                  <div class="panel-head">
+                  <div class="panel-head" style="display:flex;align-items:center;justify-content:space-between">
                     <div class="section-title">Новости и сигналы</div>
-                    <span class="chip" v-if="!newsIsToday && newsDate" style="font-size:10px">{{ newsDate }}</span>
+                    <div style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:400">
+                      <button class="today-btn" style="padding:2px 6px;font-size:11px"
+                              :disabled="!newsPrevDate" @click="goNewsDate(newsPrevDate)">&#x25C0;</button>
+                      <span style="min-width:80px;text-align:center;cursor:pointer"
+                            @click="goNewsToday()" :title="newsSelectedDate ? 'Вернуться к сегодня' : ''">
+                        {{ newsDate ? newsDate.split('-').reverse().join('.') : '--' }}
+                      </span>
+                      <button class="today-btn" style="padding:2px 6px;font-size:11px"
+                              :disabled="!newsNextDate" @click="goNewsDate(newsNextDate)">&#x25B6;</button>
+                    </div>
                   </div>
                   <div v-if="newsLoading" class="today-loading">Загрузка...</div>
                   <template v-else-if="news && news.categories && (news.categories.competitors.length || news.categories.ai_llm.length)">
@@ -208,6 +217,43 @@
               </article>
 
             </div><!-- /bottom-row -->
+
+            <!-- SIGNAL TRIAGE PANEL (BL-203) -->
+            <article class="panel" id="signalsPanel" style="margin-top:12px">
+              <div class="panel-inner">
+                <div class="panel-head">
+                  <div class="section-title">Сигналы</div>
+                  <div style="display:flex;gap:4px">
+                    <button class="today-btn" :class="{'today-btn--active': signalFilter === 'all'}" @click="signalFilter = 'all'" style="padding:4px 10px;font-size:10px">Все</button>
+                    <button class="today-btn" :class="{'today-btn--active': signalFilter === 'pending'}" @click="signalFilter = 'pending'" style="padding:4px 10px;font-size:10px">Ожидают</button>
+                    <button class="today-btn" :class="{'today-btn--active': signalFilter === 'approved'}" @click="signalFilter = 'approved'" style="padding:4px 10px;font-size:10px">Одобрены</button>
+                    <button class="today-btn" :class="{'today-btn--active': signalFilter === 'dismissed'}" @click="signalFilter = 'dismissed'" style="padding:4px 10px;font-size:10px">Отклонены</button>
+                  </div>
+                </div>
+                <div v-if="signalLoading" class="today-loading">Загрузка...</div>
+                <template v-else-if="filteredSignals && filteredSignals.length">
+                  <div class="today-signal-list">
+                    <div class="today-signal-card" v-for="s in filteredSignals" :key="s.signal_id"
+                         :class="{'today-signal-card--dismissed': s.status === 'dismissed'}"
+                         @click="openSignalDrawer(s)">
+                      <div class="today-signal-card-left">
+                        <div class="today-signal-card-title">{{ s.title }}</div>
+                        <div class="today-signal-card-meta">
+                          {{ s.source }} · {{ s.signal_date }}
+                          <span v-if="s.has_draft_idea" class="today-signal-badge today-signal-badge--idea">Идея</span>
+                        </div>
+                      </div>
+                      <div class="today-signal-card-right">
+                        <span class="today-signal-threat" :style="'color:' + signalThreatColor(s.threat_level)">{{ signalThreatLabel(s.threat_level) }}</span>
+                        <span class="today-signal-score">{{ s.relevance_score }}/10</span>
+                        <span class="today-signal-status" :class="'today-signal-status--' + s.status">{{ signalStatusLabel(s.status) }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+                <div v-else class="today-empty">Нет сигналов</div>
+              </div>
+            </article>
 
           </div><!-- /today-left-stack -->
 
@@ -300,11 +346,20 @@
         newsDate: null,
         newsIsToday: false,
         newsLoading: true,
+        newsSelectedDate: null,
+        newsPrevDate: null,
+        newsNextDate: null,
 
         latestReport: null,
         reportLoading: true,
 
         todayIdeas: [],
+
+        // Signal triage (BL-203)
+        signals: [],
+        signalFilter: 'all',
+        signalLoading: true,
+        approveLoading: false,
 
         addTodoTitle: '',
         addTodoDueDate: '',
@@ -358,6 +413,18 @@
       focusIsUrgent: function() {
         if (!this.todos || !this.todos.length) return false;
         return this.todos.some(function(t) { return t.is_urgent; });
+      },
+      signalsCount: function() {
+        return this.signals ? this.signals.length : 0;
+      },
+      pendingSignalsCount: function() {
+        if (!this.signals) return 0;
+        return this.signals.filter(function(s) { return s.status === 'pending'; }).length;
+      },
+      filteredSignals: function() {
+        if (this.signalFilter === 'all') return this.signals;
+        var f = this.signalFilter;
+        return this.signals.filter(function(s) { return s.status === f; });
       }
     },
     mounted: function() {
@@ -397,7 +464,8 @@
           self.loadMeetings(refreshParam),
           self.loadNews(refreshParam),
           self.loadLatestReport(),
-          self.loadTodayIdeas()
+          self.loadTodayIdeas(),
+          self.loadSignals()
         ]).then(function() {
           var d = new Date();
           self.syncTime = d.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
@@ -429,12 +497,26 @@
       },
       loadNews: function(refresh) {
         var self = this;
-        return api.todayNews(refresh).then(function(r) {
+        self.newsLoading = true;
+        return api.todayNews(refresh, self.newsSelectedDate).then(function(r) {
           self.news = r;
           self.newsDate = r.date || null;
           self.newsIsToday = r.is_today || false;
+          self.newsPrevDate = r.prev_date || null;
+          self.newsNextDate = r.next_date || null;
           self.newsLoading = false;
         }).catch(function() { self.newsLoading = false; });
+      },
+      goNewsDate: function(dateStr) {
+        if (!dateStr) return;
+        console.log('[today] goNewsDate:', dateStr);
+        this.newsSelectedDate = dateStr;
+        this.loadNews();
+      },
+      goNewsToday: function() {
+        console.log('[today] goNewsToday');
+        this.newsSelectedDate = null;
+        this.loadNews();
       },
       loadLatestReport: function() {
         var self = this;
@@ -462,6 +544,154 @@
             });
           }
         }).catch(function() {});
+      },
+
+      // Signal triage methods (BL-203)
+      loadSignals: function() {
+        var self = this;
+        self.signalLoading = true;
+        console.log('[today] loadSignals: start');
+        return api.signalsList({limit: 50}).then(function(data) {
+          self.signals = data.signals || [];
+          self.signalLoading = false;
+          console.log('[today] loadSignals: loaded', self.signals.length, 'signals');
+        }).catch(function(err) {
+          console.error('[today] loadSignals error:', err);
+          self.signalLoading = false;
+        });
+      },
+      signalThreatColor: function(level) {
+        if (level === 'high') return 'var(--r)';
+        if (level === 'medium') return 'var(--a)';
+        return 'var(--g)';
+      },
+      signalThreatLabel: function(level) {
+        if (level === 'high') return 'Высокий';
+        if (level === 'medium') return 'Средний';
+        return 'Низкий';
+      },
+      signalStatusLabel: function(status) {
+        if (status === 'pending') return 'Ожидает';
+        if (status === 'approved') return 'Одобрен';
+        if (status === 'dismissed') return 'Отклонён';
+        return status;
+      },
+      openSignalDrawer: function(signal) {
+        var self = this;
+        console.log('[today] openSignalDrawer:', signal.signal_id);
+        api.signalDetail(signal.signal_id).then(function(detail) {
+          console.log('[today] openSignalDrawer: detail loaded for', detail.signal_id);
+          var body = '';
+
+          // Source info
+          body += '<div class="drawer-section"><div class="drawer-section-head">Источник</div><div class="drawer-section-body">';
+          body += self.escapeHtml(detail.source || '');
+          if (detail.source_url) {
+            body += ' — <a href="' + self.escapeHtml(detail.source_url) + '" target="_blank" rel="noopener" style="color:var(--b)">' + self.escapeHtml(detail.source_url) + '</a>';
+          }
+          body += '</div></div>';
+
+          // Scoring
+          body += '<div class="drawer-section"><div class="drawer-section-head">Скоринг</div><div class="drawer-section-body">'
+               + '<span style="font-weight:700">Relevance: ' + (detail.relevance_score || 0) + '/10</span>'
+               + ' · <span style="color:' + self.signalThreatColor(detail.threat_level) + ';font-weight:700">Угроза: ' + self.signalThreatLabel(detail.threat_level) + '</span>'
+               + '</div></div>';
+
+          // Analysis
+          if (detail.analysis) {
+            body += '<div class="drawer-section"><div class="drawer-section-head">Анализ</div><div class="drawer-section-body">' + self.renderMarkdown(detail.analysis) + '</div></div>';
+          }
+
+          // Recommendation
+          if (detail.recommended_action) {
+            body += '<div class="drawer-section"><div class="drawer-section-head">Рекомендация</div><div class="drawer-section-body">' + self.renderMarkdown(detail.recommended_action) + '</div></div>';
+          }
+
+          // Draft idea
+          if (detail.draft_idea) {
+            var di = detail.draft_idea;
+            body += '<div class="drawer-section"><div class="drawer-section-head">Черновик идеи</div><div class="drawer-section-body">';
+            if (di.title) body += '<div style="font-weight:700;margin-bottom:6px">' + self.escapeHtml(di.title) + '</div>';
+            if (di.problem) body += '<div style="margin-bottom:4px"><span style="color:var(--text-muted);font-size:11px">Проблема:</span> ' + self.escapeHtml(di.problem) + '</div>';
+            if (di.solution) body += '<div style="margin-bottom:4px"><span style="color:var(--text-muted);font-size:11px">Решение:</span> ' + self.escapeHtml(di.solution) + '</div>';
+            if (di.domain) body += '<div style="margin-bottom:4px"><span style="color:var(--text-muted);font-size:11px">Домен:</span> ' + self.escapeHtml(di.domain) + '</div>';
+            body += '</div></div>';
+          }
+
+          // Action buttons (only for pending)
+          if (detail.status === 'pending') {
+            body += '<div class="today-signal-actions">'
+                 + '<button class="today-btn" id="signal-approve-btn" style="background:var(--g);color:#fff;border-color:var(--g)">Одобрить → Идея</button>'
+                 + '<button class="today-btn" id="signal-dismiss-btn" style="color:var(--text-muted)">Отклонить</button>'
+                 + '</div>';
+          } else {
+            body += '<div class="drawer-section"><div class="drawer-section-body" style="font-weight:700;color:' + (detail.status === 'approved' ? 'var(--g)' : 'var(--text-muted)') + '">'
+                 + 'Статус: ' + self.signalStatusLabel(detail.status) + '</div></div>';
+          }
+
+          self.openDrawer('Сигнал', detail.title || 'Без названия', body);
+
+          // Bind button handlers
+          if (detail.status === 'pending') {
+            setTimeout(function() {
+              var approveBtn = document.getElementById('signal-approve-btn');
+              if (approveBtn) {
+                approveBtn.onclick = function() { self.approveSignal(detail.signal_id); };
+              }
+              var dismissBtn = document.getElementById('signal-dismiss-btn');
+              if (dismissBtn) {
+                dismissBtn.onclick = function() { self.dismissSignal(detail.signal_id); };
+              }
+            }, 50);
+          }
+        }).catch(function(err) {
+          self.showToast('Не удалось загрузить данные сигнала');
+          console.error('[today] openSignalDrawer error:', err);
+        });
+      },
+      approveSignal: function(signalId) {
+        var self = this;
+        if (self.approveLoading) return;
+        self.approveLoading = true;
+        console.log('[today] approveSignal:', signalId);
+        api.signalApprove(signalId).then(function(r) {
+          console.log('[today] approveSignal success:', signalId, r);
+          self.showToast('Сигнал одобрен, идея создана');
+          self.approveLoading = false;
+          self.closeDrawer();
+          self.loadSignals();
+        }).catch(function(err) {
+          console.error('[today] approveSignal error:', err);
+          var msg = (err.message || '').indexOf('409') >= 0
+            ? 'Сигнал уже обработан (статус изменён)'
+            : 'Ошибка: ' + (err.message || 'не удалось одобрить');
+          self.showToast(msg);
+          self.approveLoading = false;
+          if ((err.message || '').indexOf('409') >= 0) {
+            self.closeDrawer();
+            self.loadSignals();
+          }
+        });
+      },
+      dismissSignal: function(signalId) {
+        var self = this;
+        console.log('[today] dismissSignal:', signalId);
+        api.signalDismiss(signalId).then(function(r) {
+          console.log('[today] dismissSignal success:', signalId, r);
+          self.showToast('Сигнал отклонён');
+          self.closeDrawer();
+          self.loadSignals();
+        }).catch(function(err) {
+          console.error('[today] dismissSignal error:', err);
+          var msg = (err.message || '').indexOf('409') >= 0
+            ? 'Сигнал уже обработан (статус изменён)'
+            : 'Ошибка: ' + (err.message || 'не удалось отклонить');
+          self.showToast(msg);
+          if ((err.message || '').indexOf('409') >= 0) {
+            self.closeDrawer();
+            self.loadSignals();
+          }
+        });
       },
 
       cleanWikilinks: function(text) {
@@ -880,10 +1110,13 @@
 
       // News
       openNewsDrawer: function(item) {
+        var self = this;
+        console.log('[today] openNewsDrawer:', item.title);
         var body = '';
-        body += '<div class="drawer-section"><div class="drawer-section-head">Кратко</div><div class="drawer-section-body">' + this.escapeHtml(item.summary || 'Нет описания') + '</div></div>';
-        body += '<div class="drawer-section"><div class="drawer-section-head">Источник</div><div class="drawer-section-body"><a href="' + this.escapeHtml(item.url || '#') + '" target="_blank" rel="noopener" style="color:var(--b)">' + this.escapeHtml(item.source || item.url || '') + '</a></div></div>';
-        this.openDrawer('Новость', item.title, body);
+        body += '<div class="drawer-section"><div class="drawer-section-head">Кратко</div><div class="drawer-section-body">' + self.escapeHtml(item.summary || 'Нет описания') + '</div></div>';
+        body += '<div class="drawer-section"><div class="drawer-section-head">Источник</div><div class="drawer-section-body"><a href="' + self.escapeHtml(item.url || '#') + '" target="_blank" rel="noopener" style="color:var(--b)">' + self.escapeHtml(item.source || item.url || '') + '</a></div></div>';
+
+        self.openDrawer('Новость', item.title, body);
       },
 
       scrollTo: function(id) {

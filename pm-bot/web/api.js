@@ -503,10 +503,12 @@ var api = {
     return apiFetch(path);
   },
 
-  /** GET /api/v1/today/news -- daily news digest */
-  todayNews: function(refresh) {
-    var path = '/today/news';
-    if (refresh) path += '?refresh=true';
+  /** GET /api/v1/today/news -- daily news digest, optional date=YYYY-MM-DD */
+  todayNews: function(refresh, date) {
+    var params = [];
+    if (date) params.push('date=' + encodeURIComponent(date));
+    if (refresh && !date) params.push('refresh=true');
+    var path = '/today/news' + (params.length ? '?' + params.join('&') : '');
     return apiFetch(path);
   },
 
@@ -578,6 +580,40 @@ var api = {
   /** GET /api/v1/signals/runs/{runId} */
   signalRunDetail: function(runId) {
     return apiFetch('/signals/runs/' + encodeURIComponent(runId));
+  },
+
+  /** GET /api/v1/signals/list?status=X&date=Y&limit=Z (BL-203) */
+  signalsList: function(params) {
+    var qs = '';
+    if (params) {
+      var parts = [];
+      if (params.status) parts.push('status=' + encodeURIComponent(params.status));
+      if (params.date) parts.push('date=' + encodeURIComponent(params.date));
+      if (params.limit) parts.push('limit=' + params.limit);
+      if (parts.length) qs = '?' + parts.join('&');
+    }
+    return apiFetch('/signals/list' + qs);
+  },
+
+  /** GET /api/v1/signals/{signalId} (BL-203) */
+  signalDetail: function(signalId) {
+    return apiFetch('/signals/' + encodeURIComponent(signalId));
+  },
+
+  /** POST /api/v1/signals/{signalId}/approve (BL-203) */
+  signalApprove: function(signalId) {
+    return apiFetch('/signals/' + encodeURIComponent(signalId) + '/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  },
+
+  /** POST /api/v1/signals/{signalId}/dismiss (BL-203) */
+  signalDismiss: function(signalId) {
+    return apiFetch('/signals/' + encodeURIComponent(signalId) + '/dismiss', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 };
 

@@ -530,6 +530,22 @@
           </div>
         </div>
 
+        <!-- Signal Moderator section (BL-203) -->
+        <div class="settings-section">
+          <div class="settings-section-title">// SIGNAL MODERATOR</div>
+          <div class="field-group">
+            <div class="field-label">RELEVANCE_THRESHOLD</div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
+              <input type="range" min="1" max="10" step="1" v-model.number="relevanceThreshold"
+                     class="field-input" style="width:240px;padding:0;cursor:pointer"
+                     @change="saveRelevanceThreshold">
+              <span style="font-size:14px;font-weight:700;min-width:24px;text-align:center">{{ relevanceThreshold }}</span>
+              <span style="font-size:11px;color:var(--text-muted)">/10</span>
+            </div>
+            <div class="field-note">Минимальный порог релевантности для обработки новостей в Signal Moderator. Новости с оценкой ниже порога будут пропущены.</div>
+          </div>
+        </div>
+
         <!-- Roadmap labels -->
         <div class="settings-section">
           <div class="settings-section-title">// ROADMAP LABELS</div>
@@ -619,6 +635,7 @@
       var openrouterStatus = ref(null);
       var openrouterTesting = ref(false);
       var searchOpen = ref(false);
+      var relevanceThreshold = ref(7);
       var fetchingMeetings = ref(false);
       var fetchMeetingsStatus = ref('');
 
@@ -1159,6 +1176,20 @@
         saveProviderSettings();
       }
 
+      function saveRelevanceThreshold() {
+        console.log('[settings] saveRelevanceThreshold:', relevanceThreshold.value);
+        var val = relevanceThreshold.value;
+        if (val < 1 || val > 10) {
+          console.warn('[settings] invalid relevance threshold:', val);
+          return;
+        }
+        api.saveUserPrefs({moderator: {relevance_threshold: val}}).then(function(res) {
+          console.log('[settings] relevance threshold saved:', val);
+        }).catch(function(err) {
+          console.error('[settings] save relevance threshold error:', err.message);
+        });
+      }
+
       onMounted(function() {
         console.log('[settings] component mounted, loading settings');
         loadSettings();
@@ -1202,6 +1233,10 @@
           }
           if (prefs.signal_escalation_fallback && Array.isArray(prefs.signal_escalation_fallback)) {
             findGroup('signal_escalation').chain = prefs.signal_escalation_fallback.map(normalizeChainStep);
+          }
+          // Load relevance threshold (BL-203)
+          if (prefs.moderator && prefs.moderator.relevance_threshold !== undefined) {
+            relevanceThreshold.value = prefs.moderator.relevance_threshold;
           }
 
           console.log('[settings] prefs loaded: refresh=%s theme=%s llm=%s capture=%s transcription=%s', refreshMode.value, currentTheme.value, llmProvider.value, captureMode.value, transcriptionProvider.value);
@@ -1299,6 +1334,8 @@
         caldavTesting: caldavTesting,
         caldavStatus: caldavStatus,
         testCaldavConnection: testCaldavConnection,
+        relevanceThreshold: relevanceThreshold,
+        saveRelevanceThreshold: saveRelevanceThreshold,
       };
     }
   });
