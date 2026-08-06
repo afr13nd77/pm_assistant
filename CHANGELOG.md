@@ -5,6 +5,16 @@
 
 ---
 
+## 06.08.2026
+
+### pm-bot
+- **fix:** BUG-029 — Фокус дня не отображался из-за emoji-префикса в заголовке дайджеста. `today_parsers.py`: `==` → `in` для contains-проверки
+
+### knowledge-engine
+- **fix:** BUG-030 — 75% новостей получали score=0 из-за `<think>` блоков в ответах LLM. `signal_moderator.py`: strip `<think>...</think>` перед JSON-парсингом
+
+---
+
 ## 05.08.2026
 
 ### knowledge-engine 1.24.0

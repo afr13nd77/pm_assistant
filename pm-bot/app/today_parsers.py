@@ -135,7 +135,7 @@ def parse_digest(text: str) -> dict:
         label = label.strip()
         body = body.strip()
 
-        if label.lower() == "фокус дня":
+        if "фокус дня" in label.lower():
             result["focus"] = _parse_focus(body)
         else:
             result["sections"].append(_parse_section(label, body))

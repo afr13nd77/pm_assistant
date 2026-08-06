@@ -107,6 +107,8 @@ def _parse_json_response(text: str) -> dict | None:
     """
     logger.info(f"_parse_json_response: parsing ({len(text)} chars)")
 
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
     # Try direct parse
     try:
         result = json.loads(text)
