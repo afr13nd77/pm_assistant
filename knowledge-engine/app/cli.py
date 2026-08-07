@@ -4,6 +4,8 @@ import logging
 import os
 import sys
 
+from shared.langfuse_client import shutdown as langfuse_shutdown
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -305,6 +307,15 @@ def main():
 
     logger.info(f"Command: {args.command}, vault: {vault_path}")
 
+    try:
+        _dispatch(args, vault_path)
+    finally:
+        logger.info("langfuse_shutdown: flushing before exit")
+        langfuse_shutdown()
+
+
+def _dispatch(args, vault_path: str):
+    """Dispatch CLI command. Extracted to ensure langfuse_shutdown() runs via finally."""
     if args.command == "enrich":
         from .enricher import enrich
         result = enrich(args.filepath, vault_path, dry_run=args.dry_run)

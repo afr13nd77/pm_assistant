@@ -2726,6 +2726,7 @@ _DEFAULT_USER_PREFS = {
     "analysis_fallback": ["claude"],
     "pipeline_fallback": ["claude"],
     "signal_triage_fallback": ["openrouter", "claude"],
+    "signal_deep_fallback": ["openrouter", "claude"],
     "signal_analysis_fallback": ["openrouter", "claude"],
     "signal_escalation_fallback": ["openrouter", "claude"],
     "caldav_username": "",
@@ -2756,6 +2757,7 @@ class UserPrefs(BaseModel):
     analysis_fallback: list[Any] = ["claude"]
     pipeline_fallback: list[Any] = ["claude"]
     signal_triage_fallback: list[Any] = ["openrouter", "claude"]
+    signal_deep_fallback: list[Any] = ["openrouter", "claude"]
     signal_analysis_fallback: list[Any] = ["openrouter", "claude"]
     signal_escalation_fallback: list[Any] = ["openrouter", "claude"]
     caldav_username: str = ""

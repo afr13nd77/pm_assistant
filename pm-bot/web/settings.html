@@ -667,7 +667,13 @@
         {
           key: 'signal_triage',
           name: 'SIGNAL TRIAGE',
-          operations: ['signal_score', 'quality_check', 'dedup_check', 'completeness_check'],
+          operations: ['signal_score', 'quality_check', 'dedup_check'],
+          chain: [{ provider: 'openrouter', model: null }]
+        },
+        {
+          key: 'signal_deep',
+          name: 'SIGNAL DEEP',
+          operations: ['completeness_check'],
           chain: [{ provider: 'openrouter', model: null }]
         },
         {
@@ -766,6 +772,7 @@
         var analysisChain = (findGroup('analysis') || {}).chain || [{ provider: 'claude', model: null }];
         var pipelineChain = (findGroup('pipeline') || {}).chain || [{ provider: 'claude', model: null }];
         var signalTriageChain = (findGroup('signal_triage') || {}).chain || [{ provider: 'openrouter', model: null }];
+        var signalDeepChain = (findGroup('signal_deep') || {}).chain || [{ provider: 'openrouter', model: null }];
         var signalAnalysisChain = (findGroup('signal_analysis') || {}).chain || [{ provider: 'openrouter', model: null }];
         var signalEscalationChain = (findGroup('signal_escalation') || {}).chain || [{ provider: 'openrouter', model: null }];
 
@@ -784,6 +791,7 @@
           analysis_fallback: analysisChain,
           pipeline_fallback: pipelineChain,
           signal_triage_fallback: signalTriageChain,
+          signal_deep_fallback: signalDeepChain,
           signal_analysis_fallback: signalAnalysisChain,
           signal_escalation_fallback: signalEscalationChain,
           caldav_username: caldavUsername.value,
@@ -1230,6 +1238,9 @@
           }
           if (prefs.signal_triage_fallback && Array.isArray(prefs.signal_triage_fallback)) {
             findGroup('signal_triage').chain = prefs.signal_triage_fallback.map(normalizeChainStep);
+          }
+          if (prefs.signal_deep_fallback && Array.isArray(prefs.signal_deep_fallback)) {
+            findGroup('signal_deep').chain = prefs.signal_deep_fallback.map(normalizeChainStep);
           }
           if (prefs.signal_analysis_fallback && Array.isArray(prefs.signal_analysis_fallback)) {
             findGroup('signal_analysis').chain = prefs.signal_analysis_fallback.map(normalizeChainStep);

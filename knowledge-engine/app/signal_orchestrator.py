@@ -37,11 +37,19 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _safe_span(trace, name: str, **kwargs):
-    """Create Langfuse span, return None if unavailable."""
+def _safe_span(trace, name: str, input=None, output=None, **kwargs):
+    """Create Langfuse span, return None if unavailable.
+
+    Accepts optional ``input`` and ``output`` that are forwarded to
+    ``trace.span()`` when provided (BL-190 flush fix).
+    """
     if trace is None:
         return None
     try:
+        if input is not None:
+            kwargs["input"] = input
+        if output is not None:
+            kwargs["output"] = output
         return trace.span(name=name, **kwargs)
     except Exception as e:
         logger.warning(f"Langfuse span creation failed: {e}")

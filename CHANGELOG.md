@@ -5,6 +5,22 @@
 
 ---
 
+## 07.08.2026
+
+### shared
+- **fix:** BL-207 — Langfuse трейсы показывали NULL: `atexit.register(shutdown)` в `langfuse_client.py`, `try/finally` обёртка в `cli.py`, `input=` в `lf.trace()` в `llm_client.py`
+- **fix:** BL-208 — OpenRouter `content: null` от reasoning-моделей вызывал crash. `openrouter_client.py`: обработка `None` → пустая строка. `llm_client.py`: пустой ответ → `RuntimeError` для корректного fallback
+- **feat:** Разделение группы `signal_triage` → `signal_triage` (signal_score, quality_check, dedup_check) + `signal_deep` (completeness_check). Дефолт для triage: `gpt-oss-20b:free` → openrouter → claude
+
+### knowledge-engine
+- **fix:** BL-207 — `_safe_span()` в `signal_orchestrator.py` принимает опциональные `input`/`output`
+
+### pm-bot
+- **ui:** today.html — блок "Отчёт" перемещён после "Черновик идеи" в попапе сигнала
+- **feat:** settings.html — карточка SIGNAL DEEP для настройки fallback-цепочки completeness_check
+
+---
+
 ## 06.08.2026
 
 ### pm-bot

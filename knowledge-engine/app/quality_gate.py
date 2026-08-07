@@ -150,7 +150,9 @@ class QualityGate:
             )
         except Exception as e:
             logger.error(f"check_dedup LLM call failed: {e}")
-            return DedupResult(is_duplicate=False, reason=f"LLM check failed: {e}")
+            err_msg = str(e)
+            short_err = f"{err_msg[:120]}..." if len(err_msg) > 120 else err_msg
+            return DedupResult(is_duplicate=False, reason=f"LLM check failed: {short_err}")
 
         parsed = self._parse_json_response(response)
         if not parsed:
@@ -229,8 +231,10 @@ class QualityGate:
             )
         except Exception as e:
             logger.error(f"check_report_completeness LLM call failed: {e}")
+            err_msg = str(e)
+            short_err = f"{err_msg[:120]}..." if len(err_msg) > 120 else err_msg
             return QualityResult(
-                passed=True, score=5, issues=[f"LLM check failed: {e}"]
+                passed=True, score=5, issues=[f"LLM check failed: {short_err}"]
             )
 
         parsed = self._parse_json_response(response)
@@ -409,8 +413,10 @@ class QualityGate:
             )
         except Exception as e:
             logger.error(f"_run_quality_llm LLM call failed: {e}")
+            err_msg = str(e)
+            short_err = f"{err_msg[:120]}..." if len(err_msg) > 120 else err_msg
             return QualityResult(
-                passed=True, score=5, issues=[f"LLM check failed: {e}"]
+                passed=True, score=5, issues=[f"LLM check failed: {short_err}"]
             )
 
         parsed = self._parse_json_response(response)

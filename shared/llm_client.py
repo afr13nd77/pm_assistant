@@ -34,7 +34,8 @@ _OPERATION_GROUPS: dict[str, str] = {
     "signal_score":                "signal_triage",
     "quality_check":               "signal_triage",
     "dedup_check":                 "signal_triage",
-    "completeness_check":          "signal_triage",
+    # Signal Moderator: deep analysis (large prompts up to 13K chars)
+    "completeness_check":          "signal_deep",
     # Signal Moderator: analysis operations (medium, 1-3 per run)
     "signal_analyze":              "signal_analysis",
     "report_to_ideas":             "signal_analysis",
@@ -46,12 +47,13 @@ _OPERATION_GROUPS: dict[str, str] = {
     "signal_analyze_escalation":   "signal_escalation",
 }
 
-_DEFAULT_FALLBACK: dict[str, list[str]] = {
+_DEFAULT_FALLBACK: dict[str, list] = {
     "capture": ["claude"],
     "transcription": ["claude"],
     "analysis": ["claude"],
     "pipeline": ["claude"],
-    "signal_triage": ["openrouter", "claude"],
+    "signal_triage": [{"provider": "openrouter", "model": "openai/gpt-oss-20b:free"}, "openrouter", "claude"],
+    "signal_deep": ["openrouter", "claude"],
     "signal_analysis": ["openrouter", "claude"],
     "signal_escalation": ["openrouter", "claude"],
 }
@@ -453,6 +455,8 @@ def _call_openrouter(
         max_tokens=max_tokens,
         timeout=or_timeout,
     )
+    if not result:
+        raise RuntimeError(f"OpenRouter model {openrouter_model} returned empty response")
     logger.info(
         "_call_openrouter: success, output_len=%d, input_tokens=%s, output_tokens=%s",
         len(result), usage.get("input_tokens"), usage.get("output_tokens"),
@@ -556,6 +560,7 @@ def call_detailed(
         try:
             trace = lf.trace(
                 name=operation,
+                input=messages if system is None else [{"role": "system", "content": system}] + messages,
                 metadata={
                     "operation": operation,
                     "group": group,

@@ -110,6 +110,12 @@ def call(
 
     try:
         text = data["choices"][0]["message"]["content"]
+        if text is None:
+            logger.warning(
+                "openrouter_client.call: model=%s returned content=null, treating as empty",
+                model,
+            )
+            text = ""
     except (KeyError, IndexError, TypeError) as exc:
         logger.error(
             "openrouter_client.call: unexpected response structure, model=%s, keys=%s, body=%s",

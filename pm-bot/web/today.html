@@ -609,11 +609,6 @@
                + ' · <span style="color:' + self.signalThreatColor(detail.threat_level) + ';font-weight:700">Угроза: ' + self.signalThreatLabel(detail.threat_level) + '</span>'
                + '</div></div>';
 
-          // Report content
-          if (detail.report_content) {
-            body += '<div class="drawer-section"><div class="drawer-section-head">Отчёт</div><div class="drawer-section-body">' + self.renderMarkdown(detail.report_content) + '</div></div>';
-          }
-
           // Analysis
           if (detail.analysis) {
             body += '<div class="drawer-section"><div class="drawer-section-head">Анализ</div><div class="drawer-section-body">' + self.renderMarkdown(detail.analysis) + '</div></div>';
@@ -633,6 +628,11 @@
             if (di.solution) body += '<div style="margin-bottom:4px"><span style="color:var(--text-muted);font-size:11px">Решение:</span> ' + self.escapeHtml(di.solution) + '</div>';
             if (di.domain) body += '<div style="margin-bottom:4px"><span style="color:var(--text-muted);font-size:11px">Домен:</span> ' + self.escapeHtml(di.domain) + '</div>';
             body += '</div></div>';
+          }
+
+          // Report content
+          if (detail.report_content) {
+            body += '<div class="drawer-section"><div class="drawer-section-head">Отчёт</div><div class="drawer-section-body">' + self.renderMarkdown(detail.report_content) + '</div></div>';
           }
 
           // Action buttons (only for pending)

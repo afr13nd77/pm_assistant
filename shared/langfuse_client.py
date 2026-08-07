@@ -1,5 +1,6 @@
 """Singleton Langfuse client with graceful degradation."""
 
+import atexit
 import logging
 import os
 
@@ -40,6 +41,7 @@ def get_langfuse():
             flush_at=10,
             flush_interval=5,
         )
+        atexit.register(shutdown)
         logger.info("get_langfuse: Langfuse client initialized, host=%s", os.getenv("LANGFUSE_HOST", "http://langfuse:3000"))
         return _langfuse
 
