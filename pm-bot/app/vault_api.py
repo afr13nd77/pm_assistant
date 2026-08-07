@@ -2725,6 +2725,7 @@ _DEFAULT_USER_PREFS = {
     "transcription_fallback": ["claude"],
     "analysis_fallback": ["claude"],
     "pipeline_fallback": ["claude"],
+    "digest_fallback": ["ollama", "claude"],
     "signal_triage_fallback": ["openrouter", "claude"],
     "signal_deep_fallback": ["openrouter", "claude"],
     "signal_analysis_fallback": ["openrouter", "claude"],
@@ -2756,6 +2757,7 @@ class UserPrefs(BaseModel):
     transcription_fallback: list[Any] = ["claude"]
     analysis_fallback: list[Any] = ["claude"]
     pipeline_fallback: list[Any] = ["claude"]
+    digest_fallback: list[Any] = ["ollama", "claude"]
     signal_triage_fallback: list[Any] = ["openrouter", "claude"]
     signal_deep_fallback: list[Any] = ["openrouter", "claude"]
     signal_analysis_fallback: list[Any] = ["openrouter", "claude"]

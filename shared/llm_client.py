@@ -30,6 +30,9 @@ _OPERATION_GROUPS: dict[str, str] = {
     "pipeline_pm": "pipeline",
     "pipeline_decomposer": "pipeline",
 
+    # Digest: heavy prompts (full artifact body, up to 100K tokens)
+    "digest":                      "digest",
+
     # Signal Moderator: triage operations (cheap, many per run)
     "signal_score":                "signal_triage",
     "quality_check":               "signal_triage",
@@ -52,6 +55,7 @@ _DEFAULT_FALLBACK: dict[str, list] = {
     "transcription": ["claude"],
     "analysis": ["claude"],
     "pipeline": ["claude"],
+    "digest": ["ollama", "claude"],
     "signal_triage": [{"provider": "openrouter", "model": "openai/gpt-oss-20b:free"}, "openrouter", "claude"],
     "signal_deep": ["openrouter", "claude"],
     "signal_analysis": ["openrouter", "claude"],

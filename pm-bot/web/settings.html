@@ -665,6 +665,12 @@
           chain: [{ provider: 'claude', model: null }]
         },
         {
+          key: 'digest',
+          name: 'DIGEST',
+          operations: ['digest'],
+          chain: [{ provider: 'ollama', model: null }]
+        },
+        {
           key: 'signal_triage',
           name: 'SIGNAL TRIAGE',
           operations: ['signal_score', 'quality_check', 'dedup_check'],
@@ -771,6 +777,7 @@
         var transcriptionChain = (findGroup('transcription') || {}).chain || [{ provider: 'claude', model: null }];
         var analysisChain = (findGroup('analysis') || {}).chain || [{ provider: 'claude', model: null }];
         var pipelineChain = (findGroup('pipeline') || {}).chain || [{ provider: 'claude', model: null }];
+        var digestChain = (findGroup('digest') || {}).chain || [{ provider: 'ollama', model: null }];
         var signalTriageChain = (findGroup('signal_triage') || {}).chain || [{ provider: 'openrouter', model: null }];
         var signalDeepChain = (findGroup('signal_deep') || {}).chain || [{ provider: 'openrouter', model: null }];
         var signalAnalysisChain = (findGroup('signal_analysis') || {}).chain || [{ provider: 'openrouter', model: null }];
@@ -790,6 +797,7 @@
           transcription_fallback: transcriptionChain,
           analysis_fallback: analysisChain,
           pipeline_fallback: pipelineChain,
+          digest_fallback: digestChain,
           signal_triage_fallback: signalTriageChain,
           signal_deep_fallback: signalDeepChain,
           signal_analysis_fallback: signalAnalysisChain,
@@ -1235,6 +1243,9 @@
           }
           if (prefs.pipeline_fallback && Array.isArray(prefs.pipeline_fallback)) {
             findGroup('pipeline').chain = prefs.pipeline_fallback.map(normalizeChainStep);
+          }
+          if (prefs.digest_fallback && Array.isArray(prefs.digest_fallback)) {
+            findGroup('digest').chain = prefs.digest_fallback.map(normalizeChainStep);
           }
           if (prefs.signal_triage_fallback && Array.isArray(prefs.signal_triage_fallback)) {
             findGroup('signal_triage').chain = prefs.signal_triage_fallback.map(normalizeChainStep);
