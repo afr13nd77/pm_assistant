@@ -5116,6 +5116,17 @@ async def signal_approve(signal_id: str):
             f"idea_ref={data.get('idea_ref')}"
         )
         return data
+    except requests.exceptions.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else 502
+        detail = str(exc)
+        try:
+            detail = exc.response.json().get("detail", detail)
+        except Exception:
+            pass
+        logger.error(
+            f"POST /api/v1/signals/{signal_id}/approve -- KE HTTP {status}: {detail}"
+        )
+        raise HTTPException(status_code=status, detail=detail)
     except requests.RequestException as exc:
         logger.error(
             f"POST /api/v1/signals/{signal_id}/approve -- KE error: {exc}"

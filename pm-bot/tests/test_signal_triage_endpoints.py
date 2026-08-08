@@ -392,32 +392,34 @@ class TestSignalApprove:
         mock_ke.signal_approve.assert_called_once_with("2026-08-01-approve-ok")
 
     def test_ke_returns_404(self, signal_client):
-        """KE raises HTTPError 404 -> proxy returns 502 (KE communication error)."""
+        """KE raises HTTPError 404 -> proxy forwards 404."""
         import requests as req_lib
 
         with patch("app.vault_api.ke_client") as mock_ke:
             response_mock = MagicMock()
             response_mock.status_code = 404
+            response_mock.json.return_value = {"detail": "Signal not found"}
             mock_ke.signal_approve.side_effect = req_lib.exceptions.HTTPError(
                 response=response_mock
             )
             resp = signal_client.post("/api/v1/signals/2026-08-01-ghost/approve")
 
-        assert resp.status_code == 502
+        assert resp.status_code == 404
 
     def test_ke_returns_409(self, signal_client):
-        """KE raises HTTPError 409 -> proxy returns 502."""
+        """KE raises HTTPError 409 -> proxy forwards 409."""
         import requests as req_lib
 
         with patch("app.vault_api.ke_client") as mock_ke:
             response_mock = MagicMock()
             response_mock.status_code = 409
+            response_mock.json.return_value = {"detail": "Signal already approved"}
             mock_ke.signal_approve.side_effect = req_lib.exceptions.HTTPError(
                 response=response_mock
             )
             resp = signal_client.post("/api/v1/signals/2026-08-01-conflict/approve")
 
-        assert resp.status_code == 502
+        assert resp.status_code == 409
 
     def test_ke_connection_error(self, signal_client):
         """KE unreachable -> 502."""

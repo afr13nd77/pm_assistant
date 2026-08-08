@@ -637,9 +637,11 @@
 
           // Action buttons (only for pending)
           if (detail.status === 'pending') {
-            body += '<div class="today-signal-actions">'
-                 + '<button class="today-btn" id="signal-approve-btn" style="background:var(--g);color:#fff;border-color:var(--g)">Одобрить → Идея</button>'
-                 + '<button class="today-btn" id="signal-dismiss-btn" style="color:var(--text-muted)">Отклонить</button>'
+            body += '<div class="today-signal-actions">';
+            if (detail.draft_idea) {
+              body += '<button class="today-btn" id="signal-approve-btn" style="background:var(--g);color:#fff;border-color:var(--g)">Одобрить → Идея</button>';
+            }
+            body += '<button class="today-btn" id="signal-dismiss-btn" style="color:var(--text-muted)">Отклонить</button>'
                  + '</div>';
           } else {
             body += '<div class="drawer-section"><div class="drawer-section-body" style="font-weight:700;color:' + (detail.status === 'approved' ? 'var(--g)' : 'var(--text-muted)') + '">'
