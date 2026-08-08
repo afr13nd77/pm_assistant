@@ -5,6 +5,16 @@
 
 ---
 
+## 08.08.2026
+
+### knowledge-engine
+- **fix:** BUG-033 — новый endpoint `POST /api/v1/signals/{signal_id}/approve`: бизнес-логика approve перенесена из pm-bot в KE (dispatch_idea, frontmatter update)
+
+### pm-bot
+- **fix:** BUG-033 — endpoint signal approve переделан в proxy через `ke_client.signal_approve()`. Удалён прямой import `knowledge_engine` (crash 500 в Docker). Удалён `_signal_approve_lock`
+
+---
+
 ## 07.08.2026
 
 ### shared

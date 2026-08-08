@@ -1666,3 +1666,101 @@ def research_queue_retry(req: ResearchRetryRequest):
     except Exception as exc:
         logger.error(f"API research_queue_retry error: {exc}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Signal Triage — approve (BUG-033)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/v1/signals/{signal_id}/approve")
+def signal_approve(signal_id: str):
+    """Approve a pending signal, creating an IDEA (BL-203, BUG-033)."""
+    logger.info(f"API signal_approve: signal_id={signal_id}")
+    try:
+        from shared.frontmatter_utils import read_frontmatter, update_frontmatter
+
+        vault_path = _vault_path_str()
+        wiki_path = (
+            pathlib.Path(vault_path)
+            / "wiki"
+            / "reports"
+            / "signals"
+            / f"{signal_id}.md"
+        )
+        if not wiki_path.exists():
+            raise HTTPException(
+                status_code=404, detail=f"Signal not found: {signal_id}"
+            )
+
+        fm, _body = read_frontmatter(wiki_path)
+        current_status = fm.get("status", "")
+        if current_status != "pending":
+            raise HTTPException(
+                status_code=409,
+                detail=f"Signal status is '{current_status}', expected 'pending'",
+            )
+
+        # Read draft_idea from raw JSON
+        raw_path = (
+            pathlib.Path(vault_path)
+            / "raw"
+            / "inbound"
+            / "signals"
+            / f"{signal_id}.json"
+        )
+        draft_idea = None
+        if raw_path.exists():
+            try:
+                raw_data = json.loads(raw_path.read_text(encoding="utf-8"))
+                draft_idea = raw_data.get("draft_idea")
+            except Exception as e:
+                logger.error(f"signal_approve: failed to read raw JSON: {e}")
+
+        if not draft_idea:
+            raise HTTPException(
+                status_code=400, detail="Signal has no draft_idea"
+            )
+
+        # Dispatch idea using signal_moderator (local import — KE has this module)
+        from .signal_moderator import AnalysisResult, dispatch_idea
+
+        analysis = AnalysisResult(
+            reaction="idea",
+            analysis=fm.get("title", ""),
+            threat_level=fm.get("threat_level", "low"),
+            idea_draft=draft_idea,
+        )
+
+        idea_ref = dispatch_idea(
+            item={
+                "title": draft_idea.get("title", fm.get("title", "")),
+                "date": fm.get("signal_date", ""),
+                "source_url": fm.get("source_url", ""),
+                "source": fm.get("source", ""),
+            },
+            analysis=analysis,
+            vault_path=vault_path,
+            notify=True,
+            dry_run=False,
+        )
+
+        # Update wiki frontmatter
+        update_frontmatter(wiki_path, {
+            "status": "approved",
+            "result_ref": idea_ref or "",
+        })
+
+        logger.info(f"signal_approve: approved {signal_id}, idea_ref={idea_ref}")
+        return {
+            "status": "ok",
+            "signal_id": signal_id,
+            "idea_ref": idea_ref or "",
+            "new_status": "approved",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"API signal_approve error: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))

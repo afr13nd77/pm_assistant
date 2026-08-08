@@ -88,7 +88,7 @@ _cache = _VaultCache(ttl_seconds=30.0)
 _caldav_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="caldav")
 
 _jira_sync_lock = threading.Lock()
-_signal_approve_lock = threading.Lock()
+
 
 app = FastAPI(title="PM Vault API", version="0.1.0")
 app.add_middleware(
@@ -5102,91 +5102,31 @@ async def signal_detail(signal_id: str):
 
 @app.post("/api/v1/signals/{signal_id}/approve")
 async def signal_approve(signal_id: str):
-    """Approve a pending signal, creating an IDEA (BL-203, AC-06)."""
+    """Proxy: approve a pending signal via KE (BL-203, BUG-033)."""
     logger.info(f"POST /api/v1/signals/{signal_id}/approve")
 
     if not _validate_signal_id(signal_id):
         raise HTTPException(status_code=400, detail=f"Invalid signal_id: {signal_id}")
 
-    with _signal_approve_lock:
-        try:
-            wiki_path = vault_paths.wiki_signals() / f"{signal_id}.md"
-            if not wiki_path.exists():
-                raise HTTPException(status_code=404, detail=f"Signal not found: {signal_id}")
-
-            fm, _body = read_frontmatter(wiki_path)
-            current_status = fm.get("status", "")
-            if current_status != "pending":
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Signal status is '{current_status}', expected 'pending'"
-                )
-
-            # Read draft_idea from raw JSON
-            raw_path = vault_paths.raw_signals() / f"{signal_id}.json"
-            draft_idea = None
-            if raw_path.exists():
-                try:
-                    raw_data = json.loads(raw_path.read_text(encoding="utf-8"))
-                    draft_idea = raw_data.get("draft_idea")
-                except Exception as e:
-                    logger.error(f"signal_approve: failed to read raw JSON: {e}")
-
-            if not draft_idea:
-                raise HTTPException(status_code=400, detail="Signal has no draft_idea")
-
-            # Dispatch idea using existing dispatch_idea from signal_moderator
-            from knowledge_engine.app.signal_moderator import (
-                AnalysisResult,
-                dispatch_idea,
-            )
-
-            analysis = AnalysisResult(
-                reaction="idea",
-                analysis=fm.get("title", ""),
-                threat_level=fm.get("threat_level", "low"),
-                idea_draft=draft_idea,
-            )
-
-            idea_ref = dispatch_idea(
-                item={
-                    "title": draft_idea.get("title", fm.get("title", "")),
-                    "date": fm.get("signal_date", ""),
-                    "source_url": fm.get("source_url", ""),
-                    "source": fm.get("source", ""),
-                },
-                analysis=analysis,
-                vault_path=str(VAULT_PATH),
-                notify=True,
-                dry_run=False,
-            )
-
-            # Update wiki frontmatter
-            update_frontmatter(wiki_path, {
-                "status": "approved",
-                "result_ref": idea_ref or "",
-            })
-
-            _cache.invalidate()
-            logger.info(
-                f"signal_approve: approved {signal_id}, idea_ref={idea_ref}"
-            )
-
-            return {
-                "status": "ok",
-                "signal_id": signal_id,
-                "idea_ref": idea_ref or "",
-                "new_status": "approved",
-            }
-
-        except HTTPException:
-            raise
-        except Exception as exc:
-            logger.error(
-                f"POST /api/v1/signals/{signal_id}/approve -- error: {exc}",
-                exc_info=True,
-            )
-            raise HTTPException(status_code=500, detail=str(exc))
+    try:
+        data = ke_client.signal_approve(signal_id)
+        _cache.invalidate()
+        logger.info(
+            f"POST /api/v1/signals/{signal_id}/approve -- success, "
+            f"idea_ref={data.get('idea_ref')}"
+        )
+        return data
+    except requests.RequestException as exc:
+        logger.error(
+            f"POST /api/v1/signals/{signal_id}/approve -- KE error: {exc}"
+        )
+        raise HTTPException(status_code=502, detail=f"KE API error: {exc}")
+    except Exception as exc:
+        logger.error(
+            f"POST /api/v1/signals/{signal_id}/approve -- error: {exc}",
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.post("/api/v1/signals/{signal_id}/dismiss")

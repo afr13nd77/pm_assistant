@@ -380,3 +380,13 @@ def signal_run_detail(run_id: str) -> dict:
     """Get detail of a specific signal run."""
     logger.info("signal_run_detail: run_id=%s", run_id)
     return _get(f"/api/v1/signals/runs/{run_id}", _get_timeout("default"))
+
+
+# ---------------------------------------------------------------------------
+# 32. POST /api/v1/signals/{signal_id}/approve (BUG-033)
+# ---------------------------------------------------------------------------
+
+def signal_approve(signal_id: str) -> dict:
+    """Approve a pending signal via KE (creates IDEA in vault)."""
+    logger.info("signal_approve: signal_id=%s", signal_id)
+    return _post(f"/api/v1/signals/{signal_id}/approve", _get_timeout("default"))

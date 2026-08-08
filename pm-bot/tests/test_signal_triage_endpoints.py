@@ -8,7 +8,6 @@ BL-203 T-23 (signal-level triage):
 """
 
 import json
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -369,46 +368,19 @@ class TestSignalDetail:
 # ---------------------------------------------------------------------------
 
 
-def _mock_ke_signal_moderator():
-    """Context manager that stubs knowledge_engine.app.signal_moderator in sys.modules.
-
-    The approve endpoint does a lazy import:
-        from knowledge_engine.app.signal_moderator import AnalysisResult, dispatch_idea
-    Since knowledge_engine is not on PYTHONPATH in pm-bot tests, we need to
-    pre-populate sys.modules with a mock before the endpoint runs.
-    """
-    mock_mod = MagicMock()
-    mock_mod.dispatch_idea = MagicMock(return_value="/wiki/ideas/test.md")
-    mock_mod.AnalysisResult = MagicMock()
-
-    modules_to_stub = {
-        "knowledge_engine": MagicMock(),
-        "knowledge_engine.app": MagicMock(),
-        "knowledge_engine.app.signal_moderator": mock_mod,
-    }
-    return patch.dict(sys.modules, modules_to_stub), mock_mod
-
-
 class TestSignalApprove:
-    """Tests for POST /api/v1/signals/{signal_id}/approve (BL-203, AC-06)."""
+    """Tests for POST /api/v1/signals/{signal_id}/approve (BL-203, BUG-033)."""
 
-    def test_success(self, signal_client, signal_vault):
-        """Pending signal with draft_idea -> approved, dispatch_idea called."""
-        draft = {
-            "title": "New Idea",
-            "problem": "Problem desc",
-            "solution": "Solution desc",
-            "domain": "general",
+    def test_success(self, signal_client):
+        """KE returns success -> proxy returns same response."""
+        ke_response = {
+            "status": "ok",
+            "signal_id": "2026-08-01-approve-ok",
+            "idea_ref": "/wiki/ideas/test.md",
+            "new_status": "approved",
         }
-        _create_signal_files(
-            signal_vault,
-            "2026-08-01-approve-ok",
-            status="pending",
-            draft_idea=draft,
-        )
-
-        modules_patch, mock_mod = _mock_ke_signal_moderator()
-        with modules_patch:
+        with patch("app.vault_api.ke_client") as mock_ke:
+            mock_ke.signal_approve.return_value = ke_response
             resp = signal_client.post("/api/v1/signals/2026-08-01-approve-ok/approve")
 
         assert resp.status_code == 200
@@ -416,84 +388,54 @@ class TestSignalApprove:
         assert data["status"] == "ok"
         assert data["signal_id"] == "2026-08-01-approve-ok"
         assert data["new_status"] == "approved"
-        assert "idea_ref" in data
-        mock_mod.dispatch_idea.assert_called_once()
+        assert data["idea_ref"] == "/wiki/ideas/test.md"
+        mock_ke.signal_approve.assert_called_once_with("2026-08-01-approve-ok")
 
-    def test_conflict_already_approved(self, signal_client, signal_vault):
-        """Already approved signal -> 409."""
-        _create_signal_files(
-            signal_vault,
-            "2026-08-01-already-approved",
-            status="approved",
-            draft_idea={"title": "X"},
-        )
+    def test_ke_returns_404(self, signal_client):
+        """KE raises HTTPError 404 -> proxy returns 502 (KE communication error)."""
+        import requests as req_lib
 
-        resp = signal_client.post(
-            "/api/v1/signals/2026-08-01-already-approved/approve"
-        )
-        assert resp.status_code == 409
-        assert "approved" in resp.json()["detail"].lower()
+        with patch("app.vault_api.ke_client") as mock_ke:
+            response_mock = MagicMock()
+            response_mock.status_code = 404
+            mock_ke.signal_approve.side_effect = req_lib.exceptions.HTTPError(
+                response=response_mock
+            )
+            resp = signal_client.post("/api/v1/signals/2026-08-01-ghost/approve")
 
-    def test_conflict_dismissed(self, signal_client, signal_vault):
-        """Dismissed signal -> 409."""
-        _create_signal_files(
-            signal_vault,
-            "2026-08-01-was-dismissed",
-            status="dismissed",
-            draft_idea={"title": "X"},
-        )
+        assert resp.status_code == 502
 
-        resp = signal_client.post(
-            "/api/v1/signals/2026-08-01-was-dismissed/approve"
-        )
-        assert resp.status_code == 409
+    def test_ke_returns_409(self, signal_client):
+        """KE raises HTTPError 409 -> proxy returns 502."""
+        import requests as req_lib
 
-    def test_no_draft_idea(self, signal_client, signal_vault):
-        """Pending signal without draft_idea -> 400."""
-        _create_signal_files(
-            signal_vault,
-            "2026-08-01-no-draft",
-            status="pending",
-            draft_idea=None,
-        )
+        with patch("app.vault_api.ke_client") as mock_ke:
+            response_mock = MagicMock()
+            response_mock.status_code = 409
+            mock_ke.signal_approve.side_effect = req_lib.exceptions.HTTPError(
+                response=response_mock
+            )
+            resp = signal_client.post("/api/v1/signals/2026-08-01-conflict/approve")
 
-        resp = signal_client.post("/api/v1/signals/2026-08-01-no-draft/approve")
-        assert resp.status_code == 400
-        assert "draft_idea" in resp.json()["detail"].lower()
+        assert resp.status_code == 502
 
-    def test_not_found(self, signal_client):
-        """Non-existent signal -> 404."""
-        resp = signal_client.post("/api/v1/signals/2026-08-01-ghost/approve")
-        assert resp.status_code == 404
+    def test_ke_connection_error(self, signal_client):
+        """KE unreachable -> 502."""
+        import requests as req_lib
+
+        with patch("app.vault_api.ke_client") as mock_ke:
+            mock_ke.signal_approve.side_effect = req_lib.exceptions.ConnectionError(
+                "Connection refused"
+            )
+            resp = signal_client.post("/api/v1/signals/2026-08-01-down/approve")
+
+        assert resp.status_code == 502
+        assert "KE API error" in resp.json()["detail"]
 
     def test_path_traversal(self, signal_client):
-        """Path traversal attempt -> 400."""
+        """Path traversal attempt -> 400 (validated before KE call)."""
         resp = signal_client.post("/api/v1/signals/..%2F..%2Fetc%2Fpasswd/approve")
         assert resp.status_code in (400, 404)
-
-    def test_updates_frontmatter(self, signal_client, signal_vault):
-        """After approve, wiki file frontmatter should have status=approved."""
-        draft = {"title": "Idea", "problem": "P", "domain": "general"}
-        _create_signal_files(
-            signal_vault,
-            "2026-08-01-approve-fm",
-            status="pending",
-            draft_idea=draft,
-        )
-
-        modules_patch, _mock_mod = _mock_ke_signal_moderator()
-        with modules_patch:
-            resp = signal_client.post("/api/v1/signals/2026-08-01-approve-fm/approve")
-
-        assert resp.status_code == 200
-
-        from shared.frontmatter_utils import read_frontmatter
-
-        wiki_path = (
-            signal_vault / "wiki" / "reports" / "signals" / "2026-08-01-approve-fm.md"
-        )
-        metadata, _ = read_frontmatter(wiki_path)
-        assert metadata["status"] == "approved"
 
 
 # ---------------------------------------------------------------------------
