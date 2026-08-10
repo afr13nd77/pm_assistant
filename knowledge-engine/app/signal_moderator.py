@@ -670,7 +670,12 @@ def dispatch_idea(
     today = datetime.now().strftime("%Y-%m-%d")
     slug = re.sub(r"[^a-zA-Zа-яА-Яё0-9]", "-", title)[:50]
     slug = re.sub(r"-+", "-", slug).strip("-")
-    raw_filename = f"{today}-signal-{slug}.md"
+
+    from shared.vault_paths import max_idea_number
+    next_num = max_idea_number() + 1
+    idea_id = f"IDEA-{next_num:04d}"
+    raw_filename = f"{idea_id}-{today}-signal-{slug}.md"
+    logger.info(f"dispatch_idea: assigned {idea_id}")
 
     ideas_dir = Path(vault_path) / "raw" / "inbound" / "ideas"
     ideas_dir.mkdir(parents=True, exist_ok=True)
@@ -683,6 +688,7 @@ def dispatch_idea(
 
     frontmatter = (
         f"---\n"
+        f"id: {idea_id}\n"
         f'title: "{idea_data["title"]}"\n'
         f"type: idea\n"
         f"domain: {idea_data['domain']}\n"

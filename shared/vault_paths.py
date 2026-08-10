@@ -250,3 +250,33 @@ def ensure_structure() -> None:
         path = fn()
         logger.info("ensure_structure: ensured %s", path)
     logger.info("ensure_structure: done — all raw/ subdirectories exist")
+
+
+def max_idea_number() -> int:
+    """Scan raw/ideas and wiki/domains/*/ideas/ for the highest IDEA-NNNN number."""
+    max_num = 0
+    pattern = re.compile(r"IDEA-(\d{4})")
+
+    # 1. Scan raw/ideas
+    raw_dir = raw_ideas()
+    if raw_dir.exists():
+        for f in raw_dir.glob("IDEA-*.md"):
+            m = pattern.match(f.name)
+            if m:
+                max_num = max(max_num, int(m.group(1)))
+
+    # 2. Scan wiki/domains/*/ideas/
+    domains_dir = VAULT_PATH / "wiki" / "domains"
+    if domains_dir.exists():
+        for domain_entry in domains_dir.iterdir():
+            if not domain_entry.is_dir():
+                continue
+            ideas_dir = domain_entry / "ideas"
+            if ideas_dir.exists():
+                for f in ideas_dir.glob("IDEA-*.md"):
+                    m = pattern.match(f.name)
+                    if m:
+                        max_num = max(max_num, int(m.group(1)))
+
+    logger.info("max_idea_number: scanned vault, max_num=%d", max_num)
+    return max_num

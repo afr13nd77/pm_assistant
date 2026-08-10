@@ -9,6 +9,10 @@
 
 ### knowledge-engine
 - **fix:** BUG-035 — `dispatch_idea()` в `signal_moderator.py` записывал IDEA только в `raw/inbound/ideas/`, без wiki-копии. IDEA не попадала в enrichment, synthesis и UI. Добавлена запись в `wiki/domains/<domain>/ideas/` через `wiki_domain_dir()`
+- **fix:** `dispatch_idea()` — добавлена IDEA-NNNN нумерация (id в frontmatter + имя файла). 19 существующих signal-IDEA переименованы (IDEA-0051..IDEA-0069)
+
+### shared
+- **feat:** `max_idea_number()` в `vault_paths.py` — единая функция поиска max IDEA-NNNN номера (вынесена из pm-bot)
 
 ### pm-bot
 - **fix:** BUG-034 — `_parse_section()` в `today_parsers.py` не парсил plain-line формат дайджеста (без `- ` или `|`). Добавлен attempt 3: каждая непустая строка = item, пропуск bold-subheaders и group-headers

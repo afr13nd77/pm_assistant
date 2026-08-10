@@ -261,30 +261,8 @@ def _max_idea_number() -> int:
     """Scan both raw/ideas and all wiki/domains/*/ideas/ directories
     for the highest existing IDEA-NNNN number.
     """
-    max_num = 0
-    pattern = re.compile(r"IDEA-(\d{4})-")
-
-    # 1. Scan raw/ideas
-    raw_dir = raw_ideas()
-    for f in raw_dir.glob("IDEA-*.md"):
-        m = pattern.match(f.name)
-        if m:
-            max_num = max(max_num, int(m.group(1)))
-
-    # 2. Scan wiki/domains/*/ideas/
-    domains_dir = VAULT_PATH / "wiki" / "domains"
-    if domains_dir.exists():
-        for domain_entry in domains_dir.iterdir():
-            if not domain_entry.is_dir():
-                continue
-            ideas_dir = domain_entry / "ideas"
-            if ideas_dir.exists():
-                for f in ideas_dir.glob("IDEA-*.md"):
-                    m = pattern.match(f.name)
-                    if m:
-                        max_num = max(max_num, int(m.group(1)))
-
-    return max_num
+    from shared.vault_paths import max_idea_number
+    return max_idea_number()
 
 
 def _load_idea_template() -> str:
