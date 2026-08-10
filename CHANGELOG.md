@@ -5,6 +5,13 @@
 
 ---
 
+## 10.08.2026
+
+### pm-bot
+- **fix:** BUG-034 — `_parse_section()` в `today_parsers.py` не парсил plain-line формат дайджеста (без `- ` или `|`). Добавлен attempt 3: каждая непустая строка = item, пропуск bold-subheaders и group-headers
+
+---
+
 ## 08.08.2026
 
 ### knowledge-engine

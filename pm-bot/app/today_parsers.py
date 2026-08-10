@@ -166,12 +166,14 @@ def _parse_focus(body: str) -> dict:
 def _parse_section(label: str, body: str) -> dict:
     """Parse a generic ``### Label`` section into items.
 
-    Supports two formats:
+    Supports three formats (tried in order):
     1. Bullet lists (lines starting with ``- ``).
     2. Markdown tables (lines starting with ``|``).
+    3. Plain lines (each non-empty line is an item; bold sub-headers
+       and group headers ending with ``:`` are skipped).
 
     Bullets are tried first; if none are found, the function falls back
-    to table parsing.
+    to table parsing, then to plain-line parsing.
     """
     # --- attempt 1: bullet list ---
     raw_items = re.split(r"\n- ", "\n" + body)
@@ -194,6 +196,24 @@ def _parse_section(label: str, body: str) -> dict:
             logger.info(
                 f"_parse_section: label='{label}' parsed as table, "
                 f"rows={len(items)}"
+            )
+
+    # --- attempt 3: plain lines (each non-empty line is an item) ---
+    if not items:
+        for line in body.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("**") and stripped.endswith("**"):
+                continue
+            if stripped.endswith(":"):
+                continue
+            wikilinks = _extract_wikilinks(stripped)
+            items.append({"title": stripped, "details": "", "wikilinks": wikilinks})
+        if items:
+            logger.info(
+                f"_parse_section: label='{label}' parsed as plain lines, "
+                f"count={len(items)}"
             )
 
     return {
