@@ -1,6 +1,6 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.27.0 / knowledge-engine 1.24.0 / idea-pipeline 1.2.0 / web-ui 1.32.0 / shared 0.7.4
+**Версии:** pm-bot 1.27.1 / knowledge-engine 1.24.1 / idea-pipeline 1.2.0 / web-ui 1.32.0 / shared 0.7.4
 **Обновлён:** 10.08.2026 (BL-211 BUG-035 dispatch-idea-no-wiki-copy)
 **Бэклог:** реализованные фичи (110), баги (36), идеи (51), итого (197)
 
