@@ -710,6 +710,17 @@ def dispatch_idea(
         logger.error(f"dispatch_idea: failed to write raw idea file: {e}")
         return None
 
+    # Write wiki (working) copy — enables enrichment watchdog & UI visibility
+    try:
+        from shared.vault_paths import wiki_domain_dir
+
+        wiki_ideas_dir = wiki_domain_dir(idea_data["domain"], "ideas")
+        wiki_path = wiki_ideas_dir / raw_filename
+        wiki_path.write_text(content, encoding="utf-8")
+        logger.info(f"dispatch_idea: wrote wiki copy to {wiki_path}")
+    except Exception as e:
+        logger.error(f"dispatch_idea: failed to write wiki copy: {e}")
+
     # Send Telegram notification (AC-30)
     if notify:
         try:

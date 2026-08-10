@@ -7,6 +7,9 @@
 
 ## 10.08.2026
 
+### knowledge-engine
+- **fix:** BUG-035 — `dispatch_idea()` в `signal_moderator.py` записывал IDEA только в `raw/inbound/ideas/`, без wiki-копии. IDEA не попадала в enrichment, synthesis и UI. Добавлена запись в `wiki/domains/<domain>/ideas/` через `wiki_domain_dir()`
+
 ### pm-bot
 - **fix:** BUG-034 — `_parse_section()` в `today_parsers.py` не парсил plain-line формат дайджеста (без `- ` или `|`). Добавлен attempt 3: каждая непустая строка = item, пропуск bold-subheaders и group-headers
 
