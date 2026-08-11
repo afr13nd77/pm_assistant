@@ -681,33 +681,131 @@ def dispatch_idea(
     ideas_dir.mkdir(parents=True, exist_ok=True)
     raw_path = ideas_dir / raw_filename
 
-    # Build frontmatter
-    related_line = ""
-    if "related" in idea_data:
-        related_line = f'related: "{idea_data["related"]}"\n'
+    # Calculate readiness (same as write_idea)
+    filled_count = sum(1 for k in ("problem", "solution") if idea_data.get(k, "").strip())
+    readiness_pct = int((filled_count / 9) * 100)
 
-    frontmatter = (
-        f"---\n"
-        f"id: {idea_id}\n"
-        f'title: "{idea_data["title"]}"\n'
-        f"type: idea\n"
-        f"domain: {idea_data['domain']}\n"
-        f'status: "Новая"\n'
-        f"source: signal\n"
-        f'signal_date: "{idea_data["signal_date"]}"\n'
-        f'signal_source: "{idea_data["signal_source"]}"\n'
-        f"{related_line}"
-        f'created: "{today}"\n'
-        f"---\n"
-    )
+    # --- Fill template ---
+    template_path = Path(vault_path) / "templates" / "idea.md"
+    if template_path.exists():
+        content = template_path.read_text(encoding="utf-8")
 
-    content = (
-        f"{frontmatter}\n"
-        f"# {idea_data['title']}\n\n"
-        f"## Проблема\n\n{idea_data['problem']}\n\n"
-        f"## Решение\n\n{idea_data['solution']}\n\n"
-        f"## Анализ\n\n{analysis.analysis}\n"
-    )
+        # 1. Fill frontmatter fields via regex
+        fm_replacements = [
+            (r"^id:.*$", f"id: {idea_id}"),
+            (r"^domain:.*$", f"domain: {idea_data['domain']}"),
+            (r"^status:.*$", 'status: "Новая"'),
+            (r"^readiness:.*$", f"readiness: {readiness_pct}%"),
+            (r"^created:.*$", f'created: "{today}"'),
+            (r"^updated:.*$", f'updated: "{today}"'),
+            (r"^source:.*$", "source: signal"),
+            (r"^author:.*$", "author: null"),
+            (r"^epic_ref:.*$", "epic_ref: null"),
+        ]
+
+        # Extract frontmatter boundaries
+        fm_match = re.match(r"(---\s*\n)(.*?)(\n---)", content, re.DOTALL)
+        if fm_match:
+            prefix = fm_match.group(1)
+            fm_body = fm_match.group(2)
+            suffix = fm_match.group(3)
+            rest = content[fm_match.end():]
+
+            for pattern, replacement in fm_replacements:
+                fm_body = re.sub(pattern, replacement, fm_body, count=1, flags=re.MULTILINE)
+
+            # Add signal-specific fields before tags line
+            signal_fields = (
+                f'signal_date: "{idea_data["signal_date"]}"\n'
+                f'signal_source: "{idea_data["signal_source"]}"\n'
+            )
+            if "related" in idea_data:
+                signal_fields += f'related: "{idea_data["related"]}"\n'
+
+            # Insert signal fields before tags:
+            fm_body = re.sub(
+                r"^(tags:)", signal_fields + r"\1", fm_body, count=1, flags=re.MULTILINE
+            )
+
+            # Add decay fields before signal_date:
+            decay_block = (
+                f"relevance: 1.0\n"
+                f"tier: active\n"
+                f'last_accessed: "{today}"\n'
+                f"access_count: 0\n"
+            )
+            fm_body = re.sub(
+                r"^(signal_date:)", decay_block + r"\1", fm_body, count=1, flags=re.MULTILINE
+            )
+
+            # Set tags
+            tags_yaml = "tags:\n  - idea\n  - signal"
+            fm_body = re.sub(
+                r"^tags:.*?(?=\n[a-z]|\n---|\Z)",
+                tags_yaml,
+                fm_body,
+                count=1,
+                flags=re.MULTILINE | re.DOTALL,
+            )
+
+            content = prefix + fm_body + suffix + rest
+
+        # 2. Fill title (replace template H1)
+        content = re.sub(
+            r"^# .+$", f"# {idea_data['title']}", content, count=1, flags=re.MULTILINE
+        )
+
+        # 3. Fill source info block
+        raw_rel = f"raw/inbound/ideas/{raw_filename}"
+        content = content.replace("{{source}}", "signal")
+        content = content.replace("{{raw_ref}}", raw_rel)
+
+        # 4. Fill Block 1 sections (problem, solution)
+        block1_map = [
+            ("problem", r"### 1\. Проблема / Боль"),
+            ("solution", r"### 2\. Решение"),
+        ]
+        for b1_field, heading_pattern in block1_map:
+            value = idea_data.get(b1_field, "").strip()
+            if not value:
+                continue
+            section_pattern = rf"({heading_pattern}\s*\n)(<!-- .*?-->\s*\n)?"
+            match = re.search(section_pattern, content, re.DOTALL)
+            if match:
+                insert_pos = match.end()
+                content = content[:insert_pos] + f"\n{value}\n" + content[insert_pos:]
+
+        logger.info(f"dispatch_idea: filled template for {idea_id}")
+    else:
+        # Fallback: original hardcoded format
+        logger.warning("dispatch_idea: template not found at %s, using fallback", template_path)
+
+        related_line = ""
+        if "related" in idea_data:
+            related_line = f'related: "{idea_data["related"]}"\n'
+
+        frontmatter = (
+            f"---\n"
+            f"id: {idea_id}\n"
+            f'title: "{idea_data["title"]}"\n'
+            f"type: idea\n"
+            f"domain: {idea_data['domain']}\n"
+            f'status: "Новая"\n'
+            f"source: signal\n"
+            f'signal_date: "{idea_data["signal_date"]}"\n'
+            f'signal_source: "{idea_data["signal_source"]}"\n'
+            f"{related_line}"
+            f'created: "{today}"\n'
+            f"---\n"
+        )
+
+        content = (
+            f"{frontmatter}\n"
+            f"# {idea_data['title']}\n\n"
+            f"## Проблема\n\n{idea_data['problem']}\n\n"
+            f"## Решение\n\n{idea_data['solution']}\n\n"
+            f"## Анализ\n\n{analysis.analysis}\n"
+        )
 
     try:
         raw_path.write_text(content, encoding="utf-8")
