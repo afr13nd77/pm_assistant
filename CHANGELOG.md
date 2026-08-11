@@ -5,7 +5,7 @@
 
 ---
 
-## 10.08.2026
+## 11.08.2026
 
 ### knowledge-engine
 - **fix:** BUG-035 — `dispatch_idea()` в `signal_moderator.py` записывал IDEA только в `raw/inbound/ideas/`, без wiki-копии. IDEA не попадала в enrichment, synthesis и UI. Добавлена запись в `wiki/domains/<domain>/ideas/` через `wiki_domain_dir()`
