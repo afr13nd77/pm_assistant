@@ -19,6 +19,7 @@
 - **fix:** BUG-034 — `_parse_section()` в `today_parsers.py` не парсил plain-line формат дайджеста (без `- ` или `|`). Добавлен attempt 3: каждая непустая строка = item, пропуск bold-subheaders и group-headers
 - **fix:** playground.html — `<think>...</think>` блоки reasoning-моделей (Nemotron, Qwen) убираются из ответа на backend (`re.sub` в `playground_chat()`)
 - **fix:** playground.html — max_tokens увеличен с 4096 до 8192 (дефолт), добавлен UI-селектор (4096/8192/16384)
+- **feat:** playground — Langfuse трейсинг: trace + generation (success/error) с usage-данными, тег `playground`
 
 ---
 

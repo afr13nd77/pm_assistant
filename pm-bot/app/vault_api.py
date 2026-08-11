@@ -4211,6 +4211,26 @@ def playground_chat(body: PlaygroundChatRequest):
     # of a bare provider string, so the resolved playground model (including a
     # user-picked OpenRouter model) is threaded through to _call_openrouter.
     start = _t.time()
+
+    # Langfuse trace for playground calls
+    from shared.langfuse_client import get_langfuse
+    lf = get_langfuse()
+    trace = None
+    if lf:
+        try:
+            trace = lf.trace(
+                name="playground",
+                input=body.messages,
+                metadata={
+                    "provider": body.provider,
+                    "model": model,
+                    "max_tokens": body.max_tokens,
+                },
+                tags=["playground", body.provider],
+            )
+        except Exception as exc:
+            logger.warning("playground_chat: failed to create Langfuse trace: %s", exc)
+
     try:
         content, _usage = _call_provider(
             step={"provider": body.provider, "model": model},
@@ -4224,6 +4244,25 @@ def playground_chat(body: PlaygroundChatRequest):
         # Strip reasoning blocks from models like Nemotron/Qwen
         import re as _re
         content = _re.sub(r"<think>.*?</think>", "", content, flags=_re.DOTALL).strip()
+        if trace:
+            try:
+                lf_usage = {}
+                if isinstance(_usage, dict):
+                    if _usage.get("input_tokens") is not None:
+                        lf_usage["input"] = _usage["input_tokens"]
+                    if _usage.get("output_tokens") is not None:
+                        lf_usage["output"] = _usage["output_tokens"]
+                trace.generation(
+                    name=f"{body.provider}:{model}",
+                    model=model,
+                    input=body.messages,
+                    output=content,
+                    usage=lf_usage if lf_usage else None,
+                    metadata={"provider": body.provider, "elapsed": elapsed},
+                    level="DEFAULT",
+                )
+            except Exception as lf_exc:
+                logger.warning("playground_chat: Langfuse generation failed: %s", lf_exc)
         logger.info(
             "POST /api/v1/playground/chat — success, provider=%s, model=%s, elapsed=%.2f, output_len=%d",
             body.provider, model, elapsed, len(content),
@@ -4238,6 +4277,18 @@ def playground_chat(body: PlaygroundChatRequest):
     except Exception as exc:
         elapsed = round(_t.time() - start, 2)
         error_msg = str(exc)
+        if trace:
+            try:
+                trace.generation(
+                    name=f"{body.provider}:{model}",
+                    model=model,
+                    input=body.messages,
+                    output=error_msg,
+                    level="ERROR",
+                    status_message=error_msg,
+                )
+            except Exception:
+                pass
         logger.error(
             "POST /api/v1/playground/chat — provider error: %s, provider=%s, model=%s, elapsed=%.2f",
             error_msg, body.provider, model, elapsed,
