@@ -54,6 +54,14 @@
             {{ m.name }}
           </option>
         </select>
+        <div class="pg-control-group">
+          <label>Max tokens</label>
+          <select v-model.number="maxTokens" class="pg-select">
+            <option :value="4096">4096</option>
+            <option :value="8192">8192 (default)</option>
+            <option :value="16384">16384</option>
+          </select>
+        </div>
         <div class="pg-templates-dropdown" style="position: relative;">
           <button class="cmd-btn cmd-btn-muted" @click="templatesOpen = !templatesOpen">
             TEMPLATES
@@ -141,6 +149,7 @@
       var searchOpen = ref(false);
       var chatArea = ref(null);
       var activeRequestProvider = ref('');
+      var maxTokens = ref(8192);
 
       var currentProviderData = computed(function() {
         return providers.value.find(function(p) { return p.id === selectedProvider.value; });
@@ -223,7 +232,7 @@
           provider: selectedProvider.value,
           model: selectedModel.value,
           messages: apiMessages,
-          max_tokens: 4096
+          max_tokens: maxTokens.value
         }).then(function(result) {
           messages.value.push({
             role: 'assistant',
@@ -303,7 +312,8 @@
         applyTemplate: applyTemplate,
         sendMessage: sendMessage,
         clearChat: clearChat,
-        renderMarkdown: renderMarkdown
+        renderMarkdown: renderMarkdown,
+        maxTokens: maxTokens
       };
     }
   });

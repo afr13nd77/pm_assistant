@@ -4221,6 +4221,9 @@ def playground_chat(body: PlaygroundChatRequest):
             timeout=timeout,
         )
         elapsed = round(_t.time() - start, 2)
+        # Strip reasoning blocks from models like Nemotron/Qwen
+        import re as _re
+        content = _re.sub(r"<think>.*?</think>", "", content, flags=_re.DOTALL).strip()
         logger.info(
             "POST /api/v1/playground/chat — success, provider=%s, model=%s, elapsed=%.2f, output_len=%d",
             body.provider, model, elapsed, len(content),
