@@ -677,16 +677,42 @@ function registerComponents(app) {
       body:     { type: String, default: '' },
       title:    { type: String, default: '' }
     },
-    emits: ['close', 'saved'],
+    emits: ['close', 'saved', 'ai-mode-changed'],
     data: function() {
       return {
         editBody: '',
         saving: false,
         errorMsg: '',
-        dirty: false
+        dirty: false,
+        aiEnabled: false,
+        aiMessages: [],
+        aiLoading: false,
+        aiInput: '',
+        aiProvider: 'claude',
+        aiModel: '',
+        colSplit2: 0.5,
+        colSplit3: [0.4, 0.4, 400],
+        colResizing: false,
+        colResizeIndex: -1
       };
     },
     computed: {
+      splitStyle: function() {
+        if (this.aiEnabled) {
+          var f0 = this.colSplit3[0];
+          var f1 = this.colSplit3[1];
+          var aiPx = this.colSplit3[2];
+          var total = f0 + f1;
+          var edPct = (f0 / total * 100).toFixed(2);
+          var prPct = (f1 / total * 100).toFixed(2);
+          return {
+            gridTemplateColumns: 'calc((100% - 12px - ' + aiPx + 'px) * ' + edPct + ' / 100) 6px calc((100% - 12px - ' + aiPx + 'px) * ' + prPct + ' / 100) 6px ' + aiPx + 'px'
+          };
+        }
+        return {
+          gridTemplateColumns: (this.colSplit2 * 100).toFixed(2) + '% 6px ' + ((1 - this.colSplit2) * 100).toFixed(2) + '%'
+        };
+      },
       preview: function() {
         if (typeof marked !== 'undefined' && marked.parse) {
           try {
@@ -702,6 +728,102 @@ function registerComponents(app) {
       }
     },
     methods: {
+      aiSendMessage: function() {
+        var text = this.aiInput.trim();
+        if (!text || this.aiLoading) return;
+
+        this.aiMessages.push({
+          role: 'user',
+          content: text,
+          ts: new Date()
+        });
+        this.aiInput = '';
+        this.aiLoading = true;
+        this.aiScrollToBottom();
+
+        var self = this;
+        var apiMessages = this.aiMessages
+          .filter(function(m) { return m.role === 'user' || m.role === 'assistant'; })
+          .filter(function(m) { return !m.error; })
+          .map(function(m) { return { role: m.role, content: m.content }; });
+
+        api.aiAgentChat({
+          provider: self.aiProvider,
+          model: self.aiModel || null,
+          messages: apiMessages,
+          idea_id: self.filename,
+          idea_body: self.editBody,
+          max_tokens: 8192
+        }).then(function(resp) {
+          self.aiMessages.push({
+            role: 'assistant',
+            content: resp.content,
+            ts: new Date(),
+            meta: {
+              elapsed: resp.elapsed_seconds,
+              provider: resp.provider,
+              model: resp.model
+            }
+          });
+          self.aiLoading = false;
+          self.aiScrollToBottom();
+        }).catch(function(err) {
+          var errorText = (err && err.message) || 'Ошибка соединения с агентом';
+          var match = errorText.match(/API error: \d+ (.*)/);
+          if (match) {
+            try {
+              var parsed = JSON.parse(match[1]);
+              errorText = parsed.detail || errorText;
+            } catch(e) { /* use raw */ }
+          }
+          self.aiMessages.push({
+            role: 'assistant',
+            content: errorText,
+            ts: new Date(),
+            error: true
+          });
+          self.aiLoading = false;
+          self.aiScrollToBottom();
+        });
+      },
+      aiHandleQuickAction: function(actionId) {
+        var prompts = {
+          strengthen: 'Усиль описание проблемы в этой идее. Сделай её более конкретной: добавь метрики, цифры, последствия для бизнеса. Покажи масштаб проблемы.',
+          hypothesis: 'Сформулируй 2-3 проверяемые гипотезы на основе этой идеи. Для каждой укажи: что проверяем, метрику успеха, способ проверки и срок.',
+          kpi: 'Предложи 3-5 ключевых метрик (KPI) для оценки успешности этой идеи. Для каждой метрики укажи: текущее значение (если можно оценить), целевое значение, способ измерения.',
+          prd: 'Подготовь структуру PRD на основе этой идеи. Включи: проблему, целевую аудиторию, предлагаемое решение, user stories, acceptance criteria, метрики успеха, риски, out of scope.'
+        };
+        var text = prompts[actionId];
+        if (!text) return;
+        this.aiInput = text;
+        this.aiSendMessage();
+      },
+      aiRenderMarkdown: function(content) {
+        if (typeof marked !== 'undefined' && marked.parse) {
+          try {
+            var renderer = new marked.Renderer();
+            renderer.link = function(href, title, text) {
+              if (typeof href === 'object') { text = href.text; title = href.title; href = href.href; }
+              return '<a href="' + href + '" target="_blank" rel="noopener noreferrer"' +
+                     (title ? ' title="' + title + '"' : '') + '>' + (text || href) + '</a>';
+            };
+            return marked.parse(content, { renderer: renderer });
+          } catch(e) { return content; }
+        }
+        return content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+      },
+      aiFormatTime: function(d) {
+        if (!d) return '';
+        var dt = d instanceof Date ? d : new Date(d);
+        return ('0' + dt.getHours()).slice(-2) + ':' + ('0' + dt.getMinutes()).slice(-2);
+      },
+      aiScrollToBottom: function() {
+        var self = this;
+        this.$nextTick(function() {
+          var area = self.$refs.aiChatArea;
+          if (area) area.scrollTop = area.scrollHeight;
+        });
+      },
       save: function() {
         if (this.saving) return;
         this.saving = true;
@@ -738,6 +860,73 @@ function registerComponents(app) {
         if (e.target === e.currentTarget) {
           this.tryClose();
         }
+      },
+      colStartResize: function(index, event) {
+        event.preventDefault();
+        this.colResizing = true;
+        this.colResizeIndex = index;
+        var split = this.$el.querySelector('.body-editor-split');
+        this._resizeContainerWidth = split.getBoundingClientRect().width;
+        this._resizeStartX = event.clientX;
+        if (this.aiEnabled) {
+          this._resizeStartSplit3 = this.colSplit3.slice();
+        } else {
+          this._resizeStartSplit2 = this.colSplit2;
+        }
+        var self = this;
+        this._boundColResize = function(e) { self._doColResize(e); };
+        this._boundColResizeEnd = function(e) { self._endColResize(e); };
+        document.addEventListener('mousemove', this._boundColResize);
+        document.addEventListener('mouseup', this._boundColResizeEnd);
+      },
+      _doColResize: function(event) {
+        var delta = event.clientX - this._resizeStartX;
+        var w = this._resizeContainerWidth;
+        if (!w || w < 100) return;
+        if (this.aiEnabled && this.colResizeIndex === 1) {
+          var startAi = this._resizeStartSplit3[2];
+          var newAi = Math.max(200, Math.min(600, startAi - delta));
+          this.colSplit3 = [this.colSplit3[0], this.colSplit3[1], newAi];
+        } else if (this.aiEnabled && this.colResizeIndex === 0) {
+          var totalFrac = this._resizeStartSplit3[0] + this._resizeStartSplit3[1];
+          var contentWidth = w - 12 - this.colSplit3[2];
+          var deltaFrac = delta / contentWidth * totalFrac;
+          var newF0 = Math.max(0.15, Math.min(totalFrac - 0.15, this._resizeStartSplit3[0] + deltaFrac));
+          var newF1 = totalFrac - newF0;
+          this.colSplit3 = [newF0, newF1, this.colSplit3[2]];
+        } else {
+          var deltaFrac2 = delta / w;
+          var newSplit = Math.max(0.2, Math.min(0.8, this._resizeStartSplit2 + deltaFrac2));
+          this.colSplit2 = newSplit;
+        }
+      },
+      _endColResize: function() {
+        document.removeEventListener('mousemove', this._boundColResize);
+        document.removeEventListener('mouseup', this._boundColResizeEnd);
+        this.colResizing = false;
+        this._boundColResize = null;
+        this._boundColResizeEnd = null;
+        var self = this;
+        clearTimeout(this._colSaveTimer);
+        this._colSaveTimer = setTimeout(function() {
+          api.getUserPrefs().then(function(current) {
+            current.editor_col_split_2 = self.colSplit2;
+            current.editor_col_split_3 = self.colSplit3.slice();
+            api.saveUserPrefs(current);
+          }).catch(function(err) {
+            console.warn('Failed to save column split prefs:', err);
+          });
+        }, 500);
+      },
+      colResetSplit: function() {
+        this.colSplit2 = 0.5;
+        this.colSplit3 = [0.4, 0.4, 400];
+        var self = this;
+        api.getUserPrefs().then(function(current) {
+          current.editor_col_split_2 = 0.5;
+          current.editor_col_split_3 = [0.4, 0.4, 400];
+          api.saveUserPrefs(current);
+        }).catch(function() {});
       }
     },
     watch: {
@@ -748,6 +937,16 @@ function registerComponents(app) {
           this.dirty = false;
           this.errorMsg = '';
           this.saving = false;
+          this.aiMessages = [];
+          this.aiLoading = false;
+          this.aiInput = '';
+          this.aiEnabled = false;
+          api.getUserPrefs().then(function(prefs) {
+            self.aiProvider = prefs.ai_agent_provider || 'claude';
+            self.aiModel = prefs.ai_agent_model || '';
+            if (typeof prefs.editor_col_split_2 === 'number') self.colSplit2 = prefs.editor_col_split_2;
+            if (Array.isArray(prefs.editor_col_split_3) && prefs.editor_col_split_3.length === 3) self.colSplit3 = prefs.editor_col_split_3;
+          }).catch(function() { /* use defaults */ });
           this._keyHandler = function(e) { self.onKeydown(e); };
           document.addEventListener('keydown', this._keyHandler);
         } else {
@@ -756,16 +955,31 @@ function registerComponents(app) {
             this._keyHandler = null;
           }
         }
+      },
+      aiEnabled: function(val) {
+        if (val) {
+          this.aiMessages.push({
+            role: 'assistant',
+            content: 'Контекст проекта и текст идеи загружены.\nГотов помочь: уточнить проблему, усилить USP, сформулировать гипотезы, риски и план проверки.',
+            ts: new Date()
+          });
+          this.aiScrollToBottom();
+        }
+        this.$emit('ai-mode-changed', val);
       }
     },
     beforeUnmount: function() {
       if (this._keyHandler) {
         document.removeEventListener('keydown', this._keyHandler);
       }
+      if (this._boundColResize) {
+        document.removeEventListener('mousemove', this._boundColResize);
+        document.removeEventListener('mouseup', this._boundColResizeEnd);
+      }
     },
     template: '\
       <div v-if="open" class="body-editor-overlay" @click="onOverlayClick">\
-        <div class="body-editor-panel">\
+        <div class="body-editor-panel" :class="{ \'ai-agent-expanded\': aiEnabled }">\
           <div class="body-editor-header">\
             <span class="body-editor-title">EDIT: {{ title || filename }}</span>\
             <div class="body-editor-actions">\
@@ -775,11 +989,68 @@ function registerComponents(app) {
               </button>\
             </div>\
           </div>\
+          <div class="ai-agent-toggle-bar">\
+            <label class="ai-agent-toggle-label">\
+              Режим работы с ИИ\
+              <input type="checkbox" v-model="aiEnabled" class="ai-agent-toggle-checkbox">\
+              <span class="ai-agent-toggle-switch"></span>\
+            </label>\
+          </div>\
           <div v-if="saving" class="body-editor-saving-bar"></div>\
           <div v-if="errorMsg" class="body-editor-error">{{ errorMsg }}</div>\
-          <div class="body-editor-split">\
+          <div class="body-editor-split" :class="{ \'ai-agent-active\': aiEnabled, \'col-resizing\': colResizing }" :style="splitStyle">\
             <textarea class="body-editor-textarea" v-model="editBody" @input="dirty = true" placeholder="Markdown body..."></textarea>\
+            <div class="col-resize-handle" @mousedown="colStartResize(0, $event)" @dblclick="colResetSplit"></div>\
             <div class="body-editor-preview" v-html="preview"></div>\
+            <div v-if="aiEnabled" class="col-resize-handle" @mousedown="colStartResize(1, $event)" @dblclick="colResetSplit"></div>\
+            <div v-if="aiEnabled" class="ai-agent-panel">\
+              <div class="ai-agent-header">\
+                <span class="ai-agent-header-icon">&#10022;</span>\
+                AI Agent\
+              </div>\
+              <div class="ai-agent-chips">\
+                <span class="ai-agent-chip">Контекст проекта загружен</span>\
+                <span class="ai-agent-chip">Идея: {{ filename }}</span>\
+              </div>\
+              <div class="ai-agent-messages" ref="aiChatArea">\
+                <div v-for="(msg, i) in aiMessages" :key="i"\
+                     :class="[\'ai-agent-msg\', \'ai-agent-msg-\' + msg.role, { \'ai-agent-msg-error\': msg.error }]">\
+                  <div class="ai-agent-msg-content" v-html="aiRenderMarkdown(msg.content)"></div>\
+                  <div class="ai-agent-msg-meta">\
+                    <span class="ai-agent-msg-time">{{ aiFormatTime(msg.ts) }}</span>\
+                  </div>\
+                </div>\
+                <div v-if="aiLoading" class="ai-agent-loading">\
+                  <span class="ai-agent-loading-dot"></span>\
+                  <span class="ai-agent-loading-dot"></span>\
+                  <span class="ai-agent-loading-dot"></span>\
+                </div>\
+              </div>\
+              <div class="ai-agent-actions">\
+                <button class="ai-agent-action-btn" @click="aiHandleQuickAction(\'strengthen\')"\
+                        :disabled="aiLoading">Усилить проблему</button>\
+                <button class="ai-agent-action-btn" @click="aiHandleQuickAction(\'hypothesis\')"\
+                        :disabled="aiLoading">Сформулировать гипотезу</button>\
+                <button class="ai-agent-action-btn" @click="aiHandleQuickAction(\'kpi\')"\
+                        :disabled="aiLoading">Добавить KPI</button>\
+                <button class="ai-agent-action-btn" @click="aiHandleQuickAction(\'prd\')"\
+                        :disabled="aiLoading">Подготовить PRD</button>\
+              </div>\
+              <div class="ai-agent-input-area">\
+                <input class="ai-agent-input"\
+                       v-model="aiInput"\
+                       @keydown.enter="aiSendMessage"\
+                       :disabled="aiLoading"\
+                       placeholder="Напишите сообщение агенту...">\
+                <button class="ai-agent-send-btn" @click="aiSendMessage"\
+                        :disabled="aiLoading || !aiInput.trim()">\
+                  &#10148;\
+                </button>\
+              </div>\
+              <div class="ai-agent-footer">\
+                Агент отвечает в контексте проекта и текущей идеи\
+              </div>\
+            </div>\
           </div>\
         </div>\
       </div>'
@@ -950,12 +1221,15 @@ function registerComponents(app) {
     data: function() {
       return {
         domains: [],
-        bodyEditorOpen: false
+        bodyEditorOpen: false,
+        aiModeActive: false
       };
     },
     computed: {
       drawerClass: function() {
-        return this.open ? 'task-drawer open' : 'task-drawer';
+        var cls = this.open ? 'task-drawer open' : 'task-drawer';
+        if (this.aiModeActive) cls += ' ai-agent-drawer-wide';
+        return cls;
       },
       itemTags: function() {
         if (!this.item || !this.item.tags) return [];
@@ -1002,6 +1276,7 @@ function registerComponents(app) {
           if (resp && resp.readiness != null) this.item.readiness = resp.readiness;
         }
         this.bodyEditorOpen = false;
+        this.aiModeActive = false;
         this.$emit('field-updated', 'body', newBody, resp);
       }
     },
@@ -1058,7 +1333,7 @@ function registerComponents(app) {
             <div class="task-drawer-content" v-if="item.body" v-html="renderMdSafe(item.body)"></div>\
             <div v-else style="color:var(--text-muted,#888);font-size:12px;">No body content</div>\
           </div>\
-          <body-editor :open="bodyEditorOpen" :filename="item.filename || \'\'" :body="item.body || \'\'" :title="item.id || item.filename || \'\'" @close="bodyEditorOpen = false" @saved="onBodySaved"></body-editor>\
+          <body-editor :open="bodyEditorOpen" :filename="item.filename || \'\'" :body="item.body || \'\'" :title="item.id || item.filename || \'\'" @close="bodyEditorOpen = false; aiModeActive = false" @saved="onBodySaved" @ai-mode-changed="aiModeActive = $event"></body-editor>\
         </div>\
       </div>'
   });

@@ -2116,7 +2116,6 @@ body {
 .body-editor-btn-save { background: #b8860b; color: #fff; border-color: #b8860b; }
 .body-editor-textarea {
   color: #1a1a1a;
-  border-right-color: #d5c9a8;
 }
 .body-editor-preview { color: #333; }
 .body-editor-preview h1, .body-editor-preview h2, .body-editor-preview h3 { color: #1a1a1a; }
@@ -2124,6 +2123,129 @@ body {
 .body-editor-preview pre { background: rgba(0,0,0,0.03); }
 .body-editor-preview a { color: #b8860b; }
 .body-editor-error { color: #c62828; background: rgba(198, 40, 40, 0.06); }
+
+/* ============================================================
+   AI AGENT — LIGHT THEME OVERRIDES (BL-230)
+   ============================================================ */
+
+.ai-agent-toggle-bar {
+  border-bottom-color: #d5c9a8;
+}
+.ai-agent-toggle-label {
+  color: #333;
+}
+.ai-agent-toggle-switch {
+  background: #d5c9a8;
+}
+.ai-agent-toggle-switch::after {
+  background: #999;
+}
+.ai-agent-toggle-checkbox:checked + .ai-agent-toggle-switch {
+  background: #b8860b;
+}
+.ai-agent-toggle-checkbox:checked + .ai-agent-toggle-switch::after {
+  background: #fff;
+}
+
+.ai-agent-panel {
+  border-left-color: #d5c9a8;
+}
+.ai-agent-header {
+  border-bottom-color: #d5c9a8;
+  color: #1a1a1a;
+}
+.ai-agent-header-icon {
+  color: #b8860b;
+}
+
+.ai-agent-chip {
+  background: #f5f0e5;
+  border-color: #d5c9a8;
+  color: #555;
+}
+
+.ai-agent-msg-assistant {
+  background: #f8f5ee;
+  border-color: #e0dbd0;
+}
+.ai-agent-msg-user {
+  background: #fff;
+  border-color: #d5c9a8;
+}
+.ai-agent-msg-content {
+  color: #333;
+}
+.ai-agent-msg-content h1,
+.ai-agent-msg-content h2,
+.ai-agent-msg-content h3 {
+  color: #1a1a1a;
+}
+.ai-agent-msg-content code {
+  background: rgba(0, 0, 0, 0.04);
+}
+.ai-agent-msg-content pre {
+  background: rgba(0, 0, 0, 0.03);
+}
+.ai-agent-msg-time {
+  color: #999;
+}
+
+.ai-agent-msg-error {
+  border-color: rgba(198, 40, 40, 0.3);
+  background: rgba(198, 40, 40, 0.04);
+}
+.ai-agent-msg-error .ai-agent-msg-content {
+  color: #c62828;
+}
+
+.ai-agent-loading-dot {
+  background: #b8860b;
+}
+
+.ai-agent-actions {
+  border-top-color: #d5c9a8;
+}
+.ai-agent-action-btn {
+  border-color: rgba(184, 134, 11, 0.35);
+  color: #b8860b;
+}
+.ai-agent-action-btn:hover {
+  background: rgba(184, 134, 11, 0.08);
+  border-color: #b8860b;
+}
+
+.ai-agent-input-area {
+  border-top-color: #d5c9a8;
+}
+.ai-agent-input {
+  background: #fff;
+  border-color: #d5c9a8;
+  color: #1a1a1a;
+}
+.ai-agent-input:focus {
+  border-color: #b8860b;
+}
+.ai-agent-input::placeholder {
+  color: #999;
+}
+.ai-agent-send-btn {
+  background: #b8860b;
+  color: #fff;
+}
+
+.ai-agent-footer {
+  color: #999;
+  border-top-color: #d5c9a8;
+}
+
+/* Column resize handle — light theme */
+.col-resize-handle {
+  background: var(--border, #e0e0e0);
+}
+.col-resize-handle:hover,
+.col-resize-handle:active {
+  background: var(--accent-cyan, #0097a7);
+}
 
 /* ================================================================
    CAPTURE TERMINAL EXTENDED — light overrides (BL-137)

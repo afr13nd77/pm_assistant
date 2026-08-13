@@ -86,12 +86,16 @@ for (var i = 0; i < expectedComponents.length; i++) {
   assert('app-sidebar template has nav-link class', comp.template.indexOf('nav-link') >= 0);
   assert('app-sidebar template has nav-divider', comp.template.indexOf('nav-divider') >= 0);
   /* Links are generated via computed.links(), check they exist in the computed function */
-  var linksResult = comp.computed.links();
-  var linkHrefs = linksResult.map(function(l) { return l.href; });
-  assert('app-sidebar computed has board.html link', linkHrefs.indexOf('board.html') >= 0);
-  assert('app-sidebar computed has roadmap.html link', linkHrefs.indexOf('roadmap.html') >= 0);
-  assert('app-sidebar computed has timeline.html link', linkHrefs.indexOf('timeline.html') >= 0);
-  assert('app-sidebar computed has report.html link', linkHrefs.indexOf('report.html') >= 0);
+  if (comp.computed && typeof comp.computed.links === 'function') {
+    var linksResult = comp.computed.links();
+    var linkHrefs = linksResult.map(function(l) { return l.href; });
+    assert('app-sidebar computed has board.html link', linkHrefs.indexOf('board.html') >= 0);
+    assert('app-sidebar computed has roadmap.html link', linkHrefs.indexOf('roadmap.html') >= 0);
+    assert('app-sidebar computed has timeline.html link', linkHrefs.indexOf('timeline.html') >= 0);
+    assert('app-sidebar computed has report.html link', linkHrefs.indexOf('report.html') >= 0);
+  } else {
+    assert('app-sidebar computed.links exists (skipped — links may be in template)', false, 'computed.links not found');
+  }
   assert('app-sidebar template links to settings.html', comp.template.indexOf('settings.html') >= 0);
 })();
 
@@ -476,13 +480,14 @@ for (var i = 0; i < expectedComponents.length; i++) {
     { key: 'SUP-2', type: 'Story', status: 'In Progress' },
     { key: 'SUP-3', type: 'Bug', status: 'In Progress' }
   ];
-  var allTickets = comp.computed.filteredTickets.call({ tickets: mockTickets, typeFilter: '', statusFilter: '' });
+  var ticketCtx = { tickets: mockTickets, typeFilter: '', statusFilter: '', directKey: '' };
+  var allTickets = comp.computed.filteredTickets.call(ticketCtx);
   assert('filteredTickets returns all when no filter', allTickets.length === 3);
-  var typeFiltered = comp.computed.filteredTickets.call({ tickets: mockTickets, typeFilter: 'Bug', statusFilter: '' });
+  var typeFiltered = comp.computed.filteredTickets.call({ tickets: mockTickets, typeFilter: 'Bug', statusFilter: '', directKey: '' });
   assert('filteredTickets filters by type', typeFiltered.length === 2);
-  var statusFiltered = comp.computed.filteredTickets.call({ tickets: mockTickets, typeFilter: '', statusFilter: 'In Progress' });
+  var statusFiltered = comp.computed.filteredTickets.call({ tickets: mockTickets, typeFilter: '', statusFilter: 'In Progress', directKey: '' });
   assert('filteredTickets filters by status', statusFiltered.length === 2);
-  var bothFiltered = comp.computed.filteredTickets.call({ tickets: mockTickets, typeFilter: 'Bug', statusFilter: 'In Progress' });
+  var bothFiltered = comp.computed.filteredTickets.call({ tickets: mockTickets, typeFilter: 'Bug', statusFilter: 'In Progress', directKey: '' });
   assert('filteredTickets filters by both', bothFiltered.length === 1 && bothFiltered[0].key === 'SUP-3');
 
   /* Computed: selectedCount */
@@ -499,9 +504,9 @@ for (var i = 0; i < expectedComponents.length; i++) {
 
   /* Computed: canImport */
   assert('capture-terminal has computed.canImport', typeof comp.computed.canImport === 'function');
-  assert('canImport true when selected and not importing', comp.computed.canImport.call({ selectedTicketIds: ['X'], importing: false }) === true);
-  assert('canImport false when none selected', comp.computed.canImport.call({ selectedTicketIds: [], importing: false }) === false);
-  assert('canImport false when importing', comp.computed.canImport.call({ selectedTicketIds: ['X'], importing: true }) === false);
+  assert('canImport true when selected and not importing', comp.computed.canImport.call({ selectedTicketIds: ['X'], importing: false, directKey: '' }) === true);
+  assert('canImport false when none selected', comp.computed.canImport.call({ selectedTicketIds: [], importing: false, directKey: '' }) === false);
+  assert('canImport false when importing', comp.computed.canImport.call({ selectedTicketIds: ['X'], importing: true, directKey: '' }) === false);
 
   /* Computed: recentProjects and otherProjects */
   assert('capture-terminal has computed.recentProjects', typeof comp.computed.recentProjects === 'function');
@@ -699,6 +704,84 @@ for (var i = 0; i < expectedComponents.length; i++) {
   for (var i = 0; i < ctClasses.length; i++) {
     assert('style.css has ' + ctClasses[i], cssContent.indexOf(ctClasses[i]) >= 0);
   }
+})();
+
+/* ========================================
+   Test body-editor column resize (BL-231 T-02)
+   ======================================== */
+(function() {
+  var comp = registeredComponents['body-editor'];
+  assert('body-editor is registered', comp !== undefined);
+
+  /* Data fields for column resize */
+  var data = comp.data();
+  assert('body-editor data.colSplit2 is 0.5', data.colSplit2 === 0.5);
+  assert('body-editor data.colSplit3 is [0.4, 0.4, 400]',
+    Array.isArray(data.colSplit3) && data.colSplit3[0] === 0.4 && data.colSplit3[1] === 0.4 && data.colSplit3[2] === 400);
+  assert('body-editor data.colResizing is false', data.colResizing === false);
+  assert('body-editor data.colResizeIndex is -1', data.colResizeIndex === -1);
+
+  /* Computed: splitStyle — 2-col mode (aiEnabled=false) */
+  assert('body-editor has computed.splitStyle', typeof comp.computed.splitStyle === 'function');
+  var ctx2col = { aiEnabled: false, colSplit2: 0.5 };
+  var style2 = comp.computed.splitStyle.call(ctx2col);
+  assert('splitStyle 2-col has gridTemplateColumns', typeof style2.gridTemplateColumns === 'string');
+  assert('splitStyle 2-col contains 50.00%', style2.gridTemplateColumns.indexOf('50.00%') >= 0);
+  assert('splitStyle 2-col contains 6px', style2.gridTemplateColumns.indexOf('6px') >= 0);
+
+  /* Computed: splitStyle — 3-col mode (aiEnabled=true) */
+  var ctx3col = { aiEnabled: true, colSplit3: [0.4, 0.4, 400] };
+  var style3 = comp.computed.splitStyle.call(ctx3col);
+  assert('splitStyle 3-col has gridTemplateColumns', typeof style3.gridTemplateColumns === 'string');
+  assert('splitStyle 3-col contains 400px', style3.gridTemplateColumns.indexOf('400px') >= 0);
+  assert('splitStyle 3-col contains two 6px handles', style3.gridTemplateColumns.split('6px').length === 3);
+
+  /* Computed: splitStyle — asymmetric 2-col */
+  var ctxAsym = { aiEnabled: false, colSplit2: 0.3 };
+  var styleAsym = comp.computed.splitStyle.call(ctxAsym);
+  assert('splitStyle 2-col 30/70 contains 30.00%', styleAsym.gridTemplateColumns.indexOf('30.00%') >= 0);
+  assert('splitStyle 2-col 30/70 contains 70.00%', styleAsym.gridTemplateColumns.indexOf('70.00%') >= 0);
+
+  /* Methods exist */
+  assert('body-editor has colStartResize method', typeof comp.methods.colStartResize === 'function');
+  assert('body-editor has _doColResize method', typeof comp.methods._doColResize === 'function');
+  assert('body-editor has _endColResize method', typeof comp.methods._endColResize === 'function');
+  assert('body-editor has colResetSplit method', typeof comp.methods.colResetSplit === 'function');
+
+  /* Template checks */
+  var tmpl = comp.template;
+  assert('body-editor template has col-resize-handle', tmpl.indexOf('col-resize-handle') >= 0);
+  assert('body-editor template has colStartResize', tmpl.indexOf('colStartResize') >= 0);
+  assert('body-editor template has colResetSplit', tmpl.indexOf('colResetSplit') >= 0);
+  assert('body-editor template has splitStyle binding', tmpl.indexOf('splitStyle') >= 0);
+  assert('body-editor template has col-resizing class binding', tmpl.indexOf('col-resizing') >= 0);
+  assert('body-editor template has two col-resize-handle divs',
+    tmpl.split('col-resize-handle').length >= 3); /* class name appears at least 3 times: 2 divs + possible CSS class ref */
+
+  /* beforeUnmount has resize cleanup */
+  var beforeUnmount = comp.beforeUnmount.toString();
+  assert('beforeUnmount cleans up _boundColResize', beforeUnmount.indexOf('_boundColResize') >= 0);
+})();
+
+/* Test style.css has column resize classes (BL-231) */
+(function() {
+  var cssPath = path.join(__dirname, '..', 'style.css');
+  var cssContent = fs.readFileSync(cssPath, 'utf8');
+  assert('style.css has .col-resize-handle', cssContent.indexOf('.col-resize-handle') >= 0);
+  assert('style.css has .col-resize-handle cursor: col-resize', cssContent.indexOf('cursor: col-resize') >= 0);
+  assert('style.css has .col-resizing', cssContent.indexOf('.col-resizing') >= 0);
+  assert('style.css has .col-resizing pointer-events: none', cssContent.indexOf('pointer-events: none') >= 0);
+  assert('style.css body-editor-split grid has 6px', cssContent.indexOf('grid-template-columns: 1fr 6px 1fr') >= 0);
+  assert('style.css ai-agent-active grid has 6px handles',
+    cssContent.indexOf('grid-template-columns: 1fr 6px 1fr 6px var(--ai-col') >= 0);
+})();
+
+/* Test style-light.css has column resize overrides (BL-231) */
+(function() {
+  var lightCssPath = path.join(__dirname, '..', 'style-light.css');
+  var lightCss = fs.readFileSync(lightCssPath, 'utf8');
+  assert('style-light.css has .col-resize-handle', lightCss.indexOf('.col-resize-handle') >= 0);
+  assert('style-light.css has col-resize-handle hover accent', lightCss.indexOf('#0097a7') >= 0);
 })();
 
 /* Summary */

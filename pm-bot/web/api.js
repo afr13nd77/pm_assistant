@@ -470,6 +470,15 @@ var api = {
     });
   },
 
+  /** POST /api/v1/ai-agent/chat -- send message to AI agent with idea context */
+  aiAgentChat: function(body) {
+    return apiFetch('/ai-agent/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  },
+
   /** GET /api/v1/system-log -- system process log with optional filters */
   systemLog: function(params) {
     var parts = [];

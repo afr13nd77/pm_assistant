@@ -1,8 +1,8 @@
 # Бэклог -- PM Assistant
 
 **Версии:** pm-bot 1.27.2 / knowledge-engine 1.24.2 / idea-pipeline 1.2.0 / web-ui 1.32.0 / shared 0.7.5
-**Обновлён:** 11.08.2026 (BL-212 playground-think-blocks-langfuse)
-**Бэклог:** реализованные фичи (111), баги (36), идеи (51), итого (198)
+**Обновлён:** 13.08.2026 (BL-231 — Ресайз колонок в body-editor)
+**Бэклог:** реализованные фичи (113), баги (36), идеи (68), итого (217)
 
 ---
 
@@ -155,6 +155,8 @@
 | BL-172 | ✅ Настройка CalDAV в Settings UI | web-ui, pm-bot | Секция «CALENDAR» на settings.html: username, app password, timezone, URL. Сохранение через user-prefs API. TEST CONNECTION → POST /api/v1/test-caldav. Статус подключения (connected/disabled/error). calendar_client.py: динамические credentials из user-prefs с fallback на env. Маскировка пароля в GET. Спека: docs/BL-172_caldav-settings-ui/ |
 | BL-188 | ✅ Auto-refresh встреч на TODAY | web-ui | today.html: автоматическое обновление блока встреч (CalDAV) каждые 15 минут через setInterval. loadMeetings(true) с инвалидацией CalDAV-кэша. cleanup в beforeUnmount. Безусловный (без проверки refreshMode). Спека: docs/BL-188_today-meetings-autorefresh/ |
 | BL-195 | ✅ Research Queue UI — мониторинг исследований | web-ui, pm-bot, knowledge-engine | Pipeline graph страница `research.html` в стиле n8n: 7 узлов (2 ghost + 5 основных), SVG edges с dash-offset анимацией, drawer для деталей задания. 3 API endpoint (status, run, retry) через полный proxy-chain (KE → ke_client → vault_api → api.js). Completeness badges, auto-refresh 60s, responsive. Спека: docs/BL-195_research-queue-ui/ |
+| BL-230 | ✅ AI-агент в редакторе идеи | web-ui, pm-bot | В body-editor (редактор идеи) добавлен режим AI-агента — чат с LLM для доработки идей. Тогл «Режим работы с ИИ», 3-колоночный layout, чат-интерфейс. Бизнес-контекст и текст идеи передаются автоматически. Quick-action кнопки (усилить проблему, гипотеза, KPI, PRD). Настройка модели в Settings: секция AI AGENT (Claude / Ollama / OpenRouter). Langfuse трейсинг (trace name: ai-agent-chat). User-prefs: поля ai_agent_provider, ai_agent_model. Endpoint POST /api/v1/ai-agent/chat. Спека: docs/BL-230_ai-agent-editor/ |
+| BL-231 | ✅ Ресайз колонок в body-editor | web-ui, pm-bot | Drag-handle между колонками в body-editor (6px, подсветка при hover). Ресайз в 2-колоночном (editor + preview) и 3-колоночном (+ AI чат) режимах. Пропорции сохраняются в user-prefs (editor_col_split_2, editor_col_split_3). Двойной клик по handle — сброс к дефолтным пропорциям. Блокировка выделения текста при drag. Responsive: handles скрыты на экранах < 1024px |
 
 ### 5.2 Идеи
 
@@ -391,12 +393,51 @@
 
 ---
 
-## 12. Сводка
+## 12. Задачи из аудита (12.08.2026)
+
+> Источник: `docs/TECH-AUDIT-2026-08-12.md` (6 параллельных направлений: архитектура, безопасность, тесты, техдолг, API/инфраструктура, ошибки/логирование).
+> Повторно подтверждены из предыдущих аудитов: BL-152, BL-174..BL-185 (14 задач).
+
+### 12.1 P0 — безопасность (немедленно)
+
+| # | Название | Компонент | Описание |
+|---|:---|:---|:---|
+| BL-213 | Path traversal protection | pm-bot, knowledge-engine, shared | 5 critical точек: (1) `vault_api.py:229` domain param → `wiki_domain_dir()` → `mkdir(parents=True)` вне vault; (2) `vault_api.py:2469` PUT domain-config/{slug} без проверки `..`; (3) `enricher.py:16` filepath без join с vault_path; (4) `decay_engine.py:342,394` абсолютный path обходит vault_root; (5) `digest/generator.py:113` source_path без проверки принадлежности. Fix: валидация domain по regex `^[a-z0-9_-]+$`, filepath через `.resolve()` + `is_relative_to(vault_root)` |
+| BL-214 | Input validation + sensitive data в логах | pm-bot, knowledge-engine | (1) `vault_api.py:128` CaptureRequest.text без max_length → бюджетный DoS через LLM. (2) `notifier.py:32` bot_token может утечь в exception message. (3) `calendar_client.py:53` CalDAV-пароль в стектрейсе. Fix: max_length на LLM-bound поля, маскировка URL в exception handlers |
+| BL-215 | Docker security hardening | инфраструктура | (1) `docker-compose.yml:13` `ipc: host` — убрать. (2) 3 Dockerfile без `USER` — процессы от root, добавить non-root. (3) Vault mount RW во всех 4 сервисах → `:ro` где запись не нужна. (4) `$JIRA_SYNC_CRON` в cron без валидации → command injection. (5) Дефолтные пароли Langfuse в закоммиченном файле → убрать fallback, требовать .env |
+
+### 12.2 P1 — техдолг (следующий спринт)
+
+| # | Название | Компонент | Описание |
+|---|:---|:---|:---|
+| BL-216 | Extract shared LLM helpers | shared, pm-bot, knowledge-engine | `_parse_json_response()` дублируется в 12+ местах (claude_client.py обоих компонентов, signal_moderator, idea_extractor, research_runner). `_load_prompt()` дублируется в pm-bot и KE. Вынести в `shared/llm_utils.py` |
+| BL-217 | Remove dead code | pm-bot, knowledge-engine, idea-pipeline, shared | (1) `artifact_extractor.py` — orphaned ~400 строк, не подключён к CLI/API. (2) `process_one.py:5` — импорт несуществующей функции. (3) `handlers.py:143` `_split_message()` не вызывается. (4) `vault_paths.py:115-173` — 7 неиспользуемых функций. (5) `models.py:76` ErrorResponse не используется. (6) `llm_client.py:768` deprecated `call_with_fallback()` используется в `reporter.py:346`. (7) `fix_broken_links.py:20` — хардкод абсолютного пути |
+| BL-218 | Standardize datetime to UTC-aware | shared, pm-bot, knowledge-engine, idea-pipeline | `datetime.now()` (naive) в 10+ файлах vs `datetime.now(timezone.utc)` в 3. В vault_api.py — оба варианта одновременно. Создать `shared/time_utils.py` с `utc_now()`, заменить все вызовы |
+| BL-219 | Extract hardcoded constants | shared, pm-bot, knowledge-engine | (1) `"claude-sonnet-4-6"` в 5+ файлах → `shared/constants.py`. (2) Дефолтная OpenRouter model рассогласована: `"qwen/qwen3-32b"` vs `"qwen/qwen3-next-80b-a3b-instruct:free"`. (3) Decay tier границы (7/21/60 дней) хардкожены → settings.yaml. (4) Token budgets (3000/10000/6000) в context_assembler → settings.yaml. (5) Таймауты 30/60с в KE claude_client.py |
+| BL-220 | Fix __import__() + print→logger + logging config | knowledge-engine, shared | (1) 20+ `__import__()` в cli.py — антипаттерн → обычные imports. (2) `print()` вместо logger в 6 файлах. (3) 4 независимых `basicConfig()` с разными форматами → `shared/logging_config.py` |
+| BL-221 | Fix HTTP 200 error responses | pm-bot, knowledge-engine | 5 endpoints возвращают ошибки с HTTP 200: test_ollama, test_openrouter, test_caldav, get_today_meetings (vault_api.py), domains_create (api.py). Ключ ошибки непоследователен: `"detail"` vs `"message"`. Fix: корректные HTTP-коды + унифицированный формат |
+| BL-222 | Add try/except to _call_claude/_call_ollama | shared | `llm_client.py:353-377` и `:380-423` без try/except. Исключения Anthropic SDK пролетают вверх без логирования на уровне функции |
+| BL-223 | Replace deprecated asyncio.get_event_loop() | pm-bot | `daily_alert.py:52` и `enrichment_reminder.py:296` — deprecated Python 3.12. При concurrent-вызовах → RuntimeError. Fix: `asyncio.run()` |
+| BL-224 | Add retry + timeout to inter-service HTTP clients | pm-bot | `ke_client.py` (25 функций) и `pipeline_client.py` без retry — перезагрузка KE роняет все запросы. `calendar_client.py` — CalDAV без timeout, зависнет при недоступности |
+
+### 12.3 P2 — качество (плановый рефакторинг)
+
+| # | Название | Компонент | Описание |
+|---|:---|:---|:---|
+| BL-225 | REST API naming consistency | pm-bot, knowledge-engine | Singular vs plural (`/artifact/` vs `/ideas/`), query vs path param для одного ресурса (project), `/signals/list` — verb suffix. Стандартизировать REST naming |
+| BL-226 | API pagination for list endpoints | pm-bot, knowledge-engine | GET /ideas, /tasks, /epics возвращают ВСЕ записи. При росте vault → slow responses / OOM. Добавить `?limit=&offset=` |
+| BL-227 | Fix dependency manifests | idea-pipeline, shared, pm-bot | (1) idea-pipeline/requirements.txt — нет `requests`. (2) Нет shared/requirements.txt — зависимости дублируются в 3 файлах. (3) `apscheduler>=3.10.4` без `<4.0.0`. (4) Неиспользуемые: recurring-ical-events, mdit-py-plugins |
+| BL-228 | CI: add testpaths + pytest-cov | инфраструктура | idea-pipeline/tests не в testpaths pyproject.toml. shared/tests не запускается в CI. Нет pytest-cov для измерения покрытия. Fix: testpaths, pytest-cov, coverage baseline |
+| BL-229 | Tests for untested core modules | shared, pm-bot | frontmatter_utils.py (все компоненты) — 0 тестов. ke_client.py (25 функций) — 0 тестов. vault_api.py (68 endpoints) — 0 integration-тестов. auth.py (idea-pipeline) — security boundary без тестов. Нет @pytest.mark.parametrize во всём проекте |
+
+---
+
+## 13. Сводка
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 111 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-192, BL-194..BL-195, BL-198..BL-203, BL-212 |
+| ✅ Реализовано | 113 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-192, BL-194..BL-195, BL-198..BL-203, BL-212, BL-230..BL-231 |
 | ✅ Баги исправлены | 36 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165, BL-193, BUG-027, BUG-028, BL-205, BL-206, BL-207, BL-208, BL-209, BL-210, BL-211 |
-| Идея | 51 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-188, BL-196..BL-197 |
+| Идея | 68 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-188, BL-196..BL-197, BL-204, BL-213..BL-229 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **196** | |
+| **Итого** | **217** | |

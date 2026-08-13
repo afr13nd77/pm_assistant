@@ -2734,6 +2734,10 @@ _DEFAULT_USER_PREFS = {
     "caldav_password": "",
     "caldav_timezone": "Europe/Moscow",
     "caldav_url": "https://caldav.yandex.ru/",
+    "ai_agent_provider": "claude",
+    "ai_agent_model": "",
+    "editor_col_split_2": 0.5,
+    "editor_col_split_3": [0.4, 0.4, 400],
 }
 
 
@@ -2766,6 +2770,10 @@ class UserPrefs(BaseModel):
     caldav_password: str = ""
     caldav_timezone: str = "Europe/Moscow"
     caldav_url: str = "https://caldav.yandex.ru/"
+    ai_agent_provider: str = "claude"
+    ai_agent_model: str = ""
+    editor_col_split_2: float = 0.5
+    editor_col_split_3: list[Any] = [0.4, 0.4, 400]
 
 
 def _read_user_prefs() -> dict:
@@ -2898,6 +2906,16 @@ def get_user_prefs():
         prefs["caldav_timezone"] = "Europe/Moscow"
     if "caldav_url" not in prefs:
         prefs["caldav_url"] = "https://caldav.yandex.ru/"
+    # --- AI Agent ---
+    if prefs.get("ai_agent_provider") not in _AI_AGENT_VALID_PROVIDERS:
+        prefs["ai_agent_provider"] = "claude"
+    if "ai_agent_model" not in prefs:
+        prefs["ai_agent_model"] = ""
+    # --- Editor column split ---
+    if "editor_col_split_2" not in prefs:
+        prefs["editor_col_split_2"] = 0.5
+    if "editor_col_split_3" not in prefs:
+        prefs["editor_col_split_3"] = [0.4, 0.4, 400]
     from shared.openrouter_client import DEFAULT_MODEL as _OR_DEFAULT_MODEL
     default_openrouter_model = prefs.get("openrouter_model") or _OR_DEFAULT_MODEL
     for key in ("capture_fallback", "transcription_fallback", "analysis_fallback", "pipeline_fallback", "signal_triage_fallback", "signal_analysis_fallback", "signal_escalation_fallback"):
@@ -2929,9 +2947,10 @@ def get_user_prefs():
         prefs["caldav_password"] = _CALDAV_PASSWORD_MASK
     logger.info(
         "GET /api/v1/user-prefs — returning refresh_mode=%s theme=%s"
-        " llm_provider=%s caldav_username=%s",
+        " llm_provider=%s caldav_username=%s ai_agent_provider=%s",
         prefs["refresh_mode"], prefs["theme"],
         prefs["llm_provider"], prefs.get("caldav_username", ""),
+        prefs.get("ai_agent_provider", "claude"),
     )
     return prefs
 
@@ -2974,6 +2993,41 @@ def put_user_prefs(body: UserPrefs):
             status_code=422,
             detail=f"capture_mode must be one of: {', '.join(sorted(_VALID_CAPTURE_MODES))}"
         )
+    # --- AI Agent fields ---
+    if body.ai_agent_provider not in _AI_AGENT_VALID_PROVIDERS:
+        logger.warning("PUT /api/v1/user-prefs — invalid ai_agent_provider: %s", body.ai_agent_provider)
+        body.ai_agent_provider = "claude"
+    if not isinstance(body.ai_agent_model, str):
+        logger.warning("PUT /api/v1/user-prefs — ai_agent_model is not a string, resetting to empty")
+        body.ai_agent_model = ""
+    logger.info(
+        "PUT /api/v1/user-prefs — ai_agent_provider=%s ai_agent_model=%s",
+        body.ai_agent_provider, body.ai_agent_model,
+    )
+    # --- Editor column split fields ---
+    if not isinstance(body.editor_col_split_2, (int, float)):
+        logger.warning("PUT /api/v1/user-prefs — editor_col_split_2 is not numeric, resetting to 0.5")
+        body.editor_col_split_2 = 0.5
+    else:
+        body.editor_col_split_2 = max(0.2, min(0.8, float(body.editor_col_split_2)))
+
+    if not isinstance(body.editor_col_split_3, list) or len(body.editor_col_split_3) != 3:
+        logger.warning("PUT /api/v1/user-prefs — editor_col_split_3 invalid format, resetting to defaults")
+        body.editor_col_split_3 = [0.4, 0.4, 400]
+    else:
+        try:
+            f0 = max(0.15, min(0.7, float(body.editor_col_split_3[0])))
+            f1 = max(0.15, min(0.7, float(body.editor_col_split_3[1])))
+            px = max(200, min(600, float(body.editor_col_split_3[2])))
+            body.editor_col_split_3 = [f0, f1, px]
+        except (TypeError, ValueError):
+            logger.warning("PUT /api/v1/user-prefs — editor_col_split_3 contains non-numeric values, resetting")
+            body.editor_col_split_3 = [0.4, 0.4, 400]
+
+    logger.info(
+        "PUT /api/v1/user-prefs — editor_col_split_2=%.2f editor_col_split_3=%s",
+        body.editor_col_split_2, body.editor_col_split_3,
+    )
     # Fallback-chain element can be a legacy provider-name string ("openrouter")
     # or a new-format step object ({"provider": "openrouter", "model": "..."}).
     # The old "no duplicate providers" check is intentionally REMOVED here --
@@ -3097,7 +3151,9 @@ def put_user_prefs(body: UserPrefs):
             "signal_escalation_fallback": body.signal_escalation_fallback,
             "caldav_username": body.caldav_username,
             "caldav_timezone": body.caldav_timezone,
-            "caldav_url": body.caldav_url}
+            "caldav_url": body.caldav_url,
+            "ai_agent_provider": body.ai_agent_provider,
+            "ai_agent_model": body.ai_agent_model}
 
 
 # ---------------------------------------------------------------------------
@@ -4297,6 +4353,250 @@ def playground_chat(body: PlaygroundChatRequest):
             status_code=502,
             detail=error_msg,
         )
+
+
+# ---------------------------------------------------------------------------
+# AI Agent — Pydantic models & constants
+# ---------------------------------------------------------------------------
+
+
+class AiAgentChatRequest(BaseModel):
+    provider: str
+    model: str | None = None
+    messages: list[dict] = Field(..., min_length=1)
+    idea_id: str = ""
+    idea_body: str = ""
+    max_tokens: int = Field(default=8192, ge=1, le=16384)
+
+
+_AI_AGENT_VALID_PROVIDERS = frozenset({"claude", "ollama", "openrouter"})
+_AI_AGENT_TIMEOUTS = {"claude": 90, "ollama": 300, "openrouter": 120}
+_AI_AGENT_DEFAULT_MODELS = {
+    "claude": "claude-sonnet-4-6",
+    "ollama": "qwen3.5:latest",
+    "openrouter": "qwen/qwen3-32b",
+}
+
+_AI_AGENT_SYSTEM_PROMPT = """Ты -- AI-ассистент продакт-менеджера. Помогаешь дорабатывать идеи продукта.
+
+## Бизнес-контекст проекта
+{business_context}
+
+## Текущая идея
+{idea_body}
+
+## Инструкции
+- Отвечай конкретно и по существу
+- Используй markdown для структурирования ответа
+- Учитывай бизнес-контекст при анализе
+- Предлагай метрики, где это уместно
+- Если идея содержит проблему -- помоги усилить её конкретикой
+- Если идея содержит решение -- помоги найти слабые места и улучшить
+"""
+
+
+def _load_business_context_file() -> str:
+    """Load business-context-brief.md from vault, strip frontmatter."""
+    import re as _re
+
+    vault_path = os.getenv("VAULT_PATH", "")
+    path = Path(vault_path) / "wiki" / "concepts" / "business-context-brief.md"
+
+    if not path.exists():
+        logger.warning("_load_business_context_file: not found at %s", path)
+        return ""
+
+    try:
+        content = path.read_text(encoding="utf-8")
+        content = _re.sub(r"^---\s*\n.*?\n---\s*\n", "", content, count=1, flags=_re.DOTALL)
+        logger.info("_load_business_context_file: loaded %d chars", len(content.strip()))
+        return content.strip()
+    except Exception as exc:
+        logger.warning("_load_business_context_file: read failed: %s", exc)
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# AI Agent — POST /api/v1/ai-agent/chat
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/v1/ai-agent/chat")
+def ai_agent_chat(body: AiAgentChatRequest):
+    """Send a chat request to an LLM provider with business context and idea body."""
+    import time as _t
+
+    logger.info(
+        "POST /api/v1/ai-agent/chat -- provider=%s, model=%s, messages=%d, "
+        "idea_id=%s, max_tokens=%d",
+        body.provider, body.model, len(body.messages),
+        body.idea_id, body.max_tokens,
+    )
+
+    # 1. Валидация провайдера
+    if body.provider not in _AI_AGENT_VALID_PROVIDERS:
+        logger.warning("ai-agent/chat: invalid provider: %s", body.provider)
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid provider '{body.provider}'. "
+                   f"Must be one of: {', '.join(sorted(_AI_AGENT_VALID_PROVIDERS))}"
+        )
+
+    # 2. Проверка доступности
+    from shared.llm_client import _call_provider, _is_provider_available, _load_llm_prefs
+    prefs = _load_llm_prefs()
+
+    if not _is_provider_available(body.provider, prefs):
+        reason_map = {
+            "claude": "CLAUDE_API_KEY not set",
+            "ollama": "Ollama URL not configured in Settings",
+            "openrouter": "OPENROUTER_API_KEY not set",
+        }
+        logger.warning("ai-agent/chat: provider %s not available", body.provider)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Provider '{body.provider}' is not available: "
+                   f"{reason_map.get(body.provider, 'unknown reason')}"
+        )
+
+    # 3. Валидация сообщений
+    for i, msg in enumerate(body.messages):
+        if "role" not in msg or "content" not in msg:
+            raise HTTPException(status_code=422, detail=f"Message {i}: missing role or content")
+        if msg["role"] not in ("user", "assistant"):
+            raise HTTPException(status_code=422, detail=f"Message {i}: invalid role '{msg['role']}'")
+
+    # 4. Лимит размера (system + messages)
+    total_chars = sum(len(msg.get("content", "")) for msg in body.messages)
+    total_chars += len(body.idea_body)
+    if total_chars > 100_000:
+        raise HTTPException(status_code=413, detail=f"Total input ({total_chars} chars) exceeds 100K limit")
+
+    # 5. Resolve model
+    model = body.model
+    if not model:
+        if body.provider == "ollama":
+            model = prefs.get("ollama_model", _AI_AGENT_DEFAULT_MODELS["ollama"])
+        elif body.provider == "openrouter":
+            model = prefs.get("ai_agent_model") or prefs.get("openrouter_model",
+                              _AI_AGENT_DEFAULT_MODELS["openrouter"])
+        else:
+            model = _AI_AGENT_DEFAULT_MODELS.get(body.provider, "claude-sonnet-4-6")
+        logger.info("ai-agent/chat: model resolved to default: %s", model)
+
+    # 6. Override model в prefs для совместимости _call_provider
+    call_prefs = dict(prefs)
+    if body.provider == "ollama" and model:
+        call_prefs["ollama_model"] = model
+    elif body.provider == "openrouter" and model:
+        call_prefs["openrouter_model"] = model
+
+    # 7. Загрузка business-context
+    business_context = _load_business_context_file()
+
+    # 8. Формирование system prompt
+    system_prompt = _AI_AGENT_SYSTEM_PROMPT.format(
+        business_context=business_context or "(бизнес-контекст не найден)",
+        idea_body=body.idea_body or "(текст идеи не передан)",
+    )
+
+    timeout = _AI_AGENT_TIMEOUTS.get(body.provider, 90)
+    start = _t.time()
+
+    # 9. Langfuse trace
+    from shared.langfuse_client import get_langfuse
+    lf = get_langfuse()
+    trace = None
+    if lf:
+        try:
+            trace = lf.trace(
+                name="ai-agent-chat",
+                input=body.messages,
+                metadata={
+                    "idea_id": body.idea_id,
+                    "provider": body.provider,
+                    "model": model,
+                    "max_tokens": body.max_tokens,
+                },
+                tags=["ai-agent", body.provider],
+            )
+        except Exception as exc:
+            logger.warning("ai-agent/chat: Langfuse trace failed: %s", exc)
+
+    # 10. Вызов провайдера
+    try:
+        content, _usage = _call_provider(
+            step={"provider": body.provider, "model": model},
+            prefs=call_prefs,
+            messages=body.messages,
+            max_tokens=body.max_tokens,
+            system=system_prompt,
+            timeout=timeout,
+        )
+        elapsed = round(_t.time() - start, 2)
+
+        # Strip reasoning blocks
+        import re as _re
+        content = _re.sub(r"<think>.*?</think>", "", content, flags=_re.DOTALL).strip()
+
+        # Langfuse generation
+        if trace:
+            try:
+                lf_usage = {}
+                if isinstance(_usage, dict):
+                    if _usage.get("input_tokens") is not None:
+                        lf_usage["input"] = _usage["input_tokens"]
+                    if _usage.get("output_tokens") is not None:
+                        lf_usage["output"] = _usage["output_tokens"]
+                trace.generation(
+                    name=f"{body.provider}:{model}",
+                    model=model,
+                    input=body.messages,
+                    output=content,
+                    usage=lf_usage if lf_usage else None,
+                    metadata={
+                        "provider": body.provider,
+                        "idea_id": body.idea_id,
+                        "elapsed": elapsed,
+                    },
+                    level="DEFAULT",
+                )
+            except Exception as lf_exc:
+                logger.warning("ai-agent/chat: Langfuse generation failed: %s", lf_exc)
+
+        logger.info(
+            "POST /api/v1/ai-agent/chat -- success, provider=%s, model=%s, "
+            "elapsed=%.2f, output_len=%d, idea_id=%s",
+            body.provider, model, elapsed, len(content), body.idea_id,
+        )
+        return PlaygroundChatResponse(
+            content=content,
+            provider=body.provider,
+            model=model,
+            elapsed_seconds=elapsed,
+            usage=None,
+        )
+    except Exception as exc:
+        elapsed = round(_t.time() - start, 2)
+        error_msg = str(exc)
+        if trace:
+            try:
+                trace.generation(
+                    name=f"{body.provider}:{model}",
+                    model=model,
+                    input=body.messages,
+                    output=error_msg,
+                    level="ERROR",
+                    status_message=error_msg,
+                )
+            except Exception:
+                pass
+        logger.error(
+            "POST /api/v1/ai-agent/chat -- error: %s, provider=%s, model=%s, "
+            "elapsed=%.2f, idea_id=%s",
+            error_msg, body.provider, model, elapsed, body.idea_id,
+        )
+        raise HTTPException(status_code=502, detail=error_msg)
 
 
 # ---------------------------------------------------------------------------

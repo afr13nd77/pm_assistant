@@ -5,6 +5,26 @@
 
 ---
 
+## 13.08.2026
+
+### BL-230 — AI-агент в редакторе идеи (13.08.2026)
+- Новый режим работы с ИИ в body-editor: тогл, 3-колоночный layout, чат-интерфейс
+- Endpoint POST /api/v1/ai-agent/chat с system prompt (бизнес-контекст + текст идеи)
+- Quick-action кнопки: усилить проблему, сформулировать гипотезу, добавить KPI, подготовить PRD
+- Настройка модели в Settings: секция AI AGENT (Claude / Ollama / OpenRouter)
+- Langfuse трейсинг (trace name: ai-agent-chat)
+- User-prefs: поля ai_agent_provider, ai_agent_model
+
+### BL-231 — Ресайз колонок в редакторе идеи (13.08.2026)
+- Drag-handle между колонками в body-editor (6px, подсветка при hover)
+- Ресайз в 2-колоночном (editor + preview) и 3-колоночном (+ AI чат) режимах
+- Пропорции сохраняются в user-prefs (editor_col_split_2, editor_col_split_3)
+- Двойной клик по handle — сброс к дефолтным пропорциям
+- Блокировка выделения текста при drag (user-select: none, pointer-events: none)
+- Responsive: handles скрыты на экранах < 1024px
+
+---
+
 ## 11.08.2026
 
 ### knowledge-engine

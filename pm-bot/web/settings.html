@@ -359,6 +359,41 @@
           </div>
         </div>
 
+        <!-- AI AGENT -->
+        <div class="settings-section">
+          <div class="settings-section-title">// AI AGENT</div>
+          <div class="provider-config-block">
+            <div class="provider-config-header">МОДЕЛЬ ДЛЯ AI-АГЕНТА В РЕДАКТОРЕ ИДЕИ</div>
+            <div class="field-group">
+              <div class="field-label">ПРОВАЙДЕР</div>
+              <div class="toggle-row">
+                <button class="toggle-btn toggle-btn-triple"
+                        :class="{ active: aiAgentProvider === 'claude' }"
+                        @click="aiAgentProvider = 'claude'; trySaveUserPrefs()">CLAUDE</button>
+                <button class="toggle-btn toggle-btn-triple"
+                        :class="{ active: aiAgentProvider === 'ollama' }"
+                        @click="aiAgentProvider = 'ollama'; trySaveUserPrefs()">OLLAMA</button>
+                <button class="toggle-btn toggle-btn-triple"
+                        :class="{ active: aiAgentProvider === 'openrouter' }"
+                        @click="aiAgentProvider = 'openrouter'; trySaveUserPrefs()">OPENROUTER</button>
+              </div>
+            </div>
+            <div class="field-group" v-if="aiAgentProvider === 'openrouter'">
+              <div class="field-label">МОДЕЛЬ OPENROUTER</div>
+              <searchable-model-select
+                :models="openrouterModels"
+                v-model="aiAgentModel"
+                :source="openrouterModelsSource"
+                compact
+                @update:model-value="trySaveUserPrefs()">
+              </searchable-model-select>
+            </div>
+            <div class="field-note">
+              Провайдер и модель для AI-агента в редакторе идеи. Не влияет на Playground и fallback-цепочки.
+            </div>
+          </div>
+        </div>
+
         <!-- Operation Groups with fallback chains -->
         <div class="settings-section">
           <div class="settings-section-title">// FALLBACK CHAINS</div>
@@ -638,6 +673,8 @@
       var relevanceThreshold = ref(7);
       var fetchingMeetings = ref(false);
       var fetchMeetingsStatus = ref('');
+      var aiAgentProvider = ref('claude');
+      var aiAgentModel = ref('');
 
       var operationGroups = ref([
         {
@@ -805,7 +842,9 @@
           caldav_username: caldavUsername.value,
           caldav_password: caldavPassword.value,
           caldav_timezone: caldavTimezone.value,
-          caldav_url: caldavUrl.value
+          caldav_url: caldavUrl.value,
+          ai_agent_provider: aiAgentProvider.value,
+          ai_agent_model: aiAgentModel.value
         };
       }
 
@@ -1229,6 +1268,8 @@
           caldavPassword.value = prefs.caldav_password || '';
           caldavTimezone.value = prefs.caldav_timezone || 'Europe/Moscow';
           caldavUrl.value = prefs.caldav_url || 'https://caldav.yandex.ru/';
+          aiAgentProvider.value = prefs.ai_agent_provider || 'claude';
+          aiAgentModel.value = prefs.ai_agent_model || '';
           // Load fallback chains. GET /api/v1/user-prefs (T-08) always returns canonical
           // {provider, model} objects, but normalizeChainStep() is kept as a defensive
           // safety net (also tolerates legacy string steps if ever encountered).
@@ -1361,6 +1402,8 @@
         testCaldavConnection: testCaldavConnection,
         relevanceThreshold: relevanceThreshold,
         saveRelevanceThreshold: saveRelevanceThreshold,
+        aiAgentProvider: aiAgentProvider,
+        aiAgentModel: aiAgentModel,
       };
     }
   });
