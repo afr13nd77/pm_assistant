@@ -126,8 +126,9 @@ class TestRecordSignal:
 class TestGetRecentSignals:
 
     def test_returns_matching_entity(self, memory: SignalMemory):
-        memory.record_signal(_make_record(entities=["Booking"], date="2026-08-01"))
-        memory.record_signal(_make_record(entities=["Airbnb"], date="2026-08-01"))
+        today = datetime.now().strftime("%Y-%m-%d")
+        memory.record_signal(_make_record(entities=["Booking"], date=today))
+        memory.record_signal(_make_record(entities=["Airbnb"], date=today))
 
         result = memory.get_recent_signals("Booking", days=7)
         assert len(result) == 1

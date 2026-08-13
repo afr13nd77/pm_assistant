@@ -18,7 +18,6 @@ from .signal_memory import SignalMemory, SignalRecord
 from .signal_moderator import (
     AnalysisResult,
     ReportResult,
-    SignalData,
     _write_processed_md,
     _write_skipped_md,
     dispatch_idea,
@@ -539,12 +538,10 @@ class SignalOrchestrator:
         item_state.current_step = "generate_analysis_report"
 
         competitor_profile = None
-        competitor_name = ""
         for entity in scoring.matched_entities:
             profile = self._load_competitor_profile(entity)
             if profile:
                 competitor_profile = profile
-                competitor_name = entity
                 break
 
         memory_history = ""

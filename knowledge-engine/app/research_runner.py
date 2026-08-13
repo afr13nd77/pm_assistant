@@ -19,16 +19,12 @@ from shared.vault_paths import (
     wiki_reports,
 )
 
-from .idea_extractor import extract_ideas_full
 from .notifier import send_telegram
 from .quality_gate import QualityGate
 from .signal_moderator import (
-    AnalysisResult,
     ScoringResult,
-    dispatch_idea,
     dispatch_signal,
     extract_signals,
-    SignalData,
 )
 from .signal_orchestrator import ModeratorConfig, load_config_from_settings
 

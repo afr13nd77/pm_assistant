@@ -1,10 +1,18 @@
+from __future__ import annotations
+
 import argparse
 import json
 import logging
 import os
 import sys
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from shared.langfuse_client import shutdown as langfuse_shutdown
+
+if TYPE_CHECKING:
+    from .decay_engine import DecayConfig
+    from .signal_orchestrator import ModeratorConfig, RunState
 
 logging.basicConfig(
     level=logging.INFO,
@@ -725,10 +733,10 @@ def _dispatch(args, vault_path: str):
     elif args.command == "decay-recalc":
         from .decay_engine import load_config, recalc_vault
         logger.info("decay-recalc: starting, vault=%s, config=%s, dry_run=%s", vault_path, args.config, args.dry_run)
-        config = load_config(args.config)
+        decay_config: "DecayConfig" = load_config(args.config)
         from shared.system_log import LoggedProcess
         with LoggedProcess("decay-recalc", source="ke-cron") as lp:
-            result = recalc_vault(vault_path, config, dry_run=args.dry_run)
+            result = recalc_vault(vault_path, decay_config, dry_run=args.dry_run)
             lp.summary = f"{result.get('processed', 0)} файлов обработано, {len(result.get('transitions', []))} переходов"
             lp.details = {"items_processed": result.get("processed", 0), "skipped": result.get("skipped", 0), "transitions_count": len(result.get("transitions", [])), "errors_count": len(result.get("errors", []))}
         logger.info(
@@ -741,8 +749,8 @@ def _dispatch(args, vault_path: str):
     elif args.command == "decay-init":
         from .decay_engine import init_vault, load_config
         logger.info("decay-init: starting, vault=%s, config=%s, dry_run=%s", vault_path, args.config, args.dry_run)
-        config = load_config(args.config)
-        result = init_vault(vault_path, config, dry_run=args.dry_run)
+        init_decay_config: DecayConfig = load_config(args.config)
+        result = init_vault(vault_path, init_decay_config, dry_run=args.dry_run)
         logger.info("decay-init: completed, migrated=%d, skipped=%d", result["migrated"], result["skipped"])
         _output_json(result)
         sys.exit(0)
@@ -832,12 +840,12 @@ def _dispatch(args, vault_path: str):
         logger.info(f"convert-news-digest: vault={vault_path}, date={args.date}")
         try:
             with LoggedProcess("convert-news-digest", source="ke-cron") as lp:
-                result = convert_news_digest(vault_path, args.date)
-                if result:
-                    lp.summary = f"Converted: {result.name}"
-                    lp.details = {"output_file": str(result)}
-                    logger.info(f"convert-news-digest: converted -> {result}")
-                    print(f"Converted: {result}")
+                converted_path: "Path | None" = convert_news_digest(vault_path, args.date)
+                if converted_path:
+                    lp.summary = f"Converted: {converted_path.name}"
+                    lp.details = {"output_file": str(converted_path)}
+                    logger.info(f"convert-news-digest: converted -> {converted_path}")
+                    print(f"Converted: {converted_path}")
                 else:
                     lp.summary = "No conversion needed (file already exists)"
                     logger.info("convert-news-digest: no conversion needed")
@@ -851,7 +859,7 @@ def _dispatch(args, vault_path: str):
         import pathlib
 
         from shared import vault_paths as _vp
-        vault_path = getattr(args, "vault", None) or os.getenv("VAULT_PATH", "/vault")
+        vault_path = str(getattr(args, "vault", None) or os.getenv("VAULT_PATH", "/vault"))
         _vp.VAULT_PATH = pathlib.Path(vault_path)
         import uvicorn
 
@@ -1072,41 +1080,41 @@ def _dispatch(args, vault_path: str):
         from .signal_orchestrator import SignalOrchestrator, load_config_from_settings
         logger.info(f"moderate-news: starting, vault={vault_path}, digest={args.digest}, notify={args.notify}, dry_run={args.dry_run}, threshold={args.threshold}")
 
-        config = load_config_from_settings()
+        mod_config: "ModeratorConfig" = load_config_from_settings()
         if args.threshold is not None:
-            config.relevance_threshold = args.threshold
+            mod_config.relevance_threshold = args.threshold
 
         with LoggedProcess("signal-moderator", source="ke-cron") as lp:
-            orchestrator = SignalOrchestrator(vault_path, config)
-            result = orchestrator.process_digest(
+            orchestrator = SignalOrchestrator(vault_path, mod_config)
+            run_state: "RunState" = orchestrator.process_digest(
                 digest_path=args.digest,
                 notify=args.notify,
                 dry_run=args.dry_run,
             )
-            if result.summary:
+            if run_state.summary:
                 lp.summary = (
-                    f"Items: {result.summary.total}, "
-                    f"relevant: {result.summary.relevant}, "
-                    f"ideas: {result.summary.ideas}, "
-                    f"reports: {result.summary.reports}"
+                    f"Items: {run_state.summary.total}, "
+                    f"relevant: {run_state.summary.relevant}, "
+                    f"ideas: {run_state.summary.ideas}, "
+                    f"reports: {run_state.summary.reports}"
                 )
                 lp.details = {
-                    "run_id": result.run_id,
-                    "total": result.summary.total,
-                    "relevant": result.summary.relevant,
-                    "ideas": result.summary.ideas,
-                    "reports": result.summary.reports,
-                    "retries": result.summary.retries,
-                    "errors": result.summary.errors,
+                    "run_id": run_state.run_id,
+                    "total": run_state.summary.total,
+                    "relevant": run_state.summary.relevant,
+                    "ideas": run_state.summary.ideas,
+                    "reports": run_state.summary.reports,
+                    "retries": run_state.summary.retries,
+                    "errors": run_state.summary.errors,
                 }
 
-        output = {"status": "ok", "run_id": result.run_id}
-        if result.summary:
+        output = {"status": "ok", "run_id": run_state.run_id}
+        if run_state.summary:
             output.update({
-                "total": result.summary.total,
-                "relevant": result.summary.relevant,
-                "ideas": result.summary.ideas,
-                "reports": result.summary.reports,
+                "total": run_state.summary.total,
+                "relevant": run_state.summary.relevant,
+                "ideas": run_state.summary.ideas,
+                "reports": run_state.summary.reports,
             })
         _output_json(output)
         sys.exit(0)
@@ -1130,12 +1138,12 @@ def _dispatch(args, vault_path: str):
                 dry_run=args.dry_run,
                 target_file=args.file,
             )
-            completed = [r for r in results if r.error is None]
-            failed = [r for r in results if r.error is not None]
-            lp.summary = f"{len(completed)} отчётов создано, {len(failed)} ошибок"
+            res_completed = [r for r in results if r.error is None]
+            res_failed = [r for r in results if r.error is not None]
+            lp.summary = f"{len(res_completed)} отчётов создано, {len(res_failed)} ошибок"
             lp.details = {
-                "completed": len(completed),
-                "failed": len(failed),
+                "completed": len(res_completed),
+                "failed": len(res_failed),
                 "results": [
                     {
                         "topic": r.topic[:60],
@@ -1148,9 +1156,9 @@ def _dispatch(args, vault_path: str):
             }
 
         output = {
-            "status": "ok" if not failed else "partial",
-            "completed": len(completed),
-            "failed": len(failed),
+            "status": "ok" if not res_failed else "partial",
+            "completed": len(res_completed),
+            "failed": len(res_failed),
             "results": [
                 {
                     "topic": r.topic,
@@ -1163,7 +1171,7 @@ def _dispatch(args, vault_path: str):
             ],
         }
         _output_json(output)
-        sys.exit(0 if not failed else 1)
+        sys.exit(0 if not res_failed else 1)
 
     elif args.command == "trend-detect":
         from shared import vault_paths as _vp
@@ -1174,14 +1182,14 @@ def _dispatch(args, vault_path: str):
         from .signal_orchestrator import load_config_from_settings
         logger.info(f"trend-detect: starting, vault={vault_path}, notify={args.notify}")
 
-        config = load_config_from_settings()
-        memory = SignalMemory(config.memory_db_path)
+        trend_config: "ModeratorConfig" = load_config_from_settings()
+        memory = SignalMemory(trend_config.memory_db_path)
         deleted = 0
 
         with LoggedProcess("trend-detect", source="ke-cron") as lp:
             trends = memory.detect_trends(
-                lookback_weeks=config.trend_detection_lookback_weeks,
-                spike_threshold=config.trend_spike_threshold,
+                lookback_weeks=trend_config.trend_detection_lookback_weeks,
+                spike_threshold=trend_config.trend_spike_threshold,
             )
             lp.summary = f"Detected {len(trends)} trends"
             lp.details = {"trends_count": len(trends), "trends": [
@@ -1217,7 +1225,7 @@ def _dispatch(args, vault_path: str):
                         logger.info(f"trend-detect: marked alert_id={alert_id} as notified")
 
             # Cleanup old signals
-            deleted = memory.cleanup(keep_days=config.memory_cleanup_days)
+            deleted = memory.cleanup(keep_days=trend_config.memory_cleanup_days)
             if deleted:
                 logger.info(f"trend-detect: cleaned up {deleted} old signals")
 

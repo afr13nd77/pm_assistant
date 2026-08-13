@@ -51,14 +51,14 @@ def _write_report(reports_dir: pathlib.Path, filename: str, frontmatter: str, bo
 
 class TestBuildReportsList:
     def test_build_reports_list_filters_by_type(self, vault):
-        reports_dir = vault / "wiki" / "reports"
+        reports_dir = vault / "wiki" / "reports" / "signals"
         _write_report(
             reports_dir,
             "2026-08-03-test.md",
             """
-            type: research-report
-            topic: "Test"
-            date: "2026-08-03"
+            type: signal-report
+            title: "Test"
+            signal_date: "2026-08-03"
             """,
         )
         _write_report(
@@ -79,14 +79,14 @@ class TestBuildReportsList:
         assert result[0]["date"] == "2026-08-03"
 
     def test_build_reports_list_reads_outcome(self, vault):
-        reports_dir = vault / "wiki" / "reports"
+        reports_dir = vault / "wiki" / "reports" / "signals"
         _write_report(
             reports_dir,
             "2026-08-03-idea-report.md",
             """
-            type: research-report
-            topic: "Idea Report"
-            date: "2026-08-03"
+            type: signal-report
+            title: "Idea Report"
+            signal_date: "2026-08-03"
             outcome: idea
             ideas_count: 2
             """,
@@ -99,14 +99,14 @@ class TestBuildReportsList:
         assert result[0]["ideas_count"] == 2
 
     def test_build_reports_list_old_report_no_outcome(self, vault):
-        reports_dir = vault / "wiki" / "reports"
+        reports_dir = vault / "wiki" / "reports" / "signals"
         _write_report(
             reports_dir,
             "2026-06-01-old-report.md",
             """
-            type: research-report
-            topic: "Old Report"
-            date: "2026-06-01"
+            type: signal-report
+            title: "Old Report"
+            signal_date: "2026-06-01"
             """,
         )
 
@@ -243,14 +243,14 @@ class TestParseIdeaBody:
 
 class TestBuildReportsListIdeasRefs:
     def test_ideas_refs_included_when_ideas_count_positive(self, vault):
-        reports_dir = vault / "wiki" / "reports"
+        reports_dir = vault / "wiki" / "reports" / "signals"
         _write_report(
             reports_dir,
             "2026-08-03-ref-report.md",
             """
-            type: research-report
-            topic: "Ref Report"
-            date: "2026-08-03"
+            type: signal-report
+            title: "Ref Report"
+            signal_date: "2026-08-03"
             outcome: idea
             ideas_count: 2
             ideas_refs:
@@ -265,14 +265,14 @@ class TestBuildReportsListIdeasRefs:
         assert result[0]["ideas_refs"] == ["idea-auto-cancel.md", "idea-pricing-model.md"]
 
     def test_ideas_refs_empty_when_no_ideas(self, vault):
-        reports_dir = vault / "wiki" / "reports"
+        reports_dir = vault / "wiki" / "reports" / "signals"
         _write_report(
             reports_dir,
             "2026-08-03-no-ideas.md",
             """
-            type: research-report
-            topic: "No Ideas"
-            date: "2026-08-03"
+            type: signal-report
+            title: "No Ideas"
+            signal_date: "2026-08-03"
             outcome: monitor
             ideas_count: 0
             """,
