@@ -23,6 +23,8 @@ _MIGRATIONS = [
     (".jira-sync-state.json", "PLATFORM_DATA_PATH", "/platform-data"),
     (".pm-user-prefs.json", "PM_BOT_DATA_PATH", "/data"),
     (".health-history.json", "KE_DATA_PATH", "/data"),
+    (".meeting-fetcher-state.json", "KE_DATA_PATH", "/data"),
+    (".enrichment-reminders.db", "PM_BOT_DATA_PATH", "/data"),
 ]
 
 

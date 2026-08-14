@@ -6,6 +6,7 @@ which emails have already been processed (dedup by message-id).
 
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -31,17 +32,21 @@ def _empty_state() -> dict:
 class State:
     """Persistent state for meeting-fetcher deduplication.
 
-    State is stored as JSON at ``{vault_path}/.meeting-fetcher-state.json``.
+    State is stored as JSON at ``{KE_DATA_PATH}/.meeting-fetcher-state.json``
+    (falls back to *vault_path* when the env-var is unset).
     The ``.`` prefix hides it from the Obsidian file explorer.
     """
 
     def __init__(self, vault_path: str) -> None:
         """Load state from disk. Create empty state if file missing or corrupt.
 
+        Uses ``KE_DATA_PATH`` env-var when set; falls back to *vault_path*.
+
         Args:
-            vault_path: Absolute path to the Obsidian vault root.
+            vault_path: Absolute path to the Obsidian vault root (fallback).
         """
-        self._path = Path(vault_path) / STATE_FILENAME
+        data_dir = Path(os.getenv("KE_DATA_PATH", str(vault_path)))
+        self._path = data_dir / STATE_FILENAME
         self._data: dict = _empty_state()
 
         logger.info("State.__init__: loading state from %s", self._path)

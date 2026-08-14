@@ -9,6 +9,7 @@ import asyncio
 import logging
 import os
 import re
+from pathlib import Path
 
 from .rate_limiter import TelegramRateLimiter
 
@@ -205,7 +206,7 @@ async def run_enrichment_check(bot, chat_id: int) -> None:
         from .enrichment_db import get_reminded_today, init_db, record_reminder
 
         with LoggedProcess(process_type="enrichment-reminder", source="pm-bot") as lp:
-            db_path = VAULT_PATH / ".enrichment-reminders.db"
+            db_path = Path(os.getenv("PM_BOT_DATA_PATH", str(VAULT_PATH))) / ".enrichment-reminders.db"
             init_db(db_path)
 
             reminded_today = get_reminded_today(db_path)

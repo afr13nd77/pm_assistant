@@ -13,6 +13,8 @@
 - `.pm-user-prefs.json` → PM_BOT_DATA_PATH (pm-bot-data volume)
 - `.jira-sync-state.json` → PLATFORM_DATA_PATH (shared volume platform-data)
 - `.health-history.json` → KE_DATA_PATH (ke-data volume)
+- `.meeting-fetcher-state.json` → KE_DATA_PATH (ke-data volume) — hotfix
+- `.enrichment-reminders.db` → PM_BOT_DATA_PATH (pm-bot-data volume) — hotfix, исправлено расхождение путей с enrichment_db.py
 - Миграция при старте: shared/platform_migrate.py (copy, не delete)
 - Env vars: PLATFORM_DATA_PATH, PM_BOT_DATA_PATH, KE_DATA_PATH с fallback на VAULT_PATH
 - `domain-config.yaml` остаётся в vault (таксономия знаний)
