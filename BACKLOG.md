@@ -1,8 +1,8 @@
 # Бэклог -- PM Assistant
 
 **Версии:** pm-bot 1.27.2 / knowledge-engine 1.24.2 / idea-pipeline 1.2.0 / web-ui 1.32.0 / shared 0.7.5
-**Обновлён:** 13.08.2026 (BL-231 — Ресайз колонок в body-editor)
-**Бэклог:** реализованные фичи (113), баги (36), идеи (68), итого (217)
+**Обновлён:** 14.08.2026 (BL-232 — Вынос служебных файлов из vault в Docker volumes)
+**Бэклог:** реализованные фичи (114), баги (36), идеи (68), итого (218)
 
 ---
 
@@ -232,6 +232,7 @@
 | BL-143 | ✅ Trace Log — централизованный журнал операций | pm-bot, knowledge-engine, shared | shared/system_log.py (SQLite модуль), 11 процессов обёрнуты в LoggedProcess, API /system-log + /system-log/stats, Web UI system-log.html, LLM trace (provider chain, fallback, ошибки), per-unit details meeting queue, overview badge, cron cleanup 90д, 12 unit-тестов. Спека: docs/system-activity-log/ |
 | BL-166 | ✅ Langfuse LLM Observability | shared, pm-bot, knowledge-engine, idea-pipeline, инфраструктура | Self-hosted Langfuse v2 (Docker: langfuse + langfuse-db, порт 3100). Инструментация shared/llm_client.py:call_detailed() — автоматические трассировки. Token usage проброс из Anthropic SDK и OpenRouter. shared/langfuse_client.py — singleton с graceful degradation. Sidebar ссылка LLM TRACES. Langfuse SDK v2.x. idea-pipeline инструментация частичная (AC-03 blocked — требует BL-167). Спека: docs/BL-166_langfuse-observability/ |
 | BL-167 | ✅ Pipeline fallback chains | idea-pipeline, shared, web-ui | Перевод idea-pipeline на shared/llm_client fallback chains. Pipeline = 4-я группа операций. PipelineClaudeClient удалён. Settings UI: PIPELINE карточка. Спека: docs/BL-167_pipeline-fallback-chains/ |
+| BL-232 | ✅ Вынос служебных файлов из vault в Docker volumes | shared, pm-bot, knowledge-engine, инфраструктура | Перенос 4 platform state файлов из VAULT_PATH в Docker volumes: .system-log.db → platform-data (новый shared volume), .pm-user-prefs.json → pm-bot-data, .jira-sync-state.json → platform-data, .health-history.json → ke-data. Env vars: PLATFORM_DATA_PATH, PM_BOT_DATA_PATH, KE_DATA_PATH. Миграция при старте (shared/platform_migrate.py). Оригиналы в vault не удаляются. Частично закрывает BL-157 |
 
 ### 7.2 Идеи
 
@@ -436,8 +437,8 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 113 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-192, BL-194..BL-195, BL-198..BL-203, BL-212, BL-230..BL-231 |
+| ✅ Реализовано | 114 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-192, BL-194..BL-195, BL-198..BL-203, BL-212, BL-230..BL-232 |
 | ✅ Баги исправлены | 36 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165, BL-193, BUG-027, BUG-028, BL-205, BL-206, BL-207, BL-208, BL-209, BL-210, BL-211 |
 | Идея | 68 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-188, BL-196..BL-197, BL-204, BL-213..BL-229 |
 | ❌ Удалено | 1 | BL-121 |
-| **Итого** | **217** | |
+| **Итого** | **218** | |

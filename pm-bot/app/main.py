@@ -49,6 +49,9 @@ async def post_init(application):
 
 
 def main():
+    from shared.platform_migrate import migrate_platform_files
+    migrate_platform_files()
+
     token = os.getenv("BOT_TOKEN")
     chat_id = int(os.getenv("ALLOWED_CHAT_ID") or "0")
 

@@ -861,6 +861,10 @@ def _dispatch(args, vault_path: str):
         from shared import vault_paths as _vp
         vault_path = str(getattr(args, "vault", None) or os.getenv("VAULT_PATH", "/vault"))
         _vp.VAULT_PATH = pathlib.Path(vault_path)
+
+        from shared.platform_migrate import migrate_platform_files
+        migrate_platform_files()
+
         import uvicorn
 
         from .api import app

@@ -22,6 +22,7 @@ services:
       - ./pm-bot/web:/web
       - ./settings.yaml:/app/settings.yaml:ro
       - pm-bot-data:/data
+      - platform-data:/platform-data
     command: >
       sh -c "python -m http.server 8080 --directory /web &
              python -m app.main"
@@ -29,6 +30,8 @@ services:
       - TZ=Europe/Moscow
       - PYTHONUNBUFFERED=1
       - VAULT_PATH=/vault
+      - PLATFORM_DATA_PATH=/platform-data
+      - PM_BOT_DATA_PATH=/data
       - PIPELINE_API_URL=http://idea-pipeline:8100
       - JIRA_URL=${JIRA_URL}
       - JIRA_TOKEN=${JIRA_TOKEN}
@@ -60,10 +63,13 @@ services:
       - ./settings.yaml:/app/settings.yaml:ro
       - ./decay.yaml:/app/decay.yaml:ro
       - ke-data:/data
+      - platform-data:/platform-data
     environment:
       - TZ=Europe/Moscow
       - PYTHONUNBUFFERED=1
       - VAULT_PATH=/vault
+      - PLATFORM_DATA_PATH=/platform-data
+      - KE_DATA_PATH=/data
       - JIRA_URL=${JIRA_URL}
       - JIRA_TOKEN=${JIRA_TOKEN}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
@@ -88,10 +94,13 @@ services:
       - ./settings.yaml:/app/settings.yaml:ro
       - ./decay.yaml:/app/decay.yaml:ro
       - ke-data:/data
+      - platform-data:/platform-data
     environment:
       - TZ=Europe/Moscow
       - PYTHONUNBUFFERED=1
       - VAULT_PATH=/vault
+      - PLATFORM_DATA_PATH=/platform-data
+      - KE_DATA_PATH=/data
       - JIRA_URL=${JIRA_URL}
       - JIRA_TOKEN=${JIRA_TOKEN}
       - JIRA_SYNC_CRON=${JIRA_SYNC_CRON:-0 */3 * * *}
@@ -175,4 +184,5 @@ services:
 volumes:
   pm-bot-data:
   ke-data:
+  platform-data:
   langfuse-db-data:

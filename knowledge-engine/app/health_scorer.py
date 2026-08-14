@@ -265,7 +265,8 @@ def _compute_score(breakdown: dict) -> tuple:
 def save_history(vault_path: str, score_entry: dict) -> None:
     logger.info("save_history: starting, vault_path=%s", vault_path)
 
-    history_path = Path(vault_path) / _HISTORY_FILENAME
+    data_dir = Path(os.getenv("KE_DATA_PATH", str(vault_path)))
+    history_path = data_dir / _HISTORY_FILENAME
 
     history = {"version": 1, "entries": []}
     if history_path.exists():
@@ -304,7 +305,8 @@ def save_history(vault_path: str, score_entry: dict) -> None:
 def load_history(vault_path: str, days: int = 90) -> list:
     logger.info("load_history: starting, vault_path=%s days=%d", vault_path, days)
 
-    history_path = Path(vault_path) / _HISTORY_FILENAME
+    data_dir = Path(os.getenv("KE_DATA_PATH", str(vault_path)))
+    history_path = data_dir / _HISTORY_FILENAME
 
     if not history_path.exists():
         logger.warning("load_history: file not found at %s, returning empty", history_path)

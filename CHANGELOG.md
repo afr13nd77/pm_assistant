@@ -5,6 +5,20 @@
 
 ---
 
+## 14.08.2026
+
+### BL-232 — Вынос служебных файлов из vault в Docker volumes (14.08.2026)
+- Новый shared volume `platform-data` в docker-compose.yml (монтирован в pm-bot, KE, ke-cron)
+- `.system-log.db` → PLATFORM_DATA_PATH (shared volume platform-data)
+- `.pm-user-prefs.json` → PM_BOT_DATA_PATH (pm-bot-data volume)
+- `.jira-sync-state.json` → PLATFORM_DATA_PATH (shared volume platform-data)
+- `.health-history.json` → KE_DATA_PATH (ke-data volume)
+- Миграция при старте: shared/platform_migrate.py (copy, не delete)
+- Env vars: PLATFORM_DATA_PATH, PM_BOT_DATA_PATH, KE_DATA_PATH с fallback на VAULT_PATH
+- `domain-config.yaml` остаётся в vault (таксономия знаний)
+
+---
+
 ## 13.08.2026
 
 ### BL-230 — AI-агент в редакторе идеи (13.08.2026)

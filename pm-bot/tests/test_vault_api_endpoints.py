@@ -47,6 +47,7 @@ def vault_dir(tmp_path):
 def client(vault_dir):
     """Create a FastAPI test client with vault_paths pointing to temp directory."""
     with patch("app.vault_api.VAULT_PATH", vault_dir), \
+         patch("app.vault_api._PLATFORM_DATA", vault_dir), \
          patch("app.vault_api.wiki_meetings", return_value=vault_dir / "wiki" / "meetings"), \
          patch("app.vault_api.wiki_reports", return_value=vault_dir / "wiki" / "reports"), \
          patch("app.vault_api.all_domains", return_value=["content", "payments"]), \
@@ -68,6 +69,7 @@ class TestDomainsEndpoint:
         """Should return empty list when no domains exist."""
         # Create a client with no domains
         with patch("app.vault_api.VAULT_PATH", vault_dir), \
+             patch("app.vault_api._PLATFORM_DATA", vault_dir), \
              patch("app.vault_api.wiki_meetings", return_value=vault_dir / "wiki" / "meetings"), \
              patch("app.vault_api.wiki_reports", return_value=vault_dir / "wiki" / "reports"), \
              patch("app.vault_api.all_domains", return_value=[]), \

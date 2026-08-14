@@ -49,6 +49,8 @@ from . import calendar_client, ke_client
 
 logger = logging.getLogger(__name__)
 
+_PLATFORM_DATA = Path(os.getenv("PLATFORM_DATA_PATH", os.getenv("VAULT_PATH", "/vault")))
+
 # ---------------------------------------------------------------------------
 # In-memory TTL cache for vault scan results
 # ---------------------------------------------------------------------------
@@ -2159,7 +2161,7 @@ def jira_sync():
         }
 
         # Write last_run_result back into state file atomically
-        state_file = VAULT_PATH / ".jira-sync-state.json"
+        state_file = _PLATFORM_DATA / ".jira-sync-state.json"
         try:
             if state_file.exists():
                 state = _json.loads(state_file.read_text(encoding="utf-8"))
@@ -2171,7 +2173,7 @@ def jira_sync():
                 "closed": sync_result["closed"],
                 "errors": sync_result["errors"],
             }
-            tmp_file = VAULT_PATH / ".jira-sync-state.json.tmp"
+            tmp_file = _PLATFORM_DATA / ".jira-sync-state.json.tmp"
             tmp_file.write_text(
                 _json.dumps(state, ensure_ascii=False, indent=2),
                 encoding="utf-8",
@@ -3835,7 +3837,7 @@ def jira_sync_status():
         logger.info("GET /api/v1/jira/sync-status — returning cached")
         return cached
 
-    state_file = VAULT_PATH / ".jira-sync-state.json"
+    state_file = _PLATFORM_DATA / ".jira-sync-state.json"
     state = {}
 
     if not state_file.exists():

@@ -1,6 +1,6 @@
 """Централизованный журнал системных операций.
 
-Хранение: SQLite в /vault/.system-log.db
+Хранение: SQLite в $PLATFORM_DATA_PATH/.system-log.db (fallback: $VAULT_PATH/.system-log.db)
 Доступ: из pm-bot, knowledge-engine, ke-cron (все монтируют /vault).
 """
 from __future__ import annotations
@@ -15,8 +15,8 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 DB_FILENAME = ".system-log.db"
-_vault_path = Path(os.getenv("VAULT_PATH", "/vault"))
-DB_PATH = _vault_path / DB_FILENAME
+_platform_data = Path(os.getenv("PLATFORM_DATA_PATH", os.getenv("VAULT_PATH", "/vault")))
+DB_PATH = _platform_data / DB_FILENAME
 
 VALID_PROCESS_TYPES = {
     "decay-recalc", "linter", "health-score", "jira-sync",

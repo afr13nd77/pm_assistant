@@ -38,7 +38,8 @@ def load(vault_path: "str | Path") -> dict:
     Returns:
         Parsed state dict with keys ``version``, ``last_sync``, ``issues``.
     """
-    path = Path(vault_path) / STATE_FILENAME
+    effective_path = Path(os.getenv("PLATFORM_DATA_PATH", str(vault_path)))
+    path = effective_path / STATE_FILENAME
     logger.info("load: reading state from %s", path)
 
     if not path.exists():
@@ -71,7 +72,8 @@ def save(vault_path: "str | Path", state: dict) -> Path:
     Returns:
         Path to the written state file.
     """
-    path = Path(vault_path) / STATE_FILENAME
+    effective_path = Path(os.getenv("PLATFORM_DATA_PATH", str(vault_path)))
+    path = effective_path / STATE_FILENAME
     logger.info("save: writing state to %s", path)
 
     state["last_sync"] = datetime.now().isoformat()

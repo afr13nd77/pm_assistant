@@ -159,7 +159,8 @@ def domain_config_path() -> Path:
 
 
 def user_prefs_path() -> Path:
-    return VAULT_PATH / ".pm-user-prefs.json"
+    data_dir = Path(os.getenv("PM_BOT_DATA_PATH", str(VAULT_PATH)))
+    return data_dir / ".pm-user-prefs.json"
 
 
 def wiki_index() -> Path:
