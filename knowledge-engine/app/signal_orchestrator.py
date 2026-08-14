@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -1127,7 +1128,7 @@ class SignalOrchestrator:
     def _load_relevance_threshold(self) -> int:
         """Load relevance threshold from user-prefs with fallback to config (BL-203, AC-09, AC-10)."""
         logger.info("_load_relevance_threshold: loading threshold")
-        prefs_path = Path(self.vault_path) / ".pm-user-prefs.json"
+        prefs_path = Path(os.getenv("PM_BOT_DATA_PATH", str(self.vault_path))) / ".pm-user-prefs.json"
         try:
             if prefs_path.exists():
                 prefs = json.loads(prefs_path.read_text(encoding="utf-8"))

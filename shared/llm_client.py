@@ -85,8 +85,8 @@ def _load_llm_prefs() -> dict:
     """Load LLM prefs from .pm-user-prefs.json with file mtime caching."""
     global _cached_prefs, _cached_mtime
 
-    vault_path = os.getenv("VAULT_PATH", "")
-    prefs_path = Path(vault_path) / ".pm-user-prefs.json"
+    data_dir = os.getenv("PM_BOT_DATA_PATH", os.getenv("VAULT_PATH", ""))
+    prefs_path = Path(data_dir) / ".pm-user-prefs.json"
 
     if not prefs_path.exists():
         logger.info("_load_llm_prefs: prefs file not found, using defaults")
