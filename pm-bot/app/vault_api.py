@@ -5476,7 +5476,8 @@ async def signal_approve(signal_id: str):
         status = exc.response.status_code if exc.response is not None else 502
         detail = str(exc)
         try:
-            detail = exc.response.json().get("detail", detail)
+            if exc.response is not None:
+                detail = exc.response.json().get("detail", detail)
         except Exception:
             pass
         logger.error(
