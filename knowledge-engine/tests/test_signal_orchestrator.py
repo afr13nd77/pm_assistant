@@ -1407,6 +1407,16 @@ class TestLangfuseTraceIntegration:
 class TestLoadRelevanceThreshold:
     """BL-203: _load_relevance_threshold reads from .pm-user-prefs.json."""
 
+    @pytest.fixture(autouse=True)
+    def _point_vault_env(self, tmp_vault, monkeypatch):
+        """Ensure _load_llm_prefs() finds .pm-user-prefs.json in tmp_vault."""
+        from shared.llm_client import invalidate_cache
+
+        monkeypatch.setenv("VAULT_PATH", str(tmp_vault))
+        invalidate_cache()
+        yield
+        invalidate_cache()
+
     def test_threshold_from_user_prefs(self, tmp_vault, config):
         """_load_relevance_threshold reads from .pm-user-prefs.json."""
         prefs = {"moderator": {"relevance_threshold": 5}}
