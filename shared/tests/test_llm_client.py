@@ -1,6 +1,8 @@
 """Tests for shared/llm_client.py"""
 
+import json
 import os
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,17 +11,21 @@ import requests
 from shared import openrouter_client
 from shared.llm_client import (
     OPENROUTER_429_BACKOFF_SECONDS,
+    _API_CACHE_TTL_SECONDS,
+    _DEFAULT_LLM_PREFS,
     _call_openrouter,
     _call_provider,
     _default_model_for,
     _is_provider_available,
     _is_rate_limit_error,
+    _load_llm_prefs,
     _migrate_legacy_prefs,
     _normalize_step,
     _resolve_chain,
     _resolve_group,
     call,
     call_detailed,
+    invalidate_cache,
 )
 
 # ---------------------------------------------------------------------------
@@ -1141,3 +1147,109 @@ class TestLangfuseErrorGenerationOnFallback:
         # LLM call succeeds despite Langfuse error generation failure
         assert text == "fallback-response"
         assert record["used"] == "claude"
+
+
+# ---------------------------------------------------------------------------
+# _load_llm_prefs HTTP fallback (BL-232)
+# ---------------------------------------------------------------------------
+
+class TestLoadLlmPrefsHttpFallback:
+    """Tests for the HTTP API fallback path in _load_llm_prefs().
+
+    When the prefs file is not found (KE container) but PM_BOT_API_URL is set,
+    _load_llm_prefs() fetches prefs via HTTP GET from pm-bot REST API.
+    """
+
+    _API_PREFS = {
+        "llm_provider": "openrouter",
+        "openrouter_model": "qwen/qwen3-32b",
+        "moderator": {"relevance_threshold": 7},
+    }
+
+    def setup_method(self):
+        """Reset all caches between tests."""
+        invalidate_cache()
+
+    def test_file_exists_reads_file(self, tmp_path):
+        """When the prefs file exists, it is read from disk. No HTTP call is made."""
+        prefs_file = tmp_path / ".pm-user-prefs.json"
+        file_prefs = {"llm_provider": "claude", "ollama_url": "", "ollama_model": "qwen3.5:latest"}
+        prefs_file.write_text(json.dumps(file_prefs), encoding="utf-8")
+
+        with patch.dict(os.environ, {"PM_BOT_DATA_PATH": str(tmp_path), "PM_BOT_API_URL": "http://pm-bot:8000"}, clear=False), \
+             patch("shared.llm_client._requests.get") as mock_get:
+            result = _load_llm_prefs()
+
+        assert result["llm_provider"] == "claude"
+        mock_get.assert_not_called()
+
+    def test_file_missing_api_available(self, tmp_path):
+        """File not found, PM_BOT_API_URL set, API returns 200 -> prefs from API."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = dict(self._API_PREFS)
+
+        with patch.dict(os.environ, {"PM_BOT_DATA_PATH": str(tmp_path), "PM_BOT_API_URL": "http://pm-bot:8000"}, clear=False), \
+             patch("shared.llm_client._requests.get", return_value=mock_resp) as mock_get:
+            result = _load_llm_prefs()
+
+        assert result["llm_provider"] == "openrouter"
+        mock_get.assert_called_once_with("http://pm-bot:8000/api/v1/user-prefs", timeout=5)
+
+    def test_file_missing_api_connection_error(self, tmp_path):
+        """File not found, PM_BOT_API_URL set, API unreachable -> defaults."""
+        with patch.dict(os.environ, {"PM_BOT_DATA_PATH": str(tmp_path), "PM_BOT_API_URL": "http://pm-bot:8000"}, clear=False), \
+             patch("shared.llm_client._requests.get", side_effect=requests.ConnectionError("Connection refused")):
+            result = _load_llm_prefs()
+
+        assert result == dict(_DEFAULT_LLM_PREFS)
+
+    def test_file_missing_api_returns_500(self, tmp_path):
+        """File not found, PM_BOT_API_URL set, API returns 500 -> defaults."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 500
+
+        with patch.dict(os.environ, {"PM_BOT_DATA_PATH": str(tmp_path), "PM_BOT_API_URL": "http://pm-bot:8000"}, clear=False), \
+             patch("shared.llm_client._requests.get", return_value=mock_resp):
+            result = _load_llm_prefs()
+
+        assert result == dict(_DEFAULT_LLM_PREFS)
+
+    def test_api_cache_within_ttl(self, tmp_path):
+        """Two consecutive calls: HTTP is called only once (TTL cache works)."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = dict(self._API_PREFS)
+
+        with patch.dict(os.environ, {"PM_BOT_DATA_PATH": str(tmp_path), "PM_BOT_API_URL": "http://pm-bot:8000"}, clear=False), \
+             patch("shared.llm_client._requests.get", return_value=mock_resp) as mock_get:
+            result1 = _load_llm_prefs()
+            result2 = _load_llm_prefs()
+
+        assert result1["llm_provider"] == "openrouter"
+        assert result2["llm_provider"] == "openrouter"
+        mock_get.assert_called_once()
+
+    def test_api_cache_expired(self, tmp_path):
+        """After TTL expiry, HTTP is called again."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = dict(self._API_PREFS)
+
+        with patch.dict(os.environ, {"PM_BOT_DATA_PATH": str(tmp_path), "PM_BOT_API_URL": "http://pm-bot:8000"}, clear=False), \
+             patch("shared.llm_client._requests.get", return_value=mock_resp) as mock_get, \
+             patch("shared.llm_client.time") as mock_time:
+            # First call at t=100
+            mock_time.monotonic.return_value = 100.0
+            result1 = _load_llm_prefs()
+            assert mock_get.call_count == 1
+
+            # Reset cache state to simulate time passing: set _cached_api_time
+            # to the value that was set during the first call (100.0),
+            # but now monotonic returns 100 + TTL + 1 -> cache expired
+            mock_time.monotonic.return_value = 100.0 + _API_CACHE_TTL_SECONDS + 1
+            result2 = _load_llm_prefs()
+
+        assert result1["llm_provider"] == "openrouter"
+        assert result2["llm_provider"] == "openrouter"
+        assert mock_get.call_count == 2

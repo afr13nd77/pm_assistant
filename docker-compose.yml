@@ -70,6 +70,7 @@ services:
       - VAULT_PATH=/vault
       - PLATFORM_DATA_PATH=/platform-data
       - KE_DATA_PATH=/data
+      - PM_BOT_API_URL=http://pm-bot:8000
       - JIRA_URL=${JIRA_URL}
       - JIRA_TOKEN=${JIRA_TOKEN}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
@@ -101,12 +102,13 @@ services:
       - VAULT_PATH=/vault
       - PLATFORM_DATA_PATH=/platform-data
       - KE_DATA_PATH=/data
+      - PM_BOT_API_URL=http://pm-bot:8000
       - JIRA_URL=${JIRA_URL}
       - JIRA_TOKEN=${JIRA_TOKEN}
       - JIRA_SYNC_CRON=${JIRA_SYNC_CRON:-0 */3 * * *}
     entrypoint: >
       sh -c "
-        env | grep -E '^(TZ|YANDEX_|CLAUDE_|BOT_|ALLOWED_|VAULT_|JIRA_|OPENROUTER_|PYTHONUNBUFFERED|PLATFORM_DATA_PATH|PM_BOT_DATA_PATH|KE_DATA_PATH)' >> /etc/environment &&
+        env | grep -E '^(TZ|YANDEX_|CLAUDE_|BOT_|ALLOWED_|VAULT_|JIRA_|OPENROUTER_|PYTHONUNBUFFERED|PLATFORM_DATA_PATH|PM_BOT_DATA_PATH|PM_BOT_API_URL|KE_DATA_PATH)' >> /etc/environment &&
         echo '0 9 * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine synthesize --notify >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-synth &&
         echo '15 * * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine fetch-meetings --notify >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-fetch &&
         echo '*/10 * * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine process-queue >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-process-queue &&

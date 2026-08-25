@@ -1,9 +1,11 @@
 import json
 import logging
 import os
+import time
 from pathlib import Path
 
 import anthropic
+import requests as _requests
 
 from shared import openrouter_client
 from shared.langfuse_client import get_langfuse
@@ -80,40 +82,89 @@ OPENROUTER_429_BACKOFF_SECONDS = 0.7
 _cached_prefs: dict | None = None
 _cached_mtime: float = 0.0
 
+# API-based cache (used when prefs file is not found but PM_BOT_API_URL is set)
+_cached_prefs_api: dict | None = None
+_cached_api_time: float = 0.0
+_API_CACHE_TTL_SECONDS = 60
+
 
 def _load_llm_prefs() -> dict:
-    """Load LLM prefs from .pm-user-prefs.json with file mtime caching."""
+    """Load LLM prefs from .pm-user-prefs.json with file mtime caching.
+
+    Fallback order:
+    1. Local file (mtime-cached) -- used by pm-bot container where the file is mounted.
+    2. HTTP GET from pm-bot API (time-based TTL cache) -- used by KE container
+       where the file is not available but PM_BOT_API_URL env is set.
+    3. Built-in defaults.
+    """
     global _cached_prefs, _cached_mtime
+    global _cached_prefs_api, _cached_api_time
 
     data_dir = os.getenv("PM_BOT_DATA_PATH", os.getenv("VAULT_PATH", ""))
     prefs_path = Path(data_dir) / ".pm-user-prefs.json"
 
-    if not prefs_path.exists():
-        logger.info("_load_llm_prefs: prefs file not found, using defaults")
+    # --- Path 1: local file available (pm-bot container) ---
+    if prefs_path.exists():
+        try:
+            mtime = prefs_path.stat().st_mtime
+            if _cached_prefs is not None and mtime == _cached_mtime:
+                logger.debug("_load_llm_prefs: returning cached prefs (file)")
+                return _cached_prefs
+
+            data = json.loads(prefs_path.read_text(encoding="utf-8"))
+            _cached_prefs = data
+            _cached_mtime = mtime
+            logger.info("_load_llm_prefs: loaded prefs from file, llm_provider=%s", data.get("llm_provider", "claude"))
+            return data
+        except Exception as e:
+            logger.warning("_load_llm_prefs: failed to read prefs file: %s, using defaults", e)
+            return dict(_DEFAULT_LLM_PREFS)
+
+    # --- Path 2: file not found, try HTTP API if PM_BOT_API_URL is set ---
+    api_url = os.getenv("PM_BOT_API_URL", "")
+    if api_url:
+        # Check time-based TTL cache first
+        now = time.monotonic()
+        if _cached_prefs_api is not None and (now - _cached_api_time) < _API_CACHE_TTL_SECONDS:
+            logger.debug("_load_llm_prefs: returning cached prefs (API, TTL)")
+            return _cached_prefs_api
+
+        endpoint = f"{api_url.rstrip('/')}/api/v1/user-prefs"
+        try:
+            resp = _requests.get(endpoint, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                _cached_prefs_api = data
+                _cached_api_time = now
+                logger.info(
+                    "_load_llm_prefs: loaded prefs from API (%s), llm_provider=%s",
+                    endpoint, data.get("llm_provider", "claude"),
+                )
+                return data
+            else:
+                logger.warning(
+                    "_load_llm_prefs: API returned status %d from %s, using defaults",
+                    resp.status_code, endpoint,
+                )
+        except Exception as e:
+            logger.warning("_load_llm_prefs: HTTP request to %s failed: %s, using defaults", endpoint, e)
+
         return dict(_DEFAULT_LLM_PREFS)
 
-    try:
-        mtime = prefs_path.stat().st_mtime
-        if _cached_prefs is not None and mtime == _cached_mtime:
-            logger.debug("_load_llm_prefs: returning cached prefs")
-            return _cached_prefs
-
-        data = json.loads(prefs_path.read_text(encoding="utf-8"))
-        _cached_prefs = data
-        _cached_mtime = mtime
-        logger.info("_load_llm_prefs: loaded prefs, llm_provider=%s", data.get("llm_provider", "claude"))
-        return data
-    except Exception as e:
-        logger.warning("_load_llm_prefs: failed to read prefs: %s, using defaults", e)
-        return dict(_DEFAULT_LLM_PREFS)
+    # --- Path 3: file not found, no API URL — defaults ---
+    logger.info("_load_llm_prefs: prefs file not found and PM_BOT_API_URL not set, using defaults")
+    return dict(_DEFAULT_LLM_PREFS)
 
 
 def invalidate_cache():
     """Force reload of prefs on next call. Called after prefs are written via API."""
     global _cached_prefs, _cached_mtime
+    global _cached_prefs_api, _cached_api_time
     _cached_prefs = None
     _cached_mtime = 0.0
-    logger.info("invalidate_cache: LLM prefs cache cleared")
+    _cached_prefs_api = None
+    _cached_api_time = 0.0
+    logger.info("invalidate_cache: LLM prefs cache cleared (file + API)")
 
 
 def get_client(operation: str) -> tuple[anthropic.Anthropic, str, dict]:

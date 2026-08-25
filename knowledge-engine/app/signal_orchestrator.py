@@ -1126,20 +1126,24 @@ class SignalOrchestrator:
         return self._business_context
 
     def _load_relevance_threshold(self) -> int:
-        """Load relevance threshold from user-prefs with fallback to config (BL-203, AC-09, AC-10)."""
+        """Load relevance threshold from user-prefs with fallback to config (BL-203, AC-09, AC-10).
+
+        Uses shared.llm_client._load_llm_prefs() which supports both local file
+        and HTTP API fallback (BL-232 fix: KE container has no access to the prefs
+        file in pm-bot-data volume, but can reach pm-bot via PM_BOT_API_URL).
+        """
         logger.info("_load_relevance_threshold: loading threshold")
-        prefs_path = Path(os.getenv("PM_BOT_DATA_PATH", str(self.vault_path))) / ".pm-user-prefs.json"
         try:
-            if prefs_path.exists():
-                prefs = json.loads(prefs_path.read_text(encoding="utf-8"))
-                mod = prefs.get("moderator", {})
-                if "relevance_threshold" in mod:
-                    val = int(mod["relevance_threshold"])
-                    val = max(1, min(10, val))
-                    logger.info(
-                        f"_load_relevance_threshold: from user-prefs, value={val}"
-                    )
-                    return val
+            from shared.llm_client import _load_llm_prefs
+            prefs = _load_llm_prefs()
+            mod = prefs.get("moderator", {})
+            if "relevance_threshold" in mod:
+                val = int(mod["relevance_threshold"])
+                val = max(1, min(10, val))
+                logger.info(
+                    f"_load_relevance_threshold: from user-prefs, value={val}"
+                )
+                return val
         except Exception as e:
             logger.warning(f"_load_relevance_threshold: error reading user-prefs: {e}")
 
