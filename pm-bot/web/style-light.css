@@ -2549,3 +2549,27 @@ body {
 .rq-priority--high { background: var(--r); color: #fff; }
 .rq-priority--medium { background: var(--a); color: #fff; }
 .rq-priority--low { background: var(--text-muted); color: #fff; }
+
+/* ============================================================
+   PROMPTS UI — light theme overrides (BL-197)
+   ============================================================ */
+.prompt-group-header {
+  background: rgba(0, 120, 200, 0.04);
+}
+.prompt-group-header:hover {
+  background: rgba(0, 120, 200, 0.08);
+}
+.prompt-item-header:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+.prompt-editor {
+  background: #fff;
+  border-color: #ddd;
+}
+.prompt-editor:focus {
+  border-color: var(--cyan);
+}
+.prompt-var-badge {
+  background: rgba(0, 120, 200, 0.06);
+  border-color: rgba(0, 120, 200, 0.2);
+}

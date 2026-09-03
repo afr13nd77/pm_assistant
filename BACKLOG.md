@@ -1,8 +1,8 @@
 # Бэклог -- PM Assistant
 
 **Версии:** pm-bot 1.27.2 / knowledge-engine 1.24.2 / idea-pipeline 1.2.0 / web-ui 1.32.0 / shared 0.7.5
-**Обновлён:** 14.08.2026 (BL-232 — Вынос служебных файлов из vault в Docker volumes)
-**Бэклог:** реализованные фичи (114), баги (36), идеи (68), итого (218)
+**Обновлён:** 03.09.2026 (BL-197 — Управление промптами через Settings UI)
+**Бэклог:** реализованные фичи (115), баги (36), идеи (69), итого (220)
 
 ---
 
@@ -159,6 +159,7 @@
 | BL-195 | ✅ Research Queue UI — мониторинг исследований | web-ui, pm-bot, knowledge-engine | Pipeline graph страница `research.html` в стиле n8n: 7 узлов (2 ghost + 5 основных), SVG edges с dash-offset анимацией, drawer для деталей задания. 3 API endpoint (status, run, retry) через полный proxy-chain (KE → ke_client → vault_api → api.js). Completeness badges, auto-refresh 60s, responsive. Спека: docs/BL-195_research-queue-ui/ |
 | BL-230 | ✅ AI-агент в редакторе идеи | web-ui, pm-bot | В body-editor (редактор идеи) добавлен режим AI-агента — чат с LLM для доработки идей. Тогл «Режим работы с ИИ», 3-колоночный layout, чат-интерфейс. Бизнес-контекст и текст идеи передаются автоматически. Quick-action кнопки (усилить проблему, гипотеза, KPI, PRD). Настройка модели в Settings: секция AI AGENT (Claude / Ollama / OpenRouter). Langfuse трейсинг (trace name: ai-agent-chat). User-prefs: поля ai_agent_provider, ai_agent_model. Endpoint POST /api/v1/ai-agent/chat. Спека: docs/BL-230_ai-agent-editor/ |
 | BL-231 | ✅ Ресайз колонок в body-editor | web-ui, pm-bot | Drag-handle между колонками в body-editor (6px, подсветка при hover). Ресайз в 2-колоночном (editor + preview) и 3-колоночном (+ AI чат) режимах. Пропорции сохраняются в user-prefs (editor_col_split_2, editor_col_split_3). Двойной клик по handle — сброс к дефолтным пропорциям. Блокировка выделения текста при drag. Responsive: handles скрыты на экранах < 1024px |
+| BL-197 | ✅ Управление промптами через Settings UI | web-ui, pm-bot, knowledge-engine, idea-pipeline | Подсекция PROMPTS в Settings: просмотр, редактирование, hot-reload и сброс всех 32 промптов (5 pm-bot, 24 KE, 3 pipeline). Proxy-архитектура: browser → vault_api → KE/Pipeline API. Дефолты через *.txt.default |
 
 ### 5.2 Идеи
 
@@ -174,7 +175,7 @@
 | BL-169 | Диагностический endpoint для UI-страниц | pm-bot | `GET /api/v1/diagnostics/today` — проверяет все API-зависимости страницы TODAY за 1 запрос: статус каждого endpoint, наличие данных, дата последнего отчёта. Team Lead вызывает перед объявлением готовности. Расширяемо на другие страницы (`/diagnostics/{page}`). Мотивация: BL-168 live-testing (20 ошибок после "готово") |
 | BL-170 | DOM-валидация frontend-страниц (Node.js) | web-ui | Node.js скрипт валидации HTML/Vue: проверка CSS-классов на конфликты (отсутствие prefix), проверка `v-html` vs `{{ }}` для markdown-контента, проверка что все `@click` ссылаются на существующие методы. Расширение test-today-node.js. Мотивация: BL-168 — 6 из 20 ошибок были конфликты классов и неверные привязки |
 | BL-171 | Visual regression testing (Playwright) | web-ui, инфраструктура | Playwright + фикстурный vault: headless-браузер открывает каждую страницу, делает скриншоты блоков, сравнивает с baseline (pixel diff). Клик по интерактивным элементам → скриншот popup. Отчёт: список блоков с % отклонения. Docker-контейнер с тестовым vault. Мотивация: BL-168 — ручное тестирование 10 страниц неэффективно |
-| BL-197 | Управление всеми промптами через Settings UI | web-ui, pm-bot, knowledge-engine, idea-pipeline | Отдельная подсекция в Settings для просмотра и редактирования **всех** промптов проекта: pm-bot (`app/prompts/`, 5 файлов), knowledge-engine (`app/prompts/`, 24 файла), idea-pipeline (`app/prompts/`, 3 файла). KE API: GET/PUT `/api/v1/prompts` (список файлов по компонентам, чтение, запись). Аналогичные API для pm-bot и idea-pipeline. Proxy через vault_api + api.js. UI: дерево промптов по компонентам, редактор с подсветкой переменных `{var}`, кнопка сохранения, diff с текущей версией, кнопка сброса к дефолту. Без перезапуска контейнера (промпты читаются при каждом вызове). **Мотивация:** дистрибьюция проекта — пользователь собирает Docker, настраивает всё через Settings без доступа к файлам и пересборки образов. Промпты — ключевая точка кастомизации под конкретную компанию/домен |
+
 
 ---
 
@@ -440,8 +441,8 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 114 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-192, BL-194..BL-195, BL-198..BL-203, BL-212, BL-230..BL-232 |
+| ✅ Реализовано | 115 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-192, BL-194..BL-195, BL-197..BL-203, BL-212, BL-230..BL-232 |
 | ✅ Баги исправлены | 36 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165, BL-193, BUG-027, BUG-028, BL-205, BL-206, BL-207, BL-208, BL-209, BL-210, BL-211 |
-| Идея | 70 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-188, BL-196..BL-197, BL-204, BL-213..BL-229, BL-233..BL-234 |
+| Идея | 69 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-188, BL-196, BL-204, BL-213..BL-229, BL-233..BL-234 |
 | ❌ Удалено | 1 | BL-121 |
 | **Итого** | **220** | |

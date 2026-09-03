@@ -24,6 +24,14 @@ class BaseAgent:
         )
         return prompt_text
 
+    def reload_prompt(self) -> None:
+        old_len = len(self.prompt)
+        self.prompt = self._load_prompt()
+        logger.info(
+            "Agent %s: prompt reloaded, old_len=%d, new_len=%d",
+            self.config.name, old_len, len(self.prompt),
+        )
+
     def run(self, input_text: str, context: dict | None = None) -> str:
         logger.info(
             "Agent %s: run started, input_len=%d, has_context=%s",

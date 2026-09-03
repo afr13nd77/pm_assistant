@@ -310,6 +310,25 @@ Drag-n-drop правила: readiness 100% для перехода в «Гото
 
 ---
 
+## Промпты
+
+Все промпты хранятся в `app/prompts/*.txt` каждого компонента:
+- **pm-bot**: 5 промптов (idea, meeting, jira_ticket, daily, weekly_report)
+- **knowledge-engine**: 24 промпта (enrich, synthesize, meeting_protocol, digest, signal_*, quality_*, research_report и др.)
+- **idea-pipeline**: 3 промпта (analyst, pm, decomposer)
+
+### Управление через Settings UI
+
+Все 32 промпта доступны для просмотра и редактирования через веб-интерфейс Settings (http://localhost:8080/settings.html, секция PROMPTS):
+- Дерево промптов по компонентам с accordion-навигацией
+- Текстовый редактор для каждого промпта с подсветкой переменных `{var}`
+- Сохранение с hot-reload (без перезапуска контейнеров)
+- Сброс к дефолтной версии одной кнопкой
+
+Промпты — ключевая точка кастомизации системы под конкретную компанию/домен. Для базовой настройки достаточно Docker + Settings UI, без доступа к файловой системе.
+
+---
+
 ## Потоки данных
 
 1. **Идеи**: Telegram/Web -> handlers -> claude_client.process_idea (->JSON) -> obsidian_writer.write_idea (template-based) -> `raw/inbound/ideas/` + `wiki/domains/<domain>/ideas/` -> knowledge-engine enrich

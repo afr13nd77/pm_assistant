@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import threading
 import time as _time
 import urllib.parse
@@ -45,7 +46,8 @@ from shared.vault_paths import (
     wiki_reports,
 )
 
-from . import calendar_client, ke_client
+from . import calendar_client, ke_client, pipeline_client
+from .prompt_registry import PROMPT_REGISTRY
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +107,14 @@ app.add_middleware(
 @app.on_event("startup")
 async def _warm_cache():
     """Pre-populate cache on server start so first request is fast."""
+    # Create *.txt.default backups for prompt files
+    prompts_dir = Path(__file__).parent / "prompts"
+    for txt_file in prompts_dir.glob("*.txt"):
+        default_file = txt_file.with_suffix(".txt.default")
+        if not default_file.exists():
+            shutil.copy2(txt_file, default_file)
+            logger.info("Created default backup: %s", default_file.name)
+
     logger.info("_warm_cache: pre-populating vault cache")
     try:
         get_domains()
@@ -2617,89 +2627,199 @@ def seed_domain_config():
 
 
 # ---------------------------------------------------------------------------
+# Prompts API (BL-197)
+# ---------------------------------------------------------------------------
+
+_PROMPT_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_VALID_COMPONENTS = frozenset({"pm-bot", "knowledge-engine", "idea-pipeline"})
+MAX_PROMPT_SIZE = 50 * 1024
+_pmbot_prompts_dir = Path(__file__).parent / "prompts"
+
+
+class PromptSaveRequest(BaseModel):
+    content: str = Field(..., max_length=MAX_PROMPT_SIZE)
+
+
+def _validate_prompt_name(name: str) -> None:
+    if not _PROMPT_NAME_RE.match(name):
+        raise HTTPException(status_code=400, detail="Invalid prompt name")
+
+
+def _validate_component(component: str) -> None:
+    if component not in _VALID_COMPONENTS:
+        raise HTTPException(status_code=400, detail="Invalid component name")
+
+
+def _safe_prompt_path(name: str, prompts_dir: Path) -> Path:
+    _validate_prompt_name(name)
+    path = (prompts_dir / f"{name}.txt").resolve()
+    if not str(path).startswith(str(prompts_dir.resolve())):
+        raise HTTPException(status_code=400, detail="Invalid prompt name")
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Prompt not found: {name}")
+    return path
+
+
+def _is_modified(prompt_path: Path) -> bool:
+    default_path = prompt_path.with_suffix(".txt.default")
+    if not default_path.exists():
+        return False
+    return prompt_path.read_text(encoding="utf-8") != default_path.read_text(encoding="utf-8")
+
+
+def _get_pmbot_prompts() -> dict:
+    """Get pm-bot prompts with metadata from PROMPT_REGISTRY."""
+    logger.info("_get_pmbot_prompts — start")
+    prompts = []
+    for name, meta in PROMPT_REGISTRY.items():
+        path = _pmbot_prompts_dir / f"{name}.txt"
+        if not path.exists():
+            logger.warning("_get_pmbot_prompts — file not found: %s", path)
+            continue
+        content = path.read_text(encoding="utf-8")
+        prompts.append({
+            "name": name,
+            "description": meta["description"],
+            "content": content,
+            "lines": content.count("\n") + 1,
+            "variables": meta["variables"],
+            "is_modified": _is_modified(path),
+        })
+    logger.info("_get_pmbot_prompts — returning %d prompts", len(prompts))
+    return {"status": "ok", "prompts": prompts}
+
+
+@app.get("/api/v1/prompts/all")
+def get_all_prompts():
+    logger.info("GET /api/v1/prompts/all — start")
+    result = {}
+
+    # pm-bot (local)
+    result["pm-bot"] = _get_pmbot_prompts()
+
+    # knowledge-engine (via ke_client)
+    try:
+        ke_data = ke_client.get_prompts()
+        result["knowledge-engine"] = {"status": "ok", "prompts": ke_data.get("prompts", [])}
+    except Exception as exc:
+        logger.error("GET /api/v1/prompts/all — KE error: %s", exc)
+        result["knowledge-engine"] = {"status": "error", "error": str(exc), "prompts": []}
+
+    # idea-pipeline (via pipeline_client)
+    try:
+        pl_data = pipeline_client.get_prompts()
+        result["idea-pipeline"] = {"status": "ok", "prompts": pl_data.get("prompts", [])}
+    except Exception as exc:
+        logger.error("GET /api/v1/prompts/all — pipeline error: %s", exc)
+        result["idea-pipeline"] = {"status": "error", "error": str(exc), "prompts": []}
+
+    logger.info(
+        "GET /api/v1/prompts/all — pm-bot=%d, ke=%s, pipeline=%s",
+        len(result["pm-bot"].get("prompts", [])),
+        result["knowledge-engine"]["status"],
+        result["idea-pipeline"]["status"],
+    )
+    return result
+
+
+@app.post("/api/v1/prompts/{component}/{name}")
+def save_component_prompt(component: str, name: str, request: PromptSaveRequest):
+    logger.info("POST /api/v1/prompts/%s/%s — start, content_len=%d", component, name, len(request.content))
+    _validate_component(component)
+    _validate_prompt_name(name)
+
+    if component == "pm-bot":
+        path = _safe_prompt_path(name, _pmbot_prompts_dir)
+        path.write_text(request.content, encoding="utf-8")
+        result = {
+            "status": "ok",
+            "name": name,
+            "lines": request.content.count("\n") + 1,
+            "is_modified": _is_modified(path),
+        }
+    elif component == "knowledge-engine":
+        try:
+            result = ke_client.save_prompt(name, request.content)
+        except Exception as exc:
+            logger.error("POST /api/v1/prompts/%s/%s — KE error: %s", component, name, exc)
+            raise HTTPException(status_code=502, detail=f"knowledge-engine service unavailable: {exc}")
+    elif component == "idea-pipeline":
+        try:
+            result = pipeline_client.save_prompt(name, request.content)
+        except Exception as exc:
+            logger.error("POST /api/v1/prompts/%s/%s — pipeline error: %s", component, name, exc)
+            raise HTTPException(status_code=502, detail=f"idea-pipeline service unavailable: {exc}")
+
+    logger.info("POST /api/v1/prompts/%s/%s — done", component, name)
+    return result
+
+
+@app.post("/api/v1/prompts/{component}/{name}/reset")
+def reset_component_prompt(component: str, name: str):
+    logger.info("POST /api/v1/prompts/%s/%s/reset — start", component, name)
+    _validate_component(component)
+    _validate_prompt_name(name)
+
+    if component == "pm-bot":
+        path = _safe_prompt_path(name, _pmbot_prompts_dir)
+        default_path = path.with_suffix(".txt.default")
+        if not default_path.exists():
+            raise HTTPException(status_code=404, detail=f"Default not found for: {name}")
+        content = default_path.read_text(encoding="utf-8")
+        path.write_text(content, encoding="utf-8")
+        result = {
+            "status": "ok",
+            "name": name,
+            "content": content,
+            "lines": content.count("\n") + 1,
+            "is_modified": False,
+        }
+    elif component == "knowledge-engine":
+        try:
+            result = ke_client.reset_prompt(name)
+        except Exception as exc:
+            logger.error("POST /api/v1/prompts/%s/%s/reset — KE error: %s", component, name, exc)
+            raise HTTPException(status_code=502, detail=f"knowledge-engine service unavailable: {exc}")
+    elif component == "idea-pipeline":
+        try:
+            result = pipeline_client.reset_prompt(name)
+        except Exception as exc:
+            logger.error("POST /api/v1/prompts/%s/%s/reset — pipeline error: %s", component, name, exc)
+            raise HTTPException(status_code=502, detail=f"idea-pipeline service unavailable: {exc}")
+
+    logger.info("POST /api/v1/prompts/%s/%s/reset — done", component, name)
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Settings
 # ---------------------------------------------------------------------------
 
 class SettingsModel(BaseModel):
     vault_path: str = ""
     transcripts_path: str = ""
-    prompts: dict = {}  # key: prompt name, value: prompt content
 
 
 @app.get("/api/v1/settings")
 def get_settings():
-    """Read current settings from environment and prompt files."""
+    """Read current settings from environment."""
     logger.info("GET /api/v1/settings — start")
 
     settings = {
         "vault_path": os.getenv("VAULT_PATH", "/vault"),
         "transcripts_path": os.getenv("TRANSCRIPTS_INBOX", "/transcripts/inbox"),
-        "prompts": {},
     }
 
-    # Read prompt files
-    prompts_dir = Path(__file__).parent / "prompts"
-    logger.info("GET /api/v1/settings — scanning prompts dir: %s", prompts_dir)
-    if prompts_dir.exists():
-        for f in prompts_dir.glob("*.txt"):
-            try:
-                settings["prompts"][f.stem] = f.read_text(encoding="utf-8")
-                logger.info("GET /api/v1/settings — loaded prompt: %s", f.stem)
-            except Exception as exc:
-                logger.error(
-                    "GET /api/v1/settings — failed to read prompt %s: %s",
-                    f.name,
-                    exc,
-                )
-    else:
-        logger.warning(
-            "GET /api/v1/settings — prompts dir not found: %s", prompts_dir
-        )
-
-    logger.info(
-        "GET /api/v1/settings — returning %d prompts", len(settings["prompts"])
-    )
+    logger.info("GET /api/v1/settings — done")
     return settings
 
 
 @app.post("/api/v1/settings")
 def save_settings(settings: SettingsModel):
-    """Save settings — currently only prompt files can be saved."""
+    """Save settings (prompts managed via /api/v1/prompts/*)."""
     logger.info("POST /api/v1/settings — start")
-
-    saved_count = 0
-    prompts_dir = Path(__file__).parent / "prompts"
-
-    for name, content in settings.prompts.items():
-        # Security: reject path traversal attempts
-        if ".." in name or "/" in name or "\\" in name:
-            logger.warning(
-                "POST /api/v1/settings — rejecting path traversal attempt: %s",
-                name,
-            )
-            continue
-
-        filepath = prompts_dir / f"{name}.txt"
-
-        # Only allow writing to existing prompt files
-        if not filepath.exists():
-            logger.warning(
-                "POST /api/v1/settings — skipping unknown prompt: %s", name
-            )
-            continue
-
-        try:
-            filepath.write_text(content, encoding="utf-8")
-            saved_count += 1
-            logger.info("POST /api/v1/settings — saved prompt: %s", name)
-        except Exception as exc:
-            logger.error(
-                "POST /api/v1/settings — failed to save prompt %s: %s", name, exc
-            )
-
-    logger.info("POST /api/v1/settings — saved %d prompts", saved_count)
-    _cache.invalidate()
-    return {"status": "ok", "saved_prompts": saved_count}
+    logger.info("POST /api/v1/settings — done")
+    return {"status": "ok"}
 
 
 # ---------------------------------------------------------------------------

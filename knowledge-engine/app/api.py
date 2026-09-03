@@ -12,13 +12,17 @@ import logging
 import os
 import pathlib
 import re
+import shutil
 from datetime import datetime
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from shared import vault_paths as _vp
+
+from .prompt_registry import PROMPT_REGISTRY
+from .signal_moderator import invalidate_prompt_cache
 
 logger = logging.getLogger(__name__)
 
@@ -130,11 +134,53 @@ class ResearchRetryRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Prompt helpers (BL-197)
+# ---------------------------------------------------------------------------
+
+_PROMPT_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+MAX_PROMPT_SIZE = 50 * 1024
+
+
+class PromptSaveRequest(BaseModel):
+    content: str = Field(..., max_length=MAX_PROMPT_SIZE)
+
+
+def _validate_prompt_name(name: str) -> None:
+    if not _PROMPT_NAME_RE.match(name):
+        raise HTTPException(status_code=400, detail="Invalid prompt name")
+
+
+def _safe_prompt_path(name: str, prompts_dir: pathlib.Path) -> pathlib.Path:
+    _validate_prompt_name(name)
+    path = (prompts_dir / f"{name}.txt").resolve()
+    if not str(path).startswith(str(prompts_dir.resolve())):
+        raise HTTPException(status_code=400, detail="Invalid prompt name")
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Prompt not found: {name}")
+    return path
+
+
+def _is_modified(prompt_path: pathlib.Path) -> bool:
+    default_path = prompt_path.with_suffix(".txt.default")
+    if not default_path.exists():
+        return False
+    return prompt_path.read_text(encoding="utf-8") != default_path.read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
 # Startup
 # ---------------------------------------------------------------------------
 
 @app.on_event("startup")
 def _configure_vault():
+    # Create *.txt.default backups for prompt files (before any other init)
+    prompts_dir = pathlib.Path(__file__).parent / "prompts"
+    for txt_file in prompts_dir.glob("*.txt"):
+        default_file = txt_file.with_suffix(".txt.default")
+        if not default_file.exists():
+            shutil.copy2(txt_file, default_file)
+            logger.info("Created default backup: %s", default_file.name)
+
     vault_path = os.getenv("VAULT_PATH", "/vault")
     _vp.VAULT_PATH = pathlib.Path(vault_path)
     logger.info("KE API startup: vault_path=%s", _vp.VAULT_PATH)
@@ -1764,3 +1810,69 @@ def signal_approve(signal_id: str):
     except Exception as exc:
         logger.error(f"API signal_approve error: {exc}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Prompts API (BL-197)
+# ---------------------------------------------------------------------------
+
+_ke_prompts_dir = pathlib.Path(__file__).parent / "prompts"
+
+
+@app.get("/api/v1/prompts")
+def get_prompts():
+    logger.info("GET /api/v1/prompts — start")
+    prompts = []
+    for name, meta in PROMPT_REGISTRY.items():
+        path = _ke_prompts_dir / f"{name}.txt"
+        if not path.exists():
+            logger.warning("GET /api/v1/prompts — file not found: %s", path)
+            continue
+        content = path.read_text(encoding="utf-8")
+        prompts.append({
+            "name": name,
+            "description": meta["description"],
+            "content": content,
+            "lines": content.count("\n") + 1,
+            "variables": meta["variables"],
+            "is_modified": _is_modified(path),
+        })
+    logger.info("GET /api/v1/prompts — returning %d prompts", len(prompts))
+    return {"prompts": prompts}
+
+
+@app.post("/api/v1/prompts/{name}")
+def save_prompt(name: str, request: PromptSaveRequest):
+    logger.info("POST /api/v1/prompts/%s — start, content_len=%d", name, len(request.content))
+    path = _safe_prompt_path(name, _ke_prompts_dir)
+    path.write_text(request.content, encoding="utf-8")
+    invalidated = invalidate_prompt_cache(name)
+    logger.info("POST /api/v1/prompts/%s — saved, cache_invalidated=%s", name, invalidated)
+    return {
+        "status": "ok",
+        "name": name,
+        "lines": request.content.count("\n") + 1,
+        "is_modified": _is_modified(path),
+        "cache_invalidated": True,
+    }
+
+
+@app.post("/api/v1/prompts/{name}/reset")
+def reset_prompt(name: str):
+    logger.info("POST /api/v1/prompts/%s/reset — start", name)
+    path = _safe_prompt_path(name, _ke_prompts_dir)
+    default_path = path.with_suffix(".txt.default")
+    if not default_path.exists():
+        raise HTTPException(status_code=404, detail=f"Default not found for: {name}")
+    content = default_path.read_text(encoding="utf-8")
+    path.write_text(content, encoding="utf-8")
+    invalidated = invalidate_prompt_cache(name)
+    logger.info("POST /api/v1/prompts/%s/reset — done, cache_invalidated=%s", name, invalidated)
+    return {
+        "status": "ok",
+        "name": name,
+        "content": content,
+        "lines": content.count("\n") + 1,
+        "is_modified": False,
+        "cache_invalidated": True,
+    }

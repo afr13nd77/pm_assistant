@@ -227,6 +227,51 @@
       white-space: nowrap;
     }
 
+    /* Prompts UI (BL-197) */
+    .prompt-group { margin-bottom: 16px; border: 1px solid var(--border); }
+    .prompt-group-header {
+      display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+      cursor: pointer; font-size: 11px; letter-spacing: 0.1em;
+      background: rgba(0, 229, 255, 0.03); transition: background 0.15s;
+    }
+    .prompt-group-header:hover { background: rgba(0, 229, 255, 0.06); }
+    .prompt-group-chevron { color: var(--cyan); font-size: 12px; width: 12px; }
+    .prompt-group-name { color: var(--cyan); font-weight: bold; }
+    .prompt-group-count { color: var(--text-muted); font-size: 9px; margin-left: auto; }
+    .prompt-group-body { padding: 0; }
+    .prompt-item { border-top: 1px solid var(--border); }
+    .prompt-item-header {
+      display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 28px;
+      cursor: pointer; font-size: 10px; transition: background 0.15s;
+    }
+    .prompt-item-header:hover { background: rgba(255, 255, 255, 0.02); }
+    .prompt-item-name { color: var(--text-body); letter-spacing: 0.05em; min-width: 140px; }
+    .prompt-item-desc { color: var(--text-muted); font-size: 9px; flex: 1; }
+    .prompt-item-lines {
+      font-size: 8px; color: var(--text-muted); padding: 1px 6px;
+      border: 1px solid var(--border); border-radius: 3px;
+    }
+    .prompt-item-modified {
+      font-size: 8px; color: #ff9800; padding: 1px 6px;
+      border: 1px solid rgba(255, 152, 0, 0.3); border-radius: 3px;
+    }
+    .prompt-item-body { padding: 8px 12px 12px 28px; }
+    .prompt-editor {
+      width: 100%; min-height: 200px; background: var(--bg); border: 1px solid var(--border);
+      color: var(--text-body); font-family: var(--font); font-size: 10px; padding: 8px;
+      resize: vertical; outline: none; line-height: 1.5;
+    }
+    .prompt-editor:focus { border-color: var(--cyan); }
+    .prompt-var-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+    .prompt-var-badge {
+      font-size: 9px; color: var(--cyan); padding: 2px 8px;
+      border: 1px solid rgba(0, 229, 255, 0.2); border-radius: 3px;
+      background: rgba(0, 229, 255, 0.05); cursor: default;
+    }
+    .prompt-actions { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+    .prompt-error { color: #f44336; font-size: 9px; margin-left: 8px; }
+    .prompt-error-detail { color: #f44336; font-size: 9px; padding: 8px 12px; }
+
   </style>
 </head>
 <body>
@@ -600,12 +645,41 @@
           </div>
         </div>
 
-        <!-- Prompts section -->
+        <!-- Prompts section (BL-197) -->
         <div class="settings-section">
           <div class="settings-section-title">// PROMPTS</div>
-          <div v-for="(content, name) in settings.prompts" :key="name" class="field-group">
-            <div class="field-label">{{ name.toUpperCase() }}.TXT</div>
-            <textarea class="field-textarea" v-model="settings.prompts[name]"></textarea>
+          <div v-if="promptsLoading" class="field-note">Загрузка промптов...</div>
+          <div v-else>
+            <div v-for="group in promptGroups" :key="group.component" class="prompt-group">
+              <div class="prompt-group-header" @click="togglePromptGroup(group.component)">
+                <span class="prompt-group-chevron">{{ group.collapsed ? '▸' : '▾' }}</span>
+                <span class="prompt-group-name">{{ group.component.toUpperCase() }}</span>
+                <span class="prompt-group-count">{{ group.prompts.length }} промптов</span>
+                <span v-if="group.status === 'error'" class="prompt-error">&#9888; Сервис недоступен</span>
+              </div>
+              <div v-show="!group.collapsed" class="prompt-group-body">
+                <div v-if="group.status === 'error'" class="prompt-error-detail">{{ group.error }}</div>
+                <div v-for="p in group.prompts" :key="p.name" class="prompt-item">
+                  <div class="prompt-item-header" @click="togglePromptItem(group.component, p.name)">
+                    <span class="prompt-item-name">{{ p.name.toUpperCase() }}.TXT</span>
+                    <span class="prompt-item-desc">{{ p.description }}</span>
+                    <span class="prompt-item-lines">{{ p.lines }} строк</span>
+                    <span v-if="p.is_modified" class="prompt-item-modified">modified</span>
+                  </div>
+                  <div v-show="promptExpanded[group.component + '/' + p.name]" class="prompt-item-body">
+                    <textarea class="prompt-editor" v-model="p.content" :rows="Math.max(10, p.lines + 2)"></textarea>
+                    <div v-if="p.variables && p.variables.length" class="prompt-var-list">
+                      <span v-for="v in p.variables" :key="v" class="prompt-var-badge" :title="'Переменная: {' + v + '}'">{{ '{' + v + '}' }}</span>
+                    </div>
+                    <div class="prompt-actions">
+                      <cmd-button label="SAVE" color="cyan" :loading="promptSaving[group.component + '/' + p.name]" :disabled="!isPromptDirty(group.component, p.name)" @click="savePrompt(group.component, p.name)"></cmd-button>
+                      <cmd-button v-if="p.is_modified" label="RESET" color="magenta" :loading="promptSaving[group.component + '/' + p.name]" @click="resetPrompt(group.component, p.name)"></cmd-button>
+                      <span v-if="promptSaveStatus[group.component + '/' + p.name]" class="save-status text-green" style="font-size:10px">{{ promptSaveStatus[group.component + '/' + p.name] }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -634,7 +708,6 @@
         roadmap_now_label: '',
         roadmap_next_label: '',
         roadmap_later_label: '',
-        prompts: {},
       });
       var loading = ref(true);
       var error = ref(null);
@@ -675,6 +748,105 @@
       var fetchMeetingsStatus = ref('');
       var aiAgentProvider = ref('claude');
       var aiAgentModel = ref('');
+
+      // Prompts (BL-197)
+      var promptGroups = ref([]);
+      var promptsLoading = ref(true);
+      var promptSaving = reactive({});
+      var promptExpanded = reactive({});
+      var promptSaveStatus = reactive({});
+
+      function loadPrompts() {
+        promptsLoading.value = true;
+        apiFetch('/prompts/all').then(function(data) {
+          promptGroups.value = Object.entries(data).map(function(entry) {
+            var comp = entry[0];
+            var info = entry[1];
+            return {
+              component: comp,
+              status: info.status,
+              error: info.error || null,
+              prompts: (info.prompts || []).map(function(p) {
+                return Object.assign({}, p, { original: p.content });
+              }),
+              collapsed: comp !== 'pm-bot'
+            };
+          });
+          console.log('[settings] prompts loaded:', promptGroups.value.map(function(g) { return g.component + '(' + g.prompts.length + ')'; }));
+          promptsLoading.value = false;
+        }).catch(function(e) {
+          console.error('[settings] loadPrompts error:', e.message);
+          promptsLoading.value = false;
+        });
+      }
+
+      function savePrompt(component, name) {
+        var key = component + '/' + name;
+        promptSaving[key] = true;
+        promptSaveStatus[key] = '';
+        var group = promptGroups.value.find(function(g) { return g.component === component; });
+        var prompt = group.prompts.find(function(p) { return p.name === name; });
+        apiFetch('/prompts/' + component + '/' + name, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: prompt.content })
+        }).then(function(res) {
+          prompt.is_modified = res.is_modified;
+          prompt.lines = res.lines;
+          prompt.original = prompt.content;
+          promptSaveStatus[key] = 'SAVED';
+          setTimeout(function() { promptSaveStatus[key] = ''; }, 3000);
+          console.log('[settings] prompt saved:', key);
+          promptSaving[key] = false;
+        }).catch(function(e) {
+          promptSaveStatus[key] = 'ERROR: ' + e.message;
+          console.error('[settings] savePrompt error:', key, e.message);
+          promptSaving[key] = false;
+        });
+      }
+
+      function resetPrompt(component, name) {
+        if (!confirm('Вернуть промпт ' + name + ' к оригинальной версии?')) return;
+        var key = component + '/' + name;
+        promptSaving[key] = true;
+        promptSaveStatus[key] = '';
+        apiFetch('/prompts/' + component + '/' + name + '/reset', {
+          method: 'POST'
+        }).then(function(res) {
+          var group = promptGroups.value.find(function(g) { return g.component === component; });
+          var prompt = group.prompts.find(function(p) { return p.name === name; });
+          prompt.content = res.content;
+          prompt.is_modified = false;
+          prompt.lines = res.lines;
+          prompt.original = res.content;
+          promptSaveStatus[key] = 'RESET';
+          setTimeout(function() { promptSaveStatus[key] = ''; }, 3000);
+          console.log('[settings] prompt reset:', key);
+          promptSaving[key] = false;
+        }).catch(function(e) {
+          promptSaveStatus[key] = 'ERROR: ' + e.message;
+          console.error('[settings] resetPrompt error:', key, e.message);
+          promptSaving[key] = false;
+        });
+      }
+
+      function togglePromptGroup(component) {
+        var group = promptGroups.value.find(function(g) { return g.component === component; });
+        if (group) group.collapsed = !group.collapsed;
+      }
+
+      function togglePromptItem(component, name) {
+        var key = component + '/' + name;
+        promptExpanded[key] = !promptExpanded[key];
+      }
+
+      function isPromptDirty(component, name) {
+        var group = promptGroups.value.find(function(g) { return g.component === component; });
+        if (!group) return false;
+        var prompt = group.prompts.find(function(p) { return p.name === name; });
+        if (!prompt) return false;
+        return prompt.content !== prompt.original;
+      }
 
       var operationGroups = ref([
         {
@@ -854,7 +1026,7 @@
         error.value = null;
         apiFetch('/settings').then(function(data) {
           Object.assign(settings, data);
-          console.log('[settings] loaded, prompts:', Object.keys(settings.prompts));
+          console.log('[settings] loaded');
           loading.value = false;
         }).catch(function(e) {
           console.error('[settings] load error', e);
@@ -873,7 +1045,7 @@
           body: JSON.stringify(settings),
         }).then(function(res) {
           saveOk.value = true;
-          saveStatus.value = 'SAVED (' + res.saved_prompts + ' prompts)';
+          saveStatus.value = 'SAVED';
           console.log('[settings] saved', res);
           setTimeout(function() { saveStatus.value = ''; }, 3000);
           saving.value = false;
@@ -1251,6 +1423,7 @@
       onMounted(function() {
         console.log('[settings] component mounted, loading settings');
         loadSettings();
+        loadPrompts();
         loadSyncStatus();
         applyPageTheme();
         api.getUserPrefs().then(function(prefs) {
@@ -1404,6 +1577,17 @@
         saveRelevanceThreshold: saveRelevanceThreshold,
         aiAgentProvider: aiAgentProvider,
         aiAgentModel: aiAgentModel,
+        promptGroups: promptGroups,
+        promptsLoading: promptsLoading,
+        promptSaving: promptSaving,
+        promptExpanded: promptExpanded,
+        promptSaveStatus: promptSaveStatus,
+        loadPrompts: loadPrompts,
+        savePrompt: savePrompt,
+        resetPrompt: resetPrompt,
+        togglePromptGroup: togglePromptGroup,
+        togglePromptItem: togglePromptItem,
+        isPromptDirty: isPromptDirty,
       };
     }
   });

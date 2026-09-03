@@ -10,6 +10,17 @@
 ### Улучшено
 - **knowledge-engine**: промпт `signal_extract.txt` переработан по результатам анализа паттернов отклонений (31 из 43 сигналов dismissed). Добавлен scope PM (4 категории исключений), обязательный draft_idea, лимит 1-3 сигнала, глагольные заголовки, запрет трендов и реактивных возможностей. Промпт `signal_report_generate.txt`: секция «Рекомендуемые действия» требует конкретный компонент/API, реализуемость за 1-3 месяца.
 
+### BL-197 — Управление промптами через Settings UI (03.09.2026)
+- **pm-bot, knowledge-engine, idea-pipeline**: подсекция PROMPTS в Settings UI — просмотр, редактирование, hot-reload и сброс к дефолтам всех 32 промптов (5 pm-bot, 24 KE, 3 pipeline)
+- **pm-bot**: pipeline_client.py — HTTP-клиент к idea-pipeline API (prompts + pipeline run/status/resume/list)
+- **knowledge-engine**: API endpoints GET/POST /api/v1/prompts, POST /api/v1/prompts/{name}/reset с hot-reload кэша
+- **idea-pipeline**: API endpoints GET/POST /api/v1/prompts, POST /api/v1/prompts/{name}/reset, POST /api/v1/reload-agents
+- **pm-bot**: агрегирующие endpoints GET /api/v1/prompts/all, POST /api/v1/prompts/{component}/{name}, POST /api/v1/prompts/{component}/{name}/reset
+- **pm-bot**: секция PROMPTS в settings.html — accordion-дерево по компонентам, textarea-редактор, badge переменных, individual save/reset
+- **Изменено**: промпты убраны из GET/POST /api/v1/settings (breaking change, перенесены в отдельные endpoints)
+- **Инфраструктура**: *.txt.default в .gitignore, prompt_registry.py в каждом компоненте
+- **Тесты**: 94 новых теста (19 KE + 28 pm-bot + 15 pipeline + 20 pipeline_client + 4 invalidate + 8 reload)
+
 ---
 
 ## 25.08.2026

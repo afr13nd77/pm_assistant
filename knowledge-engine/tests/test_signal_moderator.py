@@ -31,6 +31,7 @@ from app.signal_moderator import (
     _build_scoring_prompt,
     _load_prompt,
     _parse_json_response,
+    _prompt_cache,
     _write_processed_md,
     _write_skipped_md,
     dispatch_idea,
@@ -38,6 +39,7 @@ from app.signal_moderator import (
     dispatch_signal,
     extract_signals,
     generate_analysis_report,
+    invalidate_prompt_cache,
     score_signal,
 )
 
@@ -1119,3 +1121,44 @@ class TestDispatchSignal:
         wiki_files = list(wiki_dir.glob("*.md"))
         content = wiki_files[0].read_text(encoding="utf-8")
         assert "Черновик идеи" not in content
+
+
+# ---------------------------------------------------------------------------
+# invalidate_prompt_cache tests (T-22, BL-197)
+# ---------------------------------------------------------------------------
+
+
+class TestInvalidatePromptCache:
+    def setup_method(self):
+        _prompt_cache.clear()
+
+    def test_invalidate_specific(self):
+        """Invalidating a specific key removes only that key."""
+        _prompt_cache["signal_score"] = "cached content"
+        _prompt_cache["enrich"] = "other content"
+        result = invalidate_prompt_cache("signal_score")
+        assert result == ["signal_score"]
+        assert "signal_score" not in _prompt_cache
+        assert "enrich" in _prompt_cache
+
+    def test_invalidate_all(self):
+        """Invalidating with name=None removes all keys."""
+        _prompt_cache["a"] = "1"
+        _prompt_cache["b"] = "2"
+        result = invalidate_prompt_cache(None)
+        assert set(result) == {"a", "b"}
+        assert len(_prompt_cache) == 0
+
+    def test_invalidate_nonexistent(self):
+        """Invalidating a non-existent key returns empty list."""
+        result = invalidate_prompt_cache("nonexistent")
+        assert result == []
+
+    def test_invalidate_returns_names(self):
+        """Invalidating an existing key returns its name."""
+        _prompt_cache["x"] = "val"
+        result = invalidate_prompt_cache("x")
+        assert result == ["x"]
+
+    def teardown_method(self):
+        _prompt_cache.clear()

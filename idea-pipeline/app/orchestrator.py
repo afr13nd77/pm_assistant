@@ -40,6 +40,18 @@ class PipelineOrchestrator:
             list(config.agents.keys()),
         )
 
+    def reload_agents(self) -> list[str]:
+        reloaded = []
+        for name, agent in [
+            ("analyst", self.analyst),
+            ("pm", self.pm_agent),
+            ("decomposer", self.decomposer),
+        ]:
+            agent.reload_prompt()
+            reloaded.append(name)
+        logger.info("reload_agents: reloaded %s", reloaded)
+        return reloaded
+
     @property
     def is_running(self) -> bool:
         return self._running_pipeline_id is not None

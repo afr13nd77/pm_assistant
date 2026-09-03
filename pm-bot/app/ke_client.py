@@ -390,3 +390,34 @@ def signal_approve(signal_id: str) -> dict:
     """Approve a pending signal via KE (creates IDEA in vault)."""
     logger.info("signal_approve: signal_id=%s", signal_id)
     return _post(f"/api/v1/signals/{signal_id}/approve", _get_timeout("default"))
+
+
+# ---------------------------------------------------------------------------
+# 33. GET /api/v1/prompts
+# ---------------------------------------------------------------------------
+
+def get_prompts() -> dict:
+    """Get all KE prompts."""
+    logger.info("get_prompts: fetching KE prompts")
+    return _get("/api/v1/prompts", _get_timeout("default"))
+
+
+# ---------------------------------------------------------------------------
+# 34. POST /api/v1/prompts/{name}
+# ---------------------------------------------------------------------------
+
+def save_prompt(name: str, content: str) -> dict:
+    """Save a KE prompt by name."""
+    logger.info("save_prompt: name=%s, content_len=%d", name, len(content))
+    return _post(f"/api/v1/prompts/{name}", _get_timeout("default"),
+                 json={"content": content})
+
+
+# ---------------------------------------------------------------------------
+# 35. POST /api/v1/prompts/{name}/reset
+# ---------------------------------------------------------------------------
+
+def reset_prompt(name: str) -> dict:
+    """Reset a KE prompt to default."""
+    logger.info("reset_prompt: name=%s", name)
+    return _post(f"/api/v1/prompts/{name}/reset", _get_timeout("default"))

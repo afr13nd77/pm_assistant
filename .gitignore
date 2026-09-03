@@ -34,3 +34,6 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 *.stackdump
+
+# Prompt defaults (created at startup for RESET feature)
+*.txt.default

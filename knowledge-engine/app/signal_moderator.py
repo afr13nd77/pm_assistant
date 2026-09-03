@@ -19,6 +19,18 @@ logger = logging.getLogger(__name__)
 _prompt_cache: dict[str, str] = {}
 
 
+def invalidate_prompt_cache(name: str | None = None) -> list[str]:
+    """Invalidate cached prompts. If name given — only that one, else all."""
+    if name is not None:
+        removed = _prompt_cache.pop(name, None)
+        invalidated = [name] if removed is not None else []
+    else:
+        invalidated = list(_prompt_cache.keys())
+        _prompt_cache.clear()
+    logger.info(f"invalidate_prompt_cache: invalidated={invalidated}")
+    return invalidated
+
+
 @dataclass
 class ScoringResult:
     """Result of signal relevance scoring (AC-01, AC-02, AC-03)."""
