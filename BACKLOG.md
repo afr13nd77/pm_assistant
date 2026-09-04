@@ -1,6 +1,6 @@
 # Бэклог -- PM Assistant
 
-**Версии:** pm-bot 1.27.2 / knowledge-engine 1.24.2 / idea-pipeline 1.2.0 / web-ui 1.32.0 / shared 0.7.5
+**Версии:** pm-bot 1.29.0 / knowledge-engine 1.25.0 / idea-pipeline 1.3.0 / web-ui 1.33.0 / shared 0.7.5
 **Обновлён:** 03.09.2026 (BL-197 — Управление промптами через Settings UI)
 **Бэклог:** реализованные фичи (115), баги (36), идеи (69), итого (220)
 
