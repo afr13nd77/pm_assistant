@@ -2,7 +2,6 @@
 
 import json
 import os
-import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,9 +9,9 @@ import requests
 
 from shared import openrouter_client
 from shared.llm_client import (
-    OPENROUTER_429_BACKOFF_SECONDS,
     _API_CACHE_TTL_SECONDS,
     _DEFAULT_LLM_PREFS,
+    OPENROUTER_429_BACKOFF_SECONDS,
     _call_openrouter,
     _call_provider,
     _default_model_for,

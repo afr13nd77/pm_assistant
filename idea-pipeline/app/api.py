@@ -6,8 +6,6 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
-from pydantic import BaseModel, Field
-
 from idea_pipeline import vault_writer
 from idea_pipeline.auth import ApiKeyMiddleware
 from idea_pipeline.config import load_config
@@ -23,6 +21,7 @@ from idea_pipeline.models import (
 from idea_pipeline.orchestrator import PipelineOrchestrator
 from idea_pipeline.prompt_registry import PROMPT_REGISTRY
 from idea_pipeline.state import PipelineStore
+from pydantic import BaseModel, Field
 from slugify import slugify
 
 from shared import vault_paths

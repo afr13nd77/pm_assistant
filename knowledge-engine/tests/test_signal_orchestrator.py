@@ -350,7 +350,7 @@ class TestProcessDigest:
         sample_digest,
     ):
         """AC-01..AC-11: full pipeline scoring -> report -> extract -> dispatch."""
-        from app.signal_moderator import ReportResult, SignalData, ScoringResult
+        from app.signal_moderator import ReportResult, ScoringResult, SignalData
 
         mock_score.return_value = ScoringResult(
             relevance=8,
@@ -488,7 +488,7 @@ class TestProcessDigest:
         sample_digest,
     ):
         """AC-23: domain should be auto-corrected on signals with draft_idea."""
-        from app.signal_moderator import ReportResult, SignalData, ScoringResult
+        from app.signal_moderator import ReportResult, ScoringResult, SignalData
 
         mock_score.return_value = ScoringResult(
             relevance=8, reason="", matched_entities=[]
@@ -768,7 +768,7 @@ class TestSignalDispatchFlow:
         sample_digest,
     ):
         """signal_memory.record_signal called with reaction=signal when signals dispatched."""
-        from app.signal_moderator import ReportResult, SignalData, ScoringResult
+        from app.signal_moderator import ReportResult, ScoringResult, SignalData
 
         mock_score.return_value = ScoringResult(
             relevance=8, reason="Relevant", matched_entities=[]
@@ -1118,7 +1118,7 @@ class TestPersistenceRecording:
         sample_digest,
     ):
         """After report+extract with dispatched signals, reaction should be 'signal'."""
-        from app.signal_moderator import ReportResult, SignalData, ScoringResult
+        from app.signal_moderator import ReportResult, ScoringResult, SignalData
 
         mock_score.return_value = ScoringResult(
             relevance=8, reason="Relevant", matched_entities=[]

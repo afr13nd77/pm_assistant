@@ -4,11 +4,9 @@ Covers validation, model resolution, system prompt assembly,
 response stripping, Langfuse tracing, and error handling.
 """
 
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

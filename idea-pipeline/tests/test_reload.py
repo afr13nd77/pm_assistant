@@ -5,7 +5,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from idea_pipeline.agents.base import BaseAgent
 from idea_pipeline.config import AgentConfig
 

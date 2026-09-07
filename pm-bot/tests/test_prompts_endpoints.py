@@ -6,9 +6,7 @@ Tests:
   POST /api/v1/prompts/{component}/{name}/reset
 """
 
-import os
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -327,8 +325,9 @@ class TestValidationHelpers:
 
     def test_invalid_prompt_names(self):
         """Should reject invalid prompt names."""
-        from app.vault_api import _validate_prompt_name
         from fastapi import HTTPException
+
+        from app.vault_api import _validate_prompt_name
         for bad in ["", "UPPER", "has-dash", "123start", "../escape", "a" * 65]:
             with pytest.raises(HTTPException) as exc_info:
                 _validate_prompt_name(bad)
@@ -343,8 +342,9 @@ class TestValidationHelpers:
 
     def test_invalid_components(self):
         """Should reject invalid component names."""
-        from app.vault_api import _validate_component
         from fastapi import HTTPException
+
+        from app.vault_api import _validate_component
         for bad in ["", "unknown", "PM-BOT", "frontend"]:
             with pytest.raises(HTTPException) as exc_info:
                 _validate_component(bad)

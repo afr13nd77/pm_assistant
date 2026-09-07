@@ -11,11 +11,9 @@ No LLM calls: tests use tmp-files and monkeypatched paths.
 from __future__ import annotations
 
 import pathlib
-import shutil
 
 import pytest
 from fastapi.testclient import TestClient
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
