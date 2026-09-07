@@ -4143,29 +4143,6 @@ html, body {
 }
 /* .epic-toggle-btn removed in BL-162 (replaced by epic tabs) */
 
-/* Business Context textarea (BL-235) */
-.bc-textarea {
-  width: 100%;
-  min-height: 120px;
-  padding: 12px;
-  font-family: var(--font);
-  font-size: 13px;
-  line-height: 1.5;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg);
-  color: var(--text-body);
-  resize: vertical;
-  box-sizing: border-box;
-  outline: none;
-}
-.bc-textarea:focus {
-  border-color: var(--cyan);
-}
-.bc-textarea::placeholder {
-  color: var(--text-muted);
-}
-
 /* Save flash notification (BL-235) */
 .save-flash {
   margin-left: 12px;

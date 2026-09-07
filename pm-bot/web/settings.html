@@ -37,6 +37,13 @@
       resize: vertical; outline: none; line-height: 1.5;
     }
     .field-textarea:focus { border-color: var(--cyan); }
+    .bc-textarea {
+      width: 100%; min-height: 120px; background: var(--bg); border: 1px solid var(--border);
+      color: var(--text-body); font-family: var(--font); font-size: 13px; padding: 12px;
+      resize: vertical; outline: none; line-height: 1.5; box-sizing: border-box; border-radius: 4px;
+    }
+    .bc-textarea:focus { border-color: var(--cyan); }
+    .bc-textarea::placeholder { color: var(--text-muted); }
     .field-note { font-size: 9px; color: var(--text-muted); margin-top: 4px; font-style: italic; }
     .save-bar { display: flex; gap: 8px; align-items: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
     .save-status { font-size: 10px; }
