@@ -252,13 +252,49 @@ class TestCheckExistingReport:
 
 
 class TestCollectContext:
-    def test_both_contexts(self, tmp_path):
+    @patch("shared.llm_client._load_llm_prefs", return_value={"business_context": "BC from prefs"})
+    def test_business_context_from_user_prefs(self, mock_prefs, tmp_path):
+        """User-prefs business_context takes priority over file."""
         concepts_dir = tmp_path / "wiki" / "concepts"
         concepts_dir.mkdir(parents=True)
         (concepts_dir / "business-context-brief.md").write_text(
-            "Business context", encoding="utf-8"
+            "BC from file", encoding="utf-8"
         )
 
+        task = ResearchTask(topic="t", questions=["q"], scope="s")
+        ctx = _collect_context(str(tmp_path), task)
+        assert ctx["business_context"] == "BC from prefs"
+        mock_prefs.assert_called_once()
+
+    @patch("shared.llm_client._load_llm_prefs", return_value={"business_context": ""})
+    def test_business_context_fallback_to_file(self, mock_prefs, tmp_path):
+        """Empty user-prefs business_context falls back to file."""
+        concepts_dir = tmp_path / "wiki" / "concepts"
+        concepts_dir.mkdir(parents=True)
+        (concepts_dir / "business-context-brief.md").write_text(
+            "BC from file", encoding="utf-8"
+        )
+
+        task = ResearchTask(topic="t", questions=["q"], scope="s")
+        ctx = _collect_context(str(tmp_path), task)
+        assert ctx["business_context"] == "BC from file"
+
+    @patch("shared.llm_client._load_llm_prefs", return_value={})
+    def test_business_context_fallback_no_key(self, mock_prefs, tmp_path):
+        """Missing business_context key in prefs falls back to file."""
+        concepts_dir = tmp_path / "wiki" / "concepts"
+        concepts_dir.mkdir(parents=True)
+        (concepts_dir / "business-context-brief.md").write_text(
+            "BC from file", encoding="utf-8"
+        )
+
+        task = ResearchTask(topic="t", questions=["q"], scope="s")
+        ctx = _collect_context(str(tmp_path), task)
+        assert ctx["business_context"] == "BC from file"
+
+    @patch("shared.llm_client._load_llm_prefs", return_value={"business_context": "Prefs BC"})
+    def test_both_contexts_prefs_and_competitor(self, mock_prefs, tmp_path):
+        """User-prefs business_context + competitor context from file."""
         reports_dir = tmp_path / "wiki" / "reports"
         reports_dir.mkdir(parents=True)
         (reports_dir / "Competitor-Info-Booking.md").write_text(
@@ -269,16 +305,18 @@ class TestCollectContext:
             topic="t", questions=["q"], scope="s", competitor="Booking",
         )
         ctx = _collect_context(str(tmp_path), task)
-        assert ctx["business_context"] == "Business context"
+        assert ctx["business_context"] == "Prefs BC"
         assert ctx["competitor_context"] == "Booking info"
 
-    def test_no_files(self, tmp_path):
+    @patch("shared.llm_client._load_llm_prefs", return_value={})
+    def test_no_files_no_prefs(self, mock_prefs, tmp_path):
         task = ResearchTask(topic="t", questions=["q"], scope="s")
         ctx = _collect_context(str(tmp_path), task)
         assert ctx["business_context"] == ""
         assert ctx["competitor_context"] == ""
 
-    def test_no_competitor(self, tmp_path):
+    @patch("shared.llm_client._load_llm_prefs", return_value={})
+    def test_no_competitor(self, mock_prefs, tmp_path):
         concepts_dir = tmp_path / "wiki" / "concepts"
         concepts_dir.mkdir(parents=True)
         (concepts_dir / "business-context-brief.md").write_text("BC", encoding="utf-8")

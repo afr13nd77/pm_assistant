@@ -1098,10 +1098,21 @@ class SignalOrchestrator:
     # ------------------------------------------------------------------
 
     def _load_business_context(self) -> str:
-        """Прочитать wiki/concepts/business-context-brief.md (кэш per run)."""
+        """Загрузить business context: user-prefs (HTTP) → файл (fallback). Кэш per run."""
         if self._business_context is not None:
             return self._business_context
 
+        # Step 1: try user-prefs (via shared/llm_client HTTP fallback)
+        from shared.llm_client import _load_llm_prefs
+
+        prefs = _load_llm_prefs()
+        bc = prefs.get("business_context", "")
+        if bc:
+            self._business_context = bc
+            logger.info(f"Business context loaded from user-prefs: {len(bc)} chars")
+            return self._business_context
+
+        # Step 2: fallback to file
         path = (
             Path(self.vault_path)
             / "wiki"
@@ -1114,13 +1125,12 @@ class SignalOrchestrator:
             return ""
 
         content = path.read_text(encoding="utf-8")
-        # Strip frontmatter
         content = re.sub(
             r"^---\s*\n.*?\n---\s*\n", "", content, count=1, flags=re.DOTALL
         )
         self._business_context = content.strip()
         logger.info(
-            f"Business context loaded: {len(self._business_context)} chars"
+            f"Business context loaded from file: {len(self._business_context)} chars"
         )
         return self._business_context
 

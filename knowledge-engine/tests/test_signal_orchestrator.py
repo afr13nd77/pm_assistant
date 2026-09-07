@@ -241,19 +241,46 @@ class TestSignalOrchestrator:
         assert result.summary.relevant == 0
         assert result.summary.ideas == 0
 
-    def test_load_business_context(self, tmp_vault, config):
+    @patch("shared.llm_client._load_llm_prefs", return_value={})
+    def test_load_business_context_from_file(self, mock_prefs, tmp_vault, config):
+        """Fallback to file when user-prefs has no business_context."""
         orch = SignalOrchestrator(str(tmp_vault), config)
         ctx = orch._load_business_context()
         assert "OTA company context" in ctx
+        mock_prefs.assert_called_once()
 
-    def test_load_business_context_caches(self, tmp_vault, config):
+    def test_load_business_context_from_user_prefs(self, tmp_vault, config):
+        """User-prefs business_context takes priority over file."""
+        prefs_ctx = "Custom business context from user-prefs"
+        with patch(
+            "shared.llm_client._load_llm_prefs",
+            return_value={"business_context": prefs_ctx},
+        ):
+            orch = SignalOrchestrator(str(tmp_vault), config)
+            ctx = orch._load_business_context()
+            assert ctx == prefs_ctx
+
+    def test_load_business_context_empty_prefs_falls_to_file(self, tmp_vault, config):
+        """Empty string in user-prefs falls through to file."""
+        with patch(
+            "shared.llm_client._load_llm_prefs",
+            return_value={"business_context": ""},
+        ):
+            orch = SignalOrchestrator(str(tmp_vault), config)
+            ctx = orch._load_business_context()
+            assert "OTA company context" in ctx
+
+    @patch("shared.llm_client._load_llm_prefs", return_value={})
+    def test_load_business_context_caches(self, mock_prefs, tmp_vault, config):
         orch = SignalOrchestrator(str(tmp_vault), config)
         ctx1 = orch._load_business_context()
         ctx2 = orch._load_business_context()
         assert ctx1 == ctx2
         assert orch._business_context is not None
+        mock_prefs.assert_called_once()
 
-    def test_load_business_context_missing(self, tmp_vault, config):
+    @patch("shared.llm_client._load_llm_prefs", return_value={})
+    def test_load_business_context_missing(self, mock_prefs, tmp_vault, config):
         (tmp_vault / "wiki" / "concepts" / "business-context-brief.md").unlink()
         orch = SignalOrchestrator(str(tmp_vault), config)
         ctx = orch._load_business_context()

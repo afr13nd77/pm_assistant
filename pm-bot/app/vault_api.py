@@ -2896,6 +2896,7 @@ class UserPrefs(BaseModel):
     ai_agent_model: str = ""
     editor_col_split_2: float = 0.5
     editor_col_split_3: list[Any] = [0.4, 0.4, 400]
+    business_context: str = ""
 
 
 def _read_user_prefs() -> dict:
@@ -3038,6 +3039,13 @@ def get_user_prefs():
         prefs["editor_col_split_2"] = 0.5
     if "editor_col_split_3" not in prefs:
         prefs["editor_col_split_3"] = [0.4, 0.4, 400]
+    if not prefs.get("business_context"):
+        seeded = _load_business_context_file()
+        if seeded:
+            prefs["business_context"] = seeded
+            logger.info("GET /api/v1/user-prefs — seeded business_context from file (%d chars)", len(seeded))
+        else:
+            prefs["business_context"] = ""
     from shared.openrouter_client import DEFAULT_MODEL as _OR_DEFAULT_MODEL
     default_openrouter_model = prefs.get("openrouter_model") or _OR_DEFAULT_MODEL
     for key in ("capture_fallback", "transcription_fallback", "analysis_fallback", "pipeline_fallback", "signal_triage_fallback", "signal_analysis_fallback", "signal_escalation_fallback"):
@@ -4613,8 +4621,11 @@ def ai_agent_chat(body: AiAgentChatRequest):
     elif body.provider == "openrouter" and model:
         call_prefs["openrouter_model"] = model
 
-    # 7. Загрузка business-context
-    business_context = _load_business_context_file()
+    # 7. Загрузка business-context (prefs first, file fallback)
+    business_context = prefs.get("business_context", "")
+    if not business_context:
+        business_context = _load_business_context_file()
+        logger.info("ai-agent/chat: business_context loaded from file fallback (%d chars)", len(business_context))
 
     # 8. Формирование system prompt
     system_prompt = _AI_AGENT_SYSTEM_PROMPT.format(

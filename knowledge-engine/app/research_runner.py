@@ -679,16 +679,24 @@ def _collect_context(vault_path: str, task: ResearchTask) -> dict[str, str]:
     logger.info(f"_collect_context: collecting context for topic='{task.topic}'")
     context: dict[str, str] = {"business_context": "", "competitor_context": ""}
 
-    # Business context
-    bc_path = Path(vault_path) / "wiki" / "concepts" / "business-context-brief.md"
-    if bc_path.exists():
-        try:
-            context["business_context"] = bc_path.read_text(encoding="utf-8")
-            logger.info(f"_collect_context: business context loaded, {len(context['business_context'])} chars")
-        except Exception as exc:
-            logger.error(f"_collect_context: failed to read business context: {exc}")
+    # Business context — Step 1: try user-prefs
+    from shared.llm_client import _load_llm_prefs
+    prefs = _load_llm_prefs()
+    bc_from_prefs = prefs.get("business_context", "")
+    if bc_from_prefs:
+        context["business_context"] = bc_from_prefs
+        logger.info(f"_collect_context: business context from user-prefs, {len(bc_from_prefs)} chars")
     else:
-        logger.info(f"_collect_context: business context file not found: {bc_path}")
+        # Step 2: fallback to file
+        bc_path = Path(vault_path) / "wiki" / "concepts" / "business-context-brief.md"
+        if bc_path.exists():
+            try:
+                context["business_context"] = bc_path.read_text(encoding="utf-8")
+                logger.info(f"_collect_context: business context from file, {len(context['business_context'])} chars")
+            except Exception as exc:
+                logger.error(f"_collect_context: failed to read business context: {exc}")
+        else:
+            logger.info(f"_collect_context: business context file not found: {bc_path}")
 
     # Competitor context
     if task.competitor:

@@ -2573,3 +2573,16 @@ body {
   background: rgba(0, 120, 200, 0.06);
   border-color: rgba(0, 120, 200, 0.2);
 }
+
+/* Business Context textarea — light theme (BL-235) */
+.bc-textarea {
+  border-color: var(--border);
+  background: #fff;
+  color: var(--text-body);
+}
+.bc-textarea:focus {
+  border-color: var(--cyan);
+}
+.bc-textarea::placeholder {
+  color: var(--text-muted);
+}

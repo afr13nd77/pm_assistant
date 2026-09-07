@@ -5,6 +5,16 @@
 
 ---
 
+## 07.09.2026
+
+### BL-235 — Редактирование business_context через Settings UI (07.09.2026)
+- **web-ui**: секция BUSINESS CONTEXT в settings.html — textarea для редактирования описания бизнеса, кнопка SAVE, flash-уведомление, dual-theme CSS (matrix + light)
+- **pm-bot**: поле `business_context` в UserPrefs, GET seed из файла `business-context-brief.md`, AI-agent chat читает из prefs с fallback на файл
+- **knowledge-engine**: `signal_orchestrator._load_business_context()` и `research_runner._collect_context()` — приоритет user-prefs через HTTP API, fallback на файл
+- **Тесты**: 11 новых/обновлённых тестов (5 signal_orchestrator + 6 research_runner)
+
+---
+
 ## 03.09.2026
 
 ### Улучшено

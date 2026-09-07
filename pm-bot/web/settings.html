@@ -439,6 +439,25 @@
           </div>
         </div>
 
+        <!-- BUSINESS CONTEXT -->
+        <div class="settings-section">
+          <div class="settings-section-title">// BUSINESS CONTEXT</div>
+          <div class="provider-config-block">
+            <div class="provider-config-header">ОПИСАНИЕ БИЗНЕСА ДЛЯ LLM-ПРОМПТОВ</div>
+            <div class="field-group">
+              <textarea v-model="businessContext" rows="8"
+                        class="bc-textarea"
+                        placeholder="Опишите ваш бизнес, продукт, целевую аудиторию, ключевые метрики..."></textarea>
+            </div>
+            <div class="field-note">
+              Этот текст подставляется в промпты News Moderator, Research Runner и AI-агента.
+              Чем точнее описание — тем релевантнее результаты анализа.
+            </div>
+            <button class="cmd-btn cmd-btn-cyan" @click="saveBusinessContext">SAVE</button>
+            <span v-if="bcSaveStatus" class="save-flash" :class="bcSaveStatus">{{ bcSaveMessage }}</span>
+          </div>
+        </div>
+
         <!-- Operation Groups with fallback chains -->
         <div class="settings-section">
           <div class="settings-section-title">// FALLBACK CHAINS</div>
@@ -748,6 +767,9 @@
       var fetchMeetingsStatus = ref('');
       var aiAgentProvider = ref('claude');
       var aiAgentModel = ref('');
+      var businessContext = ref('');
+      var bcSaveStatus = ref('');
+      var bcSaveMessage = ref('');
 
       // Prompts (BL-197)
       var promptGroups = ref([]);
@@ -1016,7 +1038,8 @@
           caldav_timezone: caldavTimezone.value,
           caldav_url: caldavUrl.value,
           ai_agent_provider: aiAgentProvider.value,
-          ai_agent_model: aiAgentModel.value
+          ai_agent_model: aiAgentModel.value,
+          business_context: businessContext.value
         };
       }
 
@@ -1420,6 +1443,22 @@
         });
       }
 
+      async function saveBusinessContext() {
+        try {
+          var currentPrefs = await api.getUserPrefs();
+          currentPrefs.business_context = businessContext.value;
+          await api.saveUserPrefs(currentPrefs);
+          bcSaveStatus.value = 'success';
+          bcSaveMessage.value = 'Сохранено';
+          console.log('[settings] business_context saved (%d chars)', businessContext.value.length);
+        } catch (e) {
+          bcSaveStatus.value = 'error';
+          bcSaveMessage.value = 'Ошибка сохранения';
+          console.error('[settings] saveBusinessContext error:', e.message);
+        }
+        setTimeout(function() { bcSaveStatus.value = ''; bcSaveMessage.value = ''; }, 3000);
+      }
+
       onMounted(function() {
         console.log('[settings] component mounted, loading settings');
         loadSettings();
@@ -1443,6 +1482,7 @@
           caldavUrl.value = prefs.caldav_url || 'https://caldav.yandex.ru/';
           aiAgentProvider.value = prefs.ai_agent_provider || 'claude';
           aiAgentModel.value = prefs.ai_agent_model || '';
+          businessContext.value = prefs.business_context || '';
           // Load fallback chains. GET /api/v1/user-prefs (T-08) always returns canonical
           // {provider, model} objects, but normalizeChainStep() is kept as a defensive
           // safety net (also tolerates legacy string steps if ever encountered).
@@ -1577,6 +1617,10 @@
         saveRelevanceThreshold: saveRelevanceThreshold,
         aiAgentProvider: aiAgentProvider,
         aiAgentModel: aiAgentModel,
+        businessContext: businessContext,
+        bcSaveStatus: bcSaveStatus,
+        bcSaveMessage: bcSaveMessage,
+        saveBusinessContext: saveBusinessContext,
         promptGroups: promptGroups,
         promptsLoading: promptsLoading,
         promptSaving: promptSaving,
