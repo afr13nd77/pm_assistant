@@ -62,11 +62,11 @@ def client(vault_dir):
     # Import module first so patch can find attributes
     import app.vault_api  # noqa: F401
 
-    with patch("shared.vault_paths.VAULT_PATH", vault_dir), \
-         patch("app.vault_api.VAULT_PATH", vault_dir):
+    with patch("shared.vault_paths.VAULT_PATH", vault_dir):
         from fastapi.testclient import TestClient
 
-        from app.vault_api import _cache, app
+        from app.vault_api import app
+        from app.vault_cache import _cache
         _cache.invalidate()
         yield TestClient(app)
 
@@ -76,11 +76,11 @@ def client_empty(vault_dir_empty):
     """Create a FastAPI test client with no TODO file."""
     import app.vault_api  # noqa: F401
 
-    with patch("shared.vault_paths.VAULT_PATH", vault_dir_empty), \
-         patch("app.vault_api.VAULT_PATH", vault_dir_empty):
+    with patch("shared.vault_paths.VAULT_PATH", vault_dir_empty):
         from fastapi.testclient import TestClient
 
-        from app.vault_api import _cache, app
+        from app.vault_api import app
+        from app.vault_cache import _cache
         _cache.invalidate()
         yield TestClient(app)
 

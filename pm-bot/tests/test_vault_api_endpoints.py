@@ -46,15 +46,23 @@ def vault_dir(tmp_path):
 @pytest.fixture
 def client(vault_dir):
     """Create a FastAPI test client with vault_paths pointing to temp directory."""
-    with patch("app.vault_api.VAULT_PATH", vault_dir), \
-         patch("app.vault_api._PLATFORM_DATA", vault_dir), \
-         patch("app.vault_api.wiki_meetings", return_value=vault_dir / "wiki" / "meetings"), \
-         patch("app.vault_api.wiki_reports", return_value=vault_dir / "wiki" / "reports"), \
-         patch("app.vault_api.all_domains", return_value=["content", "payments"]), \
-         patch("app.vault_api.wiki_domain_dir", side_effect=lambda domain, at: vault_dir / "wiki" / "domains" / domain / at):
+    with patch("app.routers.vault_ops.VAULT_PATH", vault_dir), \
+         patch("app.routers.jira._PLATFORM_DATA", vault_dir), \
+         patch("app.routers.vault_ops.wiki_meetings", return_value=vault_dir / "wiki" / "meetings"), \
+         patch("app.routers.vault_ops.wiki_reports", return_value=vault_dir / "wiki" / "reports"), \
+         patch("app.routers.vault_ops.all_domains", return_value=["content", "payments"]), \
+         patch("app.routers.vault_ops.wiki_domain_dir", side_effect=lambda domain, at: vault_dir / "wiki" / "domains" / domain / at), \
+         patch("app.routers.domains.all_domains", return_value=["content", "payments"]), \
+         patch("app.routers.domains.wiki_domain_dir", side_effect=lambda domain, at: vault_dir / "wiki" / "domains" / domain / at), \
+         patch("app.routers.meetings.wiki_meetings", return_value=vault_dir / "wiki" / "meetings"), \
+         patch("app.routers.reports.wiki_reports", return_value=vault_dir / "wiki" / "reports"), \
+         patch("app.vault_scanner.VAULT_PATH", vault_dir), \
+         patch("app.vault_scanner.all_domains", return_value=["content", "payments"]), \
+         patch("app.vault_scanner.wiki_domain_dir", side_effect=lambda domain, at: vault_dir / "wiki" / "domains" / domain / at):
         from fastapi.testclient import TestClient
 
-        from app.vault_api import _cache, app
+        from app.vault_api import app
+        from app.vault_cache import _cache
         _cache.invalidate()
         yield TestClient(app)
 
@@ -68,15 +76,21 @@ class TestDomainsEndpoint:
     def test_empty_domains(self, vault_dir):
         """Should return empty list when no domains exist."""
         # Create a client with no domains
-        with patch("app.vault_api.VAULT_PATH", vault_dir), \
-             patch("app.vault_api._PLATFORM_DATA", vault_dir), \
-             patch("app.vault_api.wiki_meetings", return_value=vault_dir / "wiki" / "meetings"), \
-             patch("app.vault_api.wiki_reports", return_value=vault_dir / "wiki" / "reports"), \
-             patch("app.vault_api.all_domains", return_value=[]), \
-             patch("app.vault_api.wiki_domain_dir", side_effect=lambda domain, at: vault_dir / "wiki" / "domains" / domain / at):
+        with patch("app.routers.vault_ops.VAULT_PATH", vault_dir), \
+             patch("app.routers.jira._PLATFORM_DATA", vault_dir), \
+             patch("app.routers.vault_ops.wiki_meetings", return_value=vault_dir / "wiki" / "meetings"), \
+             patch("app.routers.vault_ops.wiki_reports", return_value=vault_dir / "wiki" / "reports"), \
+             patch("app.routers.vault_ops.all_domains", return_value=[]), \
+             patch("app.routers.vault_ops.wiki_domain_dir", side_effect=lambda domain, at: vault_dir / "wiki" / "domains" / domain / at), \
+             patch("app.routers.domains.all_domains", return_value=[]), \
+             patch("app.routers.domains.wiki_domain_dir", side_effect=lambda domain, at: vault_dir / "wiki" / "domains" / domain / at), \
+             patch("app.vault_scanner.VAULT_PATH", vault_dir), \
+             patch("app.vault_scanner.all_domains", return_value=[]), \
+             patch("app.vault_scanner.wiki_domain_dir", side_effect=lambda domain, at: vault_dir / "wiki" / "domains" / domain / at):
             from fastapi.testclient import TestClient
 
-            from app.vault_api import _cache, app
+            from app.vault_api import app
+            from app.vault_cache import _cache
             _cache.invalidate()
             tc = TestClient(app)
             resp = tc.get("/api/v1/domains")
@@ -558,41 +572,41 @@ class TestExtractReportDate:
     """Unit tests for vault_api._extract_report_date."""
 
     def test_frontmatter_date_takes_priority(self):
-        from app.vault_api import _extract_report_date
+        from app.routers.reports import _extract_report_date
 
         text = "---\ndate: 2026-07-22\ntitle: Test\n---\nBody"
         assert _extract_report_date(text, "2026-05-01-old-name") == "2026-07-22"
 
     def test_frontmatter_invalid_falls_to_filename(self):
-        from app.vault_api import _extract_report_date
+        from app.routers.reports import _extract_report_date
 
         text = "---\ntitle: Test\n---\nBody"
         assert _extract_report_date(text, "2026-06-01-Daily_Dev_Report") == "2026-06-01"
 
     def test_date_with_dots_prefix(self):
-        from app.vault_api import _extract_report_date
+        from app.routers.reports import _extract_report_date
 
         assert _extract_report_date("no frontmatter", "2026.05.29-Daily_Dev_Report") == "2026-05-29"
 
     def test_date_after_prefix(self):
-        from app.vault_api import _extract_report_date
+        from app.routers.reports import _extract_report_date
 
         assert _extract_report_date("no frontmatter", "synthesis-2026-07-23") == "2026-07-23"
 
     def test_invalid_filename_date_uses_frontmatter(self):
-        from app.vault_api import _extract_report_date
+        from app.routers.reports import _extract_report_date
 
         text = "---\ndate: 2026-05-30\n---\nBody"
         assert _extract_report_date(text, "2026-30-05-Next_Week_Plan") == "2026-05-30"
 
     def test_created_field_fallback(self):
-        from app.vault_api import _extract_report_date
+        from app.routers.reports import _extract_report_date
 
         text = "---\ncreated: 2026-05-22\ntitle: Test\n---\nBody"
         assert _extract_report_date(text, "weekly-report-no-date") == "2026-05-22"
 
     def test_no_date_returns_zero(self):
-        from app.vault_api import _extract_report_date
+        from app.routers.reports import _extract_report_date
 
         assert _extract_report_date("no frontmatter", "weekly-done-27apr-2may") == "0000-00-00"
 
@@ -1227,7 +1241,7 @@ class TestJiraSyncEndpoint:
             "message": "Sync completed successfully",
         }
 
-        with patch("app.vault_api.ke_client.jira_sync", return_value=ke_result):
+        with patch("app.routers.jira.ke_client.jira_sync", return_value=ke_result):
             resp = client.post("/api/v1/jira/sync")
 
         assert resp.status_code == 200
@@ -1252,7 +1266,7 @@ class TestJiraSyncEndpoint:
             "closed": 0, "errors": 0, "logged": 1, "message": "done",
         }
 
-        with patch("app.vault_api.ke_client.jira_sync", return_value=ke_result):
+        with patch("app.routers.jira.ke_client.jira_sync", return_value=ke_result):
             resp = client.post("/api/v1/jira/sync")
 
         assert resp.status_code == 200
@@ -1268,7 +1282,7 @@ class TestJiraSyncEndpoint:
         """Should return 502 when ke_client raises RequestException."""
         import requests as req
 
-        with patch("app.vault_api.ke_client.jira_sync",
+        with patch("app.routers.jira.ke_client.jira_sync",
                    side_effect=req.RequestException("Connection refused")):
             resp = client.post("/api/v1/jira/sync")
 
@@ -1277,7 +1291,7 @@ class TestJiraSyncEndpoint:
 
     def test_sync_concurrency_guard(self, client, vault_dir):
         """Should return 409 when sync is already running."""
-        from app.vault_api import _jira_sync_lock
+        from app.routers.jira import _jira_sync_lock
 
         # Simulate another sync in progress by holding the lock
         _jira_sync_lock.acquire()
@@ -1290,7 +1304,7 @@ class TestJiraSyncEndpoint:
 
     def test_sync_generic_exception(self, client, vault_dir):
         """Should return 500 on unexpected exceptions."""
-        with patch("app.vault_api.ke_client.jira_sync",
+        with patch("app.routers.jira.ke_client.jira_sync",
                    side_effect=OSError("disk error")):
             resp = client.post("/api/v1/jira/sync")
 
@@ -1301,7 +1315,7 @@ class TestJiraSyncEndpoint:
         """Should return default values when ke_client returns minimal dict."""
         ke_result = {"status": "ok"}
 
-        with patch("app.vault_api.ke_client.jira_sync", return_value=ke_result):
+        with patch("app.routers.jira.ke_client.jira_sync", return_value=ke_result):
             resp = client.post("/api/v1/jira/sync")
 
         assert resp.status_code == 200
@@ -1490,7 +1504,7 @@ class TestTodayNewsEndpoint:
             "categories": {"competitors": [], "ai_llm": []},
         }
 
-        from app.vault_api import _cache
+        from app.vault_cache import _cache
         _cache.set("today:news", cached_result)
 
         resp = client.get("/api/v1/today/news")
@@ -1502,7 +1516,7 @@ class TestTodayNewsEndpoint:
         news_dir = vault_dir / "wiki" / "reports" / "daily-news"
         news_dir.mkdir(parents=True, exist_ok=True)
 
-        from app.vault_api import _cache
+        from app.vault_cache import _cache
         _cache.set("today:news", {"date": "old", "filename": "old.md", "is_today": False, "categories": {}})
 
         with patch("app.today_parsers.find_latest_file", return_value=(None, False)), \
@@ -1516,7 +1530,7 @@ class TestTodayNewsEndpoint:
 
     def test_news_error_returns_500(self, client):
         """Should return 500 when an unexpected error occurs."""
-        from app.vault_api import _cache
+        from app.vault_cache import _cache
         _cache.invalidate("today:news")
 
         with patch("shared.vault_paths.wiki_daily_news", side_effect=RuntimeError("disk error")):
@@ -1531,7 +1545,7 @@ class TestTodayMeetings:
 
     def test_meetings_disabled(self, client):
         """Should return source='disabled' when CalDAV is not enabled."""
-        with patch("app.vault_api.calendar_client") as mock_cal:
+        with patch("app.routers.today.calendar_client") as mock_cal:
             mock_cal.is_enabled.return_value = False
             resp = client.get("/api/v1/today/meetings")
 
@@ -1548,7 +1562,7 @@ class TestTodayMeetings:
             {"title": "Standup", "start": "09:00", "end": "09:30"},
             {"title": "Sprint Review", "start": "14:00", "end": "15:00"},
         ]
-        with patch("app.vault_api.calendar_client") as mock_cal:
+        with patch("app.routers.today.calendar_client") as mock_cal:
             mock_cal.is_enabled.return_value = True
             mock_cal.get_today_meetings.return_value = sample_meetings
             resp = client.get("/api/v1/today/meetings")
@@ -1562,7 +1576,7 @@ class TestTodayMeetings:
 
     def test_meetings_caldav_error(self, client):
         """Should return source='error' when CalDAV throws exception."""
-        with patch("app.vault_api.calendar_client") as mock_cal:
+        with patch("app.routers.today.calendar_client") as mock_cal:
             mock_cal.is_enabled.return_value = True
             mock_cal.get_today_meetings.side_effect = ConnectionError("CalDAV unreachable")
             resp = client.get("/api/v1/today/meetings")
@@ -1575,7 +1589,7 @@ class TestTodayMeetings:
 
     def test_meetings_refresh_invalidates_cache(self, client):
         """Should invalidate CalDAV cache when refresh=true."""
-        with patch("app.vault_api.calendar_client") as mock_cal:
+        with patch("app.routers.today.calendar_client") as mock_cal:
             mock_cal.is_enabled.return_value = True
             mock_cal.get_today_meetings.return_value = []
             resp = client.get("/api/v1/today/meetings?refresh=true")
@@ -1585,7 +1599,7 @@ class TestTodayMeetings:
 
     def test_meetings_no_refresh_by_default(self, client):
         """Should not invalidate cache when refresh is not specified."""
-        with patch("app.vault_api.calendar_client") as mock_cal:
+        with patch("app.routers.today.calendar_client") as mock_cal:
             mock_cal.is_enabled.return_value = True
             mock_cal.get_today_meetings.return_value = []
             resp = client.get("/api/v1/today/meetings")
@@ -1595,7 +1609,7 @@ class TestTodayMeetings:
 
     def test_meetings_empty_list(self, client):
         """Should handle empty meetings list gracefully."""
-        with patch("app.vault_api.calendar_client") as mock_cal:
+        with patch("app.routers.today.calendar_client") as mock_cal:
             mock_cal.is_enabled.return_value = True
             mock_cal.get_today_meetings.return_value = []
             resp = client.get("/api/v1/today/meetings")

@@ -26,8 +26,7 @@ def prefs_file(vault_dir):
 @pytest.fixture
 def client(vault_dir):
     """Create a FastAPI test client with VAULT_PATH pointed at tmp dir."""
-    with patch("app.vault_api.VAULT_PATH", vault_dir), \
-         patch("shared.vault_paths.VAULT_PATH", vault_dir):
+    with patch("shared.vault_paths.VAULT_PATH", vault_dir):
         from fastapi.testclient import TestClient
 
         from app.vault_api import app
@@ -41,26 +40,26 @@ def client(vault_dir):
 class TestUserPrefsModel:
 
     def test_valid_themes_contains_matrix_and_light(self):
-        from app.vault_api import _VALID_THEMES
+        from app.routers.user_prefs import _VALID_THEMES
         assert "matrix" in _VALID_THEMES
         assert "light" in _VALID_THEMES
         assert len(_VALID_THEMES) == 2
 
     def test_default_user_prefs_includes_theme(self):
-        from app.vault_api import _DEFAULT_USER_PREFS
+        from app.routers.user_prefs import _DEFAULT_USER_PREFS
         assert "theme" in _DEFAULT_USER_PREFS
         assert _DEFAULT_USER_PREFS["theme"] == "matrix"
         assert "refresh_mode" in _DEFAULT_USER_PREFS
         assert _DEFAULT_USER_PREFS["refresh_mode"] == "auto"
 
     def test_user_prefs_model_defaults(self):
-        from app.vault_api import UserPrefs
+        from app.routers.user_prefs import UserPrefs
         prefs = UserPrefs()
         assert prefs.refresh_mode == "auto"
         assert prefs.theme == "matrix"
 
     def test_user_prefs_model_custom_values(self):
-        from app.vault_api import UserPrefs
+        from app.routers.user_prefs import UserPrefs
         prefs = UserPrefs(refresh_mode="manual", theme="light")
         assert prefs.refresh_mode == "manual"
         assert prefs.theme == "light"

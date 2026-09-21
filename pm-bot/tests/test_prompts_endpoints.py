@@ -33,7 +33,7 @@ def prompts_dir(tmp_path):
 @pytest.fixture()
 def client(prompts_dir):
     """TestClient with patched prompts dir and mocked external clients."""
-    with patch("app.vault_api._pmbot_prompts_dir", prompts_dir):
+    with patch("app.routers.prompts._pmbot_prompts_dir", prompts_dir):
         from app.vault_api import app
         yield TestClient(app)
 
@@ -46,8 +46,8 @@ class TestGetAllPrompts:
 
     def test_returns_all_components(self, client, prompts_dir):
         """Should return prompts for all three components."""
-        with patch("app.vault_api.ke_client") as mock_ke, \
-             patch("app.vault_api.pipeline_client") as mock_pl:
+        with patch("app.routers.prompts.ke_client") as mock_ke, \
+             patch("app.routers.prompts.pipeline_client") as mock_pl:
             mock_ke.get_prompts.return_value = {
                 "prompts": [{"name": "ke_prompt", "content": "ke content"}],
             }
@@ -74,8 +74,8 @@ class TestGetAllPrompts:
 
     def test_pmbot_prompt_structure(self, client, prompts_dir):
         """pm-bot prompts should have correct fields."""
-        with patch("app.vault_api.ke_client") as mock_ke, \
-             patch("app.vault_api.pipeline_client") as mock_pl:
+        with patch("app.routers.prompts.ke_client") as mock_ke, \
+             patch("app.routers.prompts.pipeline_client") as mock_pl:
             mock_ke.get_prompts.return_value = {"prompts": []}
             mock_pl.get_prompts.return_value = {"prompts": []}
 
@@ -95,8 +95,8 @@ class TestGetAllPrompts:
         # Modify one prompt
         (prompts_dir / "idea.txt").write_text("MODIFIED content", encoding="utf-8")
 
-        with patch("app.vault_api.ke_client") as mock_ke, \
-             patch("app.vault_api.pipeline_client") as mock_pl:
+        with patch("app.routers.prompts.ke_client") as mock_ke, \
+             patch("app.routers.prompts.pipeline_client") as mock_pl:
             mock_ke.get_prompts.return_value = {"prompts": []}
             mock_pl.get_prompts.return_value = {"prompts": []}
 
@@ -109,8 +109,8 @@ class TestGetAllPrompts:
 
     def test_ke_error_graceful(self, client, prompts_dir):
         """KE failure should return error status, not crash."""
-        with patch("app.vault_api.ke_client") as mock_ke, \
-             patch("app.vault_api.pipeline_client") as mock_pl:
+        with patch("app.routers.prompts.ke_client") as mock_ke, \
+             patch("app.routers.prompts.pipeline_client") as mock_pl:
             mock_ke.get_prompts.side_effect = ConnectionError("KE down")
             mock_pl.get_prompts.return_value = {"prompts": []}
 
@@ -123,8 +123,8 @@ class TestGetAllPrompts:
 
     def test_pipeline_error_graceful(self, client, prompts_dir):
         """Pipeline failure should return error status, not crash."""
-        with patch("app.vault_api.ke_client") as mock_ke, \
-             patch("app.vault_api.pipeline_client") as mock_pl:
+        with patch("app.routers.prompts.ke_client") as mock_ke, \
+             patch("app.routers.prompts.pipeline_client") as mock_pl:
             mock_ke.get_prompts.return_value = {"prompts": []}
             mock_pl.get_prompts.side_effect = ConnectionError("Pipeline down")
 
@@ -160,7 +160,7 @@ class TestSaveComponentPrompt:
 
     def test_save_ke_prompt(self, client):
         """Should proxy save to ke_client."""
-        with patch("app.vault_api.ke_client") as mock_ke:
+        with patch("app.routers.prompts.ke_client") as mock_ke:
             mock_ke.save_prompt.return_value = {"status": "ok", "name": "ke_test"}
 
             resp = client.post(
@@ -172,7 +172,7 @@ class TestSaveComponentPrompt:
 
     def test_save_pipeline_prompt(self, client):
         """Should proxy save to pipeline_client."""
-        with patch("app.vault_api.pipeline_client") as mock_pl:
+        with patch("app.routers.prompts.pipeline_client") as mock_pl:
             mock_pl.save_prompt.return_value = {"status": "ok", "name": "pl_test"}
 
             resp = client.post(
@@ -210,7 +210,7 @@ class TestSaveComponentPrompt:
 
     def test_ke_unavailable(self, client):
         """Should return 502 when KE is unavailable."""
-        with patch("app.vault_api.ke_client") as mock_ke:
+        with patch("app.routers.prompts.ke_client") as mock_ke:
             mock_ke.save_prompt.side_effect = ConnectionError("KE down")
 
             resp = client.post(
@@ -221,7 +221,7 @@ class TestSaveComponentPrompt:
 
     def test_pipeline_unavailable(self, client):
         """Should return 502 when pipeline is unavailable."""
-        with patch("app.vault_api.pipeline_client") as mock_pl:
+        with patch("app.routers.prompts.pipeline_client") as mock_pl:
             mock_pl.save_prompt.side_effect = ConnectionError("Pipeline down")
 
             resp = client.post(
@@ -256,7 +256,7 @@ class TestResetComponentPrompt:
 
     def test_reset_ke_prompt(self, client):
         """Should proxy reset to ke_client."""
-        with patch("app.vault_api.ke_client") as mock_ke:
+        with patch("app.routers.prompts.ke_client") as mock_ke:
             mock_ke.reset_prompt.return_value = {"status": "ok", "name": "ke_test"}
 
             resp = client.post("/api/v1/prompts/knowledge-engine/ke_test/reset")
@@ -265,7 +265,7 @@ class TestResetComponentPrompt:
 
     def test_reset_pipeline_prompt(self, client):
         """Should proxy reset to pipeline_client."""
-        with patch("app.vault_api.pipeline_client") as mock_pl:
+        with patch("app.routers.prompts.pipeline_client") as mock_pl:
             mock_pl.reset_prompt.return_value = {"status": "ok", "name": "pl_test"}
 
             resp = client.post("/api/v1/prompts/idea-pipeline/pl_test/reset")
@@ -293,7 +293,7 @@ class TestResetComponentPrompt:
 
     def test_reset_ke_unavailable(self, client):
         """Should return 502 when KE is unavailable."""
-        with patch("app.vault_api.ke_client") as mock_ke:
+        with patch("app.routers.prompts.ke_client") as mock_ke:
             mock_ke.reset_prompt.side_effect = ConnectionError("KE down")
 
             resp = client.post("/api/v1/prompts/knowledge-engine/test_prompt/reset")
@@ -301,7 +301,7 @@ class TestResetComponentPrompt:
 
     def test_reset_pipeline_unavailable(self, client):
         """Should return 502 when pipeline is unavailable."""
-        with patch("app.vault_api.pipeline_client") as mock_pl:
+        with patch("app.routers.prompts.pipeline_client") as mock_pl:
             mock_pl.reset_prompt.side_effect = ConnectionError("Pipeline down")
 
             resp = client.post("/api/v1/prompts/idea-pipeline/test_prompt/reset")
@@ -316,7 +316,7 @@ class TestValidationHelpers:
 
     def test_valid_prompt_names(self):
         """Should accept valid prompt names."""
-        from app.vault_api import _validate_prompt_name
+        from app.routers.prompts import _validate_prompt_name
         # Should not raise
         _validate_prompt_name("idea")
         _validate_prompt_name("weekly_report")
@@ -327,7 +327,7 @@ class TestValidationHelpers:
         """Should reject invalid prompt names."""
         from fastapi import HTTPException
 
-        from app.vault_api import _validate_prompt_name
+        from app.routers.prompts import _validate_prompt_name
         for bad in ["", "UPPER", "has-dash", "123start", "../escape", "a" * 65]:
             with pytest.raises(HTTPException) as exc_info:
                 _validate_prompt_name(bad)
@@ -335,7 +335,7 @@ class TestValidationHelpers:
 
     def test_valid_components(self):
         """Should accept valid component names."""
-        from app.vault_api import _validate_component
+        from app.routers.prompts import _validate_component
         _validate_component("pm-bot")
         _validate_component("knowledge-engine")
         _validate_component("idea-pipeline")
@@ -344,7 +344,7 @@ class TestValidationHelpers:
         """Should reject invalid component names."""
         from fastapi import HTTPException
 
-        from app.vault_api import _validate_component
+        from app.routers.prompts import _validate_component
         for bad in ["", "unknown", "PM-BOT", "frontend"]:
             with pytest.raises(HTTPException) as exc_info:
                 _validate_component(bad)
@@ -352,7 +352,7 @@ class TestValidationHelpers:
 
     def test_is_modified_true(self, tmp_path):
         """Should detect modified prompt."""
-        from app.vault_api import _is_modified
+        from app.routers.prompts import _is_modified
         p = tmp_path / "test.txt"
         d = tmp_path / "test.txt.default"
         p.write_text("modified", encoding="utf-8")
@@ -361,7 +361,7 @@ class TestValidationHelpers:
 
     def test_is_modified_false(self, tmp_path):
         """Should detect unmodified prompt."""
-        from app.vault_api import _is_modified
+        from app.routers.prompts import _is_modified
         p = tmp_path / "test.txt"
         d = tmp_path / "test.txt.default"
         p.write_text("same", encoding="utf-8")
@@ -370,7 +370,7 @@ class TestValidationHelpers:
 
     def test_is_modified_no_default(self, tmp_path):
         """Should return False if no default exists."""
-        from app.vault_api import _is_modified
+        from app.routers.prompts import _is_modified
         p = tmp_path / "test.txt"
         p.write_text("content", encoding="utf-8")
         assert _is_modified(p) is False

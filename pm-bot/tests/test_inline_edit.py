@@ -13,7 +13,7 @@ class TestFindArtifactFile:
 
     def test_find_idea(self, tmp_path):
         """Should find an idea file in domains/*/ideas/."""
-        from app.vault_api import _find_artifact_file
+        from app.vault_scanner import _find_artifact_file
 
         # Create mock vault structure
         idea_dir = tmp_path / "wiki" / "domains" / "general" / "ideas"
@@ -21,53 +21,53 @@ class TestFindArtifactFile:
         idea_file = idea_dir / "IDEA-001.md"
         idea_file.write_text("---\ntitle: test\n---\nbody", encoding="utf-8")
 
-        with patch("app.vault_api.all_domains", return_value=["general"]), \
-             patch("app.vault_api.wiki_domain_dir", side_effect=lambda d, t: tmp_path / "wiki" / "domains" / d / t), \
-             patch("app.vault_api.VAULT_PATH", tmp_path):
+        with patch("app.vault_scanner.all_domains", return_value=["general"]), \
+             patch("app.vault_scanner.wiki_domain_dir", side_effect=lambda d, t: tmp_path / "wiki" / "domains" / d / t), \
+             patch("app.vault_scanner.VAULT_PATH", tmp_path):
             result = _find_artifact_file("IDEA-001.md")
             assert result is not None
             assert result.name == "IDEA-001.md"
 
     def test_find_task(self, tmp_path):
         """Should find a task file in domains/*/tasks/."""
-        from app.vault_api import _find_artifact_file
+        from app.vault_scanner import _find_artifact_file
 
         task_dir = tmp_path / "wiki" / "domains" / "static-metadata" / "tasks"
         task_dir.mkdir(parents=True)
         task_file = task_dir / "GO-156.md"
         task_file.write_text("---\ntitle: task\n---\nbody", encoding="utf-8")
 
-        with patch("app.vault_api.all_domains", return_value=["static-metadata"]), \
-             patch("app.vault_api.wiki_domain_dir", side_effect=lambda d, t: tmp_path / "wiki" / "domains" / d / t), \
-             patch("app.vault_api.VAULT_PATH", tmp_path):
+        with patch("app.vault_scanner.all_domains", return_value=["static-metadata"]), \
+             patch("app.vault_scanner.wiki_domain_dir", side_effect=lambda d, t: tmp_path / "wiki" / "domains" / d / t), \
+             patch("app.vault_scanner.VAULT_PATH", tmp_path):
             result = _find_artifact_file("GO-156.md")
             assert result is not None
             assert result.name == "GO-156.md"
 
     def test_not_found(self, tmp_path):
         """Should return None when file doesn't exist."""
-        from app.vault_api import _find_artifact_file
+        from app.vault_scanner import _find_artifact_file
 
         # Create meetings dir so the fallback path exists but file is still absent
         (tmp_path / "wiki" / "meetings").mkdir(parents=True)
 
-        with patch("app.vault_api.all_domains", return_value=["general"]), \
-             patch("app.vault_api.wiki_domain_dir", side_effect=lambda d, t: tmp_path / "wiki" / "domains" / d / t), \
-             patch("app.vault_api.VAULT_PATH", tmp_path):
+        with patch("app.vault_scanner.all_domains", return_value=["general"]), \
+             patch("app.vault_scanner.wiki_domain_dir", side_effect=lambda d, t: tmp_path / "wiki" / "domains" / d / t), \
+             patch("app.vault_scanner.VAULT_PATH", tmp_path):
             result = _find_artifact_file("nonexistent.md")
             assert result is None
 
     def test_find_in_meetings(self, tmp_path):
         """Should find a file in wiki/meetings/ if not in domain folders."""
-        from app.vault_api import _find_artifact_file
+        from app.vault_scanner import _find_artifact_file
 
         meetings_dir = tmp_path / "wiki" / "meetings"
         meetings_dir.mkdir(parents=True)
         meeting_file = meetings_dir / "2026-01-01-standup.md"
         meeting_file.write_text("---\ntitle: standup\n---\nnotes", encoding="utf-8")
 
-        with patch("app.vault_api.all_domains", return_value=[]), \
-             patch("app.vault_api.VAULT_PATH", tmp_path):
+        with patch("app.vault_scanner.all_domains", return_value=[]), \
+             patch("app.vault_scanner.VAULT_PATH", tmp_path):
             result = _find_artifact_file("2026-01-01-standup.md")
             assert result is not None
             assert result.name == "2026-01-01-standup.md"
@@ -83,7 +83,8 @@ class TestUpdateField:
     @pytest.fixture
     def field_client(self, tmp_path):
         """TestClient with a mock artifact file."""
-        from app.vault_api import _cache, app
+        from app.vault_api import app
+        from app.vault_cache import _cache
 
         idea_dir = tmp_path / "wiki" / "domains" / "general" / "ideas"
         idea_dir.mkdir(parents=True)
@@ -94,7 +95,7 @@ class TestUpdateField:
             candidate = idea_dir / filename
             return candidate if candidate.exists() else None
 
-        with patch("app.vault_api._find_artifact_file", side_effect=mock_find):
+        with patch("app.routers.artifacts._find_artifact_file", side_effect=mock_find):
             from fastapi.testclient import TestClient
             _cache.invalidate()
             yield TestClient(app)
@@ -158,7 +159,8 @@ class TestUpdateBody:
     @pytest.fixture
     def body_client(self, tmp_path):
         """TestClient with a mock artifact file."""
-        from app.vault_api import _cache, app
+        from app.vault_api import app
+        from app.vault_cache import _cache
 
         idea_dir = tmp_path / "wiki" / "domains" / "general" / "ideas"
         idea_dir.mkdir(parents=True)
@@ -169,7 +171,7 @@ class TestUpdateBody:
             candidate = idea_dir / filename
             return candidate if candidate.exists() else None
 
-        with patch("app.vault_api._find_artifact_file", side_effect=mock_find):
+        with patch("app.routers.artifacts._find_artifact_file", side_effect=mock_find):
             from fastapi.testclient import TestClient
             _cache.invalidate()
             yield TestClient(app)

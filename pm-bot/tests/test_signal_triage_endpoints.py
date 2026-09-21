@@ -86,39 +86,20 @@ def signal_vault(tmp_path):
 def signal_client(signal_vault):
     """TestClient for pm-bot's vault_api with vault_paths patched for signals.
 
-    Patches both the vault_api module-level VAULT_PATH and the shared
-    vault_paths.VAULT_PATH so that vault_paths.wiki_signals() and
+    Patches both the app.routers.signals module-level VAULT_PATH and the
+    shared vault_paths.VAULT_PATH so that vault_paths.wiki_signals() and
     vault_paths.raw_signals() resolve to the temporary directory.
     """
     import shared.vault_paths as _vp
 
     with (
-        patch("app.vault_api.VAULT_PATH", signal_vault),
+        patch("app.routers.signals.VAULT_PATH", signal_vault),
         patch.object(_vp, "VAULT_PATH", signal_vault),
-        patch(
-            "app.vault_api.wiki_meetings",
-            return_value=signal_vault / "wiki" / "meetings",
-        ),
-        patch(
-            "app.vault_api.wiki_reports",
-            return_value=signal_vault / "wiki" / "reports",
-        ),
-        patch(
-            "app.vault_api.all_domains",
-            return_value=[],
-        ),
-        patch(
-            "app.vault_api.wiki_domain_dir",
-            side_effect=lambda domain, at: signal_vault
-            / "wiki"
-            / "domains"
-            / domain
-            / at,
-        ),
     ):
         from fastapi.testclient import TestClient
 
-        from app.vault_api import _cache, app
+        from app.vault_api import app
+        from app.vault_cache import _cache
 
         _cache.invalidate()
         yield TestClient(app)
@@ -379,7 +360,7 @@ class TestSignalApprove:
             "idea_ref": "/wiki/ideas/test.md",
             "new_status": "approved",
         }
-        with patch("app.vault_api.ke_client") as mock_ke:
+        with patch("app.routers.signals.ke_client") as mock_ke:
             mock_ke.signal_approve.return_value = ke_response
             resp = signal_client.post("/api/v1/signals/2026-08-01-approve-ok/approve")
 
@@ -395,7 +376,7 @@ class TestSignalApprove:
         """KE raises HTTPError 404 -> proxy forwards 404."""
         import requests as req_lib
 
-        with patch("app.vault_api.ke_client") as mock_ke:
+        with patch("app.routers.signals.ke_client") as mock_ke:
             response_mock = MagicMock()
             response_mock.status_code = 404
             response_mock.json.return_value = {"detail": "Signal not found"}
@@ -410,7 +391,7 @@ class TestSignalApprove:
         """KE raises HTTPError 409 -> proxy forwards 409."""
         import requests as req_lib
 
-        with patch("app.vault_api.ke_client") as mock_ke:
+        with patch("app.routers.signals.ke_client") as mock_ke:
             response_mock = MagicMock()
             response_mock.status_code = 409
             response_mock.json.return_value = {"detail": "Signal already approved"}
@@ -425,7 +406,7 @@ class TestSignalApprove:
         """KE unreachable -> 502."""
         import requests as req_lib
 
-        with patch("app.vault_api.ke_client") as mock_ke:
+        with patch("app.routers.signals.ke_client") as mock_ke:
             mock_ke.signal_approve.side_effect = req_lib.exceptions.ConnectionError(
                 "Connection refused"
             )

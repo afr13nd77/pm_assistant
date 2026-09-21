@@ -36,8 +36,7 @@ class TestGetSettings:
 
     def test_returns_env_values(self, vault_dir):
         """Should return VAULT_PATH and TRANSCRIPTS_INBOX from environment."""
-        with patch("app.vault_api.VAULT_PATH", vault_dir), \
-             patch.dict(os.environ, {
+        with patch.dict(os.environ, {
                  "VAULT_PATH": "/my/vault",
                  "TRANSCRIPTS_INBOX": "/my/transcripts"
              }):
@@ -55,37 +54,35 @@ class TestGetSettings:
     @pytest.mark.xfail(reason="roadmap_*_label keys removed from settings")
     def test_returns_empty_roadmap_labels(self, vault_dir):
         """Should return empty roadmap labels by default."""
-        with patch("app.vault_api.VAULT_PATH", vault_dir):
-            from fastapi.testclient import TestClient
+        from fastapi.testclient import TestClient
 
-            from app.vault_api import app
-            client = TestClient(app)
+        from app.vault_api import app
+        client = TestClient(app)
 
-            resp = client.get("/api/v1/settings")
-            assert resp.status_code == 200
-            data = resp.json()
-            assert data["roadmap_now_label"] == ""
-            assert data["roadmap_next_label"] == ""
-            assert data["roadmap_later_label"] == ""
+        resp = client.get("/api/v1/settings")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["roadmap_now_label"] == ""
+        assert data["roadmap_next_label"] == ""
+        assert data["roadmap_later_label"] == ""
 
     @pytest.mark.xfail(reason="roadmap_*_label keys removed from settings")
     def test_settings_structure(self, vault_dir):
         """Should return all expected keys in the response."""
-        with patch("app.vault_api.VAULT_PATH", vault_dir):
-            from fastapi.testclient import TestClient
+        from fastapi.testclient import TestClient
 
-            from app.vault_api import app
-            client = TestClient(app)
+        from app.vault_api import app
+        client = TestClient(app)
 
-            resp = client.get("/api/v1/settings")
-            assert resp.status_code == 200
-            data = resp.json()
-            expected_keys = {
-                "vault_path", "transcripts_path",
-                "roadmap_now_label", "roadmap_next_label",
-                "roadmap_later_label",
-            }
-            assert set(data.keys()) == expected_keys
+        resp = client.get("/api/v1/settings")
+        assert resp.status_code == 200
+        data = resp.json()
+        expected_keys = {
+            "vault_path", "transcripts_path",
+            "roadmap_now_label", "roadmap_next_label",
+            "roadmap_later_label",
+        }
+        assert set(data.keys()) == expected_keys
 
 
 # ---------------------------------------------------------------------------
@@ -100,8 +97,7 @@ class TestRegenerateReport:
         mock_filepath = MagicMock()
         mock_filepath.name = "2026-04-27-weekly.md"
 
-        with patch("app.vault_api.VAULT_PATH", vault_dir), \
-             patch("app.reporter.generate_weekly_report", return_value=mock_report_md), \
+        with patch("app.reporter.generate_weekly_report", return_value=mock_report_md), \
              patch("app.obsidian_writer.write_report", return_value=mock_filepath):
             from fastapi.testclient import TestClient
 
@@ -117,8 +113,7 @@ class TestRegenerateReport:
 
     def test_regenerate_error(self, vault_dir):
         """Should return 500 when report generation fails."""
-        with patch("app.vault_api.VAULT_PATH", vault_dir), \
-             patch(
+        with patch(
                  "app.reporter.generate_weekly_report",
                  side_effect=RuntimeError("Claude API unavailable"),
              ):

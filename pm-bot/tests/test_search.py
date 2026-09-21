@@ -16,7 +16,7 @@ class TestExtractSearchKeywords:
 
     def test_title_words(self):
         """Should extract words from title that are longer than 2 chars."""
-        from app.vault_api import _extract_search_keywords
+        from app.vault_search import _extract_search_keywords
 
         result = _extract_search_keywords("Hotel Content Checker", "")
         assert "hotel" in result
@@ -25,7 +25,7 @@ class TestExtractSearchKeywords:
 
     def test_heading_words(self):
         """Should extract words from ## headings that are longer than 2 chars."""
-        from app.vault_api import _extract_search_keywords
+        from app.vault_search import _extract_search_keywords
 
         result = _extract_search_keywords("Test", "## Overview section\nSome body text")
         assert "overview" in result
@@ -33,7 +33,7 @@ class TestExtractSearchKeywords:
 
     def test_body_snippet(self):
         """Should extract words from body text that are longer than 3 chars."""
-        from app.vault_api import _extract_search_keywords
+        from app.vault_search import _extract_search_keywords
 
         result = _extract_search_keywords(
             "Test", "This is a long description about hotels and rates"
@@ -45,7 +45,7 @@ class TestExtractSearchKeywords:
 
     def test_short_words_excluded(self):
         """Should filter out short words: title > 2 chars, body > 3 chars."""
-        from app.vault_api import _extract_search_keywords
+        from app.vault_search import _extract_search_keywords
 
         result = _extract_search_keywords("A B CD", "an it of")
         # "A", "B" have len <= 2 -> excluded from title
@@ -63,7 +63,7 @@ def _make_index(entries_data):
 
     entries_data is a list of dicts with keys matching _SearchEntry fields.
     """
-    from app.vault_api import _SearchEntry, _SearchIndex
+    from app.vault_search import _SearchEntry, _SearchIndex
 
     idx = _SearchIndex()
     for data in entries_data:
@@ -198,35 +198,35 @@ class TestExtractArtifactId:
 
     def test_from_frontmatter_id(self):
         """Should extract id from frontmatter 'id' field."""
-        from app.vault_api import _extract_artifact_id
+        from app.vault_search import _extract_artifact_id
         note = {"id": "IDEA-0023"}
         result = _extract_artifact_id(note, Path("some-file.md"))
         assert result == "IDEA-0023"
 
     def test_from_frontmatter_jira_key(self):
         """Should extract jira_key when id is absent."""
-        from app.vault_api import _extract_artifact_id
+        from app.vault_search import _extract_artifact_id
         note = {"jira_key": "GO-156"}
         result = _extract_artifact_id(note, Path("some-file.md"))
         assert result == "GO-156"
 
     def test_from_filename(self):
         """Should extract ID from filename pattern PREFIX-NUMBER."""
-        from app.vault_api import _extract_artifact_id
+        from app.vault_search import _extract_artifact_id
         note = {}
         result = _extract_artifact_id(note, Path("PLATFORM-10272-some-task.md"))
         assert result == "PLATFORM-10272"
 
     def test_id_priority_over_jira_key(self):
         """Frontmatter 'id' takes priority over 'jira_key'."""
-        from app.vault_api import _extract_artifact_id
+        from app.vault_search import _extract_artifact_id
         note = {"id": "IDEA-0023", "jira_key": "GO-156"}
         result = _extract_artifact_id(note, Path("test.md"))
         assert result == "IDEA-0023"
 
     def test_no_id(self):
         """Should return empty string when no ID found."""
-        from app.vault_api import _extract_artifact_id
+        from app.vault_search import _extract_artifact_id
         note = {}
         result = _extract_artifact_id(note, Path("some-random-file.md"))
         assert result == ""
@@ -242,7 +242,9 @@ class TestSearchEndpoint:
     @pytest.fixture
     def search_client(self):
         """TestClient with a pre-built search index."""
-        from app.vault_api import _cache, _SearchEntry, _SearchIndex, app
+        from app.vault_api import app
+        from app.vault_cache import _cache
+        from app.vault_search import _SearchEntry, _SearchIndex
 
         idx = _SearchIndex()
         idx.entries.append(_SearchEntry(
@@ -256,7 +258,7 @@ class TestSearchEndpoint:
             url="ideas.html",
         ))
 
-        with patch("app.vault_api._get_search_index", return_value=idx):
+        with patch("app.routers.vault_ops._get_search_index", return_value=idx):
             from fastapi.testclient import TestClient
             _cache.invalidate()
             yield TestClient(app)

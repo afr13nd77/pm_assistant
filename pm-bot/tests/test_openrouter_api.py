@@ -1,4 +1,4 @@
-"""Unit tests for OpenRouter API endpoints in vault_api.py.
+"""Unit tests for OpenRouter API endpoints in app.routers.providers.
 
 Covers:
   GET  /api/v1/openrouter-key-status
@@ -26,11 +26,9 @@ def client(tmp_path):
     inbox = tmp_path / "Inbox"
     inbox.mkdir()
     # Import first so the module exists, then patch VAULT_PATH on it
-    import app.vault_api as vault_api_module
     import shared.vault_paths as vault_paths_module
     from app.vault_api import app
-    with patch.object(vault_api_module, "VAULT_PATH", tmp_path), \
-         patch.object(vault_paths_module, "VAULT_PATH", tmp_path):
+    with patch.object(vault_paths_module, "VAULT_PATH", tmp_path):
         yield TestClient(app)
 
 
@@ -48,14 +46,14 @@ class TestOpenRouterKeyStatus:
 
     def test_has_key_returns_true(self, client):
         """When OPENROUTER_API_KEY is set, has_key should be True."""
-        with patch("app.vault_api.os.getenv", return_value="sk-test-key"):
+        with patch("app.routers.providers.os.getenv", return_value="sk-test-key"):
             resp = client.get("/api/v1/openrouter-key-status")
         assert resp.status_code == 200
         assert resp.json() == {"has_key": True}
 
     def test_no_key_returns_false(self, client):
         """When OPENROUTER_API_KEY is absent, has_key should be False."""
-        with patch("app.vault_api.os.getenv", return_value=None):
+        with patch("app.routers.providers.os.getenv", return_value=None):
             resp = client.get("/api/v1/openrouter-key-status")
         assert resp.status_code == 200
         data = resp.json()
@@ -63,7 +61,7 @@ class TestOpenRouterKeyStatus:
 
     def test_empty_string_key_returns_false(self, client):
         """Empty string env var should be treated as no key (bool('') == False)."""
-        with patch("app.vault_api.os.getenv", return_value=""):
+        with patch("app.routers.providers.os.getenv", return_value=""):
             resp = client.get("/api/v1/openrouter-key-status")
         assert resp.status_code == 200
         assert resp.json()["has_key"] is False
@@ -149,7 +147,7 @@ class TestOpenRouterModels:
             "fetched_at": "2026-07-01T09:00:00Z",
             "count": len(AVAILABLE_MODELS),
         }
-        with patch("app.vault_api.os.getenv", return_value=None), \
+        with patch("app.routers.providers.os.getenv", return_value=None), \
              patch("shared.openrouter_client.list_models", return_value=mock_result) as mock_list:
             resp = client.get("/api/v1/openrouter-models")
         assert resp.status_code == 200
@@ -172,7 +170,7 @@ class TestOpenRouterModels:
             "fetched_at": "2026-07-01T09:00:00Z",
             "count": 0,
         }
-        with patch("app.vault_api.os.getenv", return_value="sk-test-key"), \
+        with patch("app.routers.providers.os.getenv", return_value="sk-test-key"), \
              patch("shared.settings.get", return_value=1800) as mock_settings_get, \
              patch("shared.openrouter_client.list_models", return_value=mock_result) as mock_list:
             resp = client.get("/api/v1/openrouter-models")
@@ -194,7 +192,7 @@ class TestTestOpenRouter:
             "model": "qwen/qwen3-32b",
             "model_name": "Qwen3 32B",
         }
-        with patch("app.vault_api.os.getenv", return_value="sk-test-key"), \
+        with patch("app.routers.providers.os.getenv", return_value="sk-test-key"), \
              patch("shared.openrouter_client.test_connection", return_value=mock_result):
             resp = client.post(
                 "/api/v1/test-openrouter",
@@ -207,7 +205,7 @@ class TestTestOpenRouter:
 
     def test_no_key_returns_error(self, client):
         """When OPENROUTER_API_KEY is absent, should return status=error without calling API."""
-        with patch("app.vault_api.os.getenv", return_value=None):
+        with patch("app.routers.providers.os.getenv", return_value=None):
             resp = client.post(
                 "/api/v1/test-openrouter",
                 json={"model": "qwen/qwen3-32b"},
@@ -219,7 +217,7 @@ class TestTestOpenRouter:
 
     def test_connection_exception_returns_error(self, client):
         """When test_connection raises an exception, endpoint returns status=error."""
-        with patch("app.vault_api.os.getenv", return_value="sk-test-key"), \
+        with patch("app.routers.providers.os.getenv", return_value="sk-test-key"), \
              patch("shared.openrouter_client.test_connection",
                    side_effect=RuntimeError("network failure")):
             resp = client.post(
@@ -238,7 +236,7 @@ class TestTestOpenRouter:
             "model": "google/gemini-2.5-flash",
             "model_name": "Gemini 2.5 Flash",
         }
-        with patch("app.vault_api.os.getenv", return_value="sk-test-key"), \
+        with patch("app.routers.providers.os.getenv", return_value="sk-test-key"), \
              patch("shared.openrouter_client.test_connection",
                    return_value=mock_result) as mock_conn:
             resp = client.post(
@@ -254,7 +252,7 @@ class TestTestOpenRouter:
     def test_missing_model_uses_default(self, client):
         """POST body without 'model' field should use default qwen/qwen3-32b."""
         mock_result = {"status": "ok", "model": "qwen/qwen3-32b", "model_name": "Qwen3 32B"}
-        with patch("app.vault_api.os.getenv", return_value="sk-test-key"), \
+        with patch("app.routers.providers.os.getenv", return_value="sk-test-key"), \
              patch("shared.openrouter_client.test_connection",
                    return_value=mock_result) as mock_conn:
             resp = client.post("/api/v1/test-openrouter", json={})

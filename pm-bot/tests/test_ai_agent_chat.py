@@ -30,8 +30,7 @@ def prefs_file(vault_dir):
 @pytest.fixture
 def client(vault_dir):
     """FastAPI TestClient with VAULT_PATH pointed at tmp dir."""
-    with patch("app.vault_api.VAULT_PATH", vault_dir), \
-         patch("shared.vault_paths.VAULT_PATH", vault_dir):
+    with patch("shared.vault_paths.VAULT_PATH", vault_dir):
         from fastapi.testclient import TestClient
 
         from app.vault_api import app
@@ -56,9 +55,10 @@ _P_CALL = "shared.llm_client._call_provider"
 _P_AVAIL = "shared.llm_client._is_provider_available"
 _P_PREFS = "shared.llm_client._load_llm_prefs"
 _P_LF = "shared.langfuse_client.get_langfuse"
-# _load_business_context_file is defined in app.vault_api and is called
-# directly (not via local import), so it must be patched at app.vault_api.
-_P_CTX = "app.vault_api._load_business_context_file"
+# _load_business_context_file is imported (module-level, not local import)
+# into app.routers.ai_agent from app.routers.user_prefs, so it must be
+# patched where it is looked up: app.routers.ai_agent.
+_P_CTX = "app.routers.ai_agent._load_business_context_file"
 
 
 # ---------------------------------------------------------------------------
@@ -310,14 +310,14 @@ class TestLoadBusinessContextFile:
             encoding="utf-8",
         )
         with patch.dict("os.environ", {"VAULT_PATH": str(tmp_path)}):
-            from app.vault_api import _load_business_context_file
+            from app.routers.user_prefs import _load_business_context_file
             result = _load_business_context_file()
         assert result == "This is the real content."
 
     def test_load_business_context_file_missing(self, tmp_path):
         """When file does not exist, should return empty string."""
         with patch.dict("os.environ", {"VAULT_PATH": str(tmp_path)}):
-            from app.vault_api import _load_business_context_file
+            from app.routers.user_prefs import _load_business_context_file
             result = _load_business_context_file()
         assert result == ""
 

@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.vault_api import _extract_report_type
+from app.routers.reports import _extract_report_type
 
 
 def test_extract_report_type_valid():
