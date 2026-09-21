@@ -439,7 +439,7 @@ python -m app.main
 
 ## Performance
 
-In-memory TTL cache (30s) в vault_api.py:
+In-memory TTL cache (30s) в vault_cache.py (`_VaultCache`):
 
 | Endpoint | До оптимизации | После (cached) |
 |---|---|---|
