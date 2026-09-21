@@ -5,6 +5,18 @@
 
 ---
 
+## 21.09.2026
+
+### BL-152 — Рефакторинг vault_api.py — разбивка на роутеры (21.09.2026)
+- **pm-bot**: vault_api.py (5672 строк, 72 эндпоинта) → thin orchestrator (105 строк, 0 эндпоинтов)
+- **pm-bot**: 4 хелпер-модуля: vault_cache.py (_VaultCache, _cache, _jira_sync_lock), vault_parsers.py (parse_note, parse_epic_note, _calculate_readiness и др.), vault_scanner.py (_scan_domain_folders, _domain_from_path), vault_search.py (_get_search_index)
+- **pm-bot**: 23 APIRouter-модуля в app/routers/ (ai_agent, artifacts, config, decay, decisions, domains, epics, ideas, jira, meetings, playground, prompts, providers, reports, research, settings, signals, system, tasks, today, todos, user_prefs, vault_ops)
+- **API-контракт**: все 72 URL, форматы ответов, статус-коды — без изменений
+- **Тесты**: guard-тесты (endpoint smoke 72, circular imports, line count ≤200, routers ≥15), mock.patch targets обновлены в 13 тест-файлах
+- **Результат**: 716 passed, 9 xfailed, 0 failures
+
+---
+
 ## 07.09.2026
 
 ### BL-235 — Редактирование business_context через Settings UI (07.09.2026)
