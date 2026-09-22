@@ -1,3 +1,8 @@
+[![CI](https://github.com/afr13nd77/pm_assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/afr13nd77/pm_assistant/actions/workflows/ci.yml)
+[![GitHub release](https://img.shields.io/github/release/afr13nd77/pm_assistant.svg)](https://github.com/afr13nd77/pm_assistant/releases)
+
+[English version](readme_en.md)
+
 # PM Assistant
 
 ## Что это
@@ -190,7 +195,7 @@ Jira-статусы не нормализуются — Jira является и
 
 ## Компоненты
 
-### pm-bot (v1.27.0)
+### pm-bot (v1.30.0)
 
 Telegram-бот + Vault API + Web UI сервер. Точка входа для всех взаимодействий.
 
@@ -201,12 +206,12 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 - OpenRouter API для транскрибаций (6 моделей, fallback chain)
 - Speech-to-Text (faster-whisper)
 - transcript_watcher: локальные `.txt` кладёт в файловую очередь `raw/meeting-queue/pending/` (без локального LLM; обработку выполняет KE-воркер) — BL-145
-- Vault API (FastAPI, порт 8000) с in-memory TTL cache (30s)
+- Vault API (FastAPI, порт 8000) с in-memory TTL cache (30s), 23 APIRouter-модуля (app/routers/) вместо монолитного vault_api.py
 - Web UI static server (порт 8080)
 - APScheduler: enrichment reminders (daily), daily alert (пн-пт 18:00)
 - SQLite: дедупликация enrichment-напоминаний (cooldown 24ч)
 
-### knowledge-engine (v1.24.0)
+### knowledge-engine (v1.25.0)
 
 Сервис обогащения и синтеза знаний.
 
@@ -240,7 +245,7 @@ Telegram-бот + Vault API + Web UI сервер. Точка входа для 
 docker exec knowledge-engine python -m app moderate-news --notify
 ```
 
-### idea-pipeline (v1.1.2)
+### idea-pipeline (v1.3.0)
 
 Оркестратор проработки идей через цепочку AI-агентов.
 
@@ -269,7 +274,7 @@ Cron-контейнер для периодических задач:
 - News Moderator: Пн-Пт 08:00
 - Trend detect: Пн 06:00
 
-### shared (v0.7.4)
+### shared (v0.7.5)
 
 Общий модуль, единый источник для pm-bot, knowledge-engine и idea-pipeline.
 
@@ -284,7 +289,7 @@ Cron-контейнер для периодических задач:
 
 ---
 
-## Web UI (v1.27.1)
+## Web UI (v1.33.0)
 
 SPA-дашборд на Vue 3 + vanilla JS. Статические HTML-страницы, данные через Vault API.
 
@@ -525,12 +530,12 @@ API возвращает `trend_7d` и `trend_30d` — история score за
 
 ## Статистика проекта
 
-- 85 реализованных фичей
-- 24 исправленных бага
-- 27 идей в бэклоге
-- 139 пунктов бэклога всего
+- 117 реализованных фичей
+- 36 исправленных багов
+- 68 идей в бэклоге
+- 221 пункт бэклога всего
 
-Разработка ведется с 07.05.2026. Текущие версии: pm-bot 1.20.0, knowledge-engine 1.18.0, idea-pipeline 1.2.0, web-ui 1.28.0, shared 0.7.3.
+Разработка ведется с 07.05.2026. Текущие версии: pm-bot 1.30.0, knowledge-engine 1.25.0, idea-pipeline 1.3.0, web-ui 1.33.0, shared 0.7.5.
 
 ---
 
