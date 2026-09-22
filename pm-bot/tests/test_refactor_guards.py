@@ -90,31 +90,25 @@ EXPECTED_ENDPOINTS = {
 
 
 def test_all_endpoint_urls_exist():
-    """Проверяет, что все 72 ожидаемых endpoint зарегистрированы в FastAPI app."""
+    """Проверяет, что все 72 ожидаемых endpoint зарегистрированы в FastAPI app.
+
+    Использует OpenAPI schema (app.openapi()) вместо прямого обхода app.routes,
+    т.к. на разных версиях FastAPI/Starlette include_router может создавать
+    Mount-объекты без доступного path на верхнем уровне.
+    """
     from app.vault_api import app as test_app
 
-    all_routes = list(test_app.routes)
-    api_routes = [r for r in all_routes if hasattr(r, "path") and getattr(r, "path", "").startswith("/api/v1")]
-    assert len(api_routes) > 0, (
-        f"app.routes has {len(all_routes)} total routes but 0 start with /api/v1. "
-        f"Route paths: {[getattr(r, 'path', '?') for r in all_routes[:20]]}"
-    )
+    schema = test_app.openapi()
+    paths = schema.get("paths", {})
 
     actual_endpoints = set()
-    for route in all_routes:
-        methods = getattr(route, "methods", None)
-        path = getattr(route, "path", None)
-        if not methods or not path:
-            continue
-        if not path.startswith("/api/v1"):
-            continue
-        for method in methods:
-            if method == "HEAD":
-                continue
-            actual_endpoints.add((method, path))
+    for path, methods_dict in paths.items():
+        for method in methods_dict:
+            if method.upper() in ("GET", "POST", "PUT", "PATCH", "DELETE"):
+                actual_endpoints.add((method.upper(), path))
 
     missing = EXPECTED_ENDPOINTS - actual_endpoints
-    extra = actual_endpoints - EXPECTED_ENDPOINTS
+    extra = {ep for ep in (actual_endpoints - EXPECTED_ENDPOINTS) if ep[1].startswith("/api/v1")}
 
     assert not missing, f"Missing endpoints: {sorted(missing)}"
     assert not extra, f"Unexpected extra endpoints: {sorted(extra)}"
