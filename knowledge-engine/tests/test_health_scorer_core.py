@@ -199,7 +199,9 @@ class TestSaveHistory:
         """Save to non-existent file -> file created with 1 entry."""
         scorer = _import_health_scorer(tmp_path)
 
-        entry = {"date": "2026-06-10", "score": 85, "grade": "healthy"}
+        today = datetime.now(timezone.utc).date().isoformat()
+
+        entry = {"date": today, "score": 85, "grade": "healthy"}
         scorer.save_history(str(tmp_path), entry)
 
         history_file = tmp_path / HISTORY_FILENAME
@@ -208,15 +210,19 @@ class TestSaveHistory:
         data = _read_history(tmp_path)
         assert data["version"] == 1
         assert len(data["entries"]) == 1
-        assert data["entries"][0]["date"] == "2026-06-10"
+        assert data["entries"][0]["date"] == today
         assert data["entries"][0]["score"] == 85
 
     def test_save_history_appends(self, tmp_path):
         """Save twice with different dates -> 2 entries."""
         scorer = _import_health_scorer(tmp_path)
 
-        entry1 = {"date": "2026-06-09", "score": 80, "grade": "healthy"}
-        entry2 = {"date": "2026-06-10", "score": 85, "grade": "healthy"}
+        today = datetime.now(timezone.utc).date()
+        yesterday = (today - timedelta(days=1)).isoformat()
+        two_days_ago = (today - timedelta(days=2)).isoformat()
+
+        entry1 = {"date": two_days_ago, "score": 80, "grade": "healthy"}
+        entry2 = {"date": yesterday, "score": 85, "grade": "healthy"}
         scorer.save_history(str(tmp_path), entry1)
         scorer.save_history(str(tmp_path), entry2)
 
@@ -224,14 +230,16 @@ class TestSaveHistory:
         assert len(data["entries"]) == 2
 
         dates = {e["date"] for e in data["entries"]}
-        assert dates == {"2026-06-09", "2026-06-10"}
+        assert dates == {two_days_ago, yesterday}
 
     def test_save_history_overwrites_same_day(self, tmp_path):
         """Save twice with same date -> 1 entry (latest values)."""
         scorer = _import_health_scorer(tmp_path)
 
-        entry1 = {"date": "2026-06-10", "score": 70, "grade": "warning"}
-        entry2 = {"date": "2026-06-10", "score": 90, "grade": "healthy"}
+        today = datetime.now(timezone.utc).date().isoformat()
+
+        entry1 = {"date": today, "score": 70, "grade": "warning"}
+        entry2 = {"date": today, "score": 90, "grade": "healthy"}
         scorer.save_history(str(tmp_path), entry1)
         scorer.save_history(str(tmp_path), entry2)
 

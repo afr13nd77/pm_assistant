@@ -23,7 +23,7 @@ def memory(db_path: str) -> SignalMemory:
 
 
 def _make_record(
-    date: str = "2026-08-01",
+    date: str | None = None,
     title: str = "Test signal",
     summary: str = "Summary",
     source: str = "test",
@@ -35,6 +35,10 @@ def _make_record(
     quality_score: int = 7,
     attempts: int = 1,
 ) -> SignalRecord:
+    # По умолчанию используем сегодняшнюю дату, чтобы тесты не протухали
+    # из-за фильтрации по TTL/окну дней в signal_memory.
+    if date is None:
+        date = datetime.now().strftime("%Y-%m-%d")
     return SignalRecord(
         date=date,
         title=title,
