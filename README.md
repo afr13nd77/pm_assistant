@@ -1,5 +1,6 @@
 [![CI](https://github.com/afr13nd77/pm_assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/afr13nd77/pm_assistant/actions/workflows/ci.yml)
 [![GitHub release](https://img.shields.io/github/release/afr13nd77/pm_assistant.svg)](https://github.com/afr13nd77/pm_assistant/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 [English version](readme_en.md)
 
