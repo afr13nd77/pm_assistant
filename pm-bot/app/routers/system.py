@@ -6,8 +6,9 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 
-from ..vault_cache import _cache
 from shared.vault_paths import VAULT_PATH
+
+from ..vault_cache import _cache
 
 logger = logging.getLogger(__name__)
 
