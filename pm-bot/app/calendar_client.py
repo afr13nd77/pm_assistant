@@ -42,7 +42,7 @@ def _get_credentials() -> tuple[str, str, str, str]:
     """
     logger.info("_get_credentials -- reading user-prefs")
     try:
-        from app.vault_api import _read_user_prefs
+        from app.routers.user_prefs import _read_user_prefs
         prefs = _read_user_prefs()
         username = prefs.get("caldav_username", "")
         password = prefs.get("caldav_password", "")

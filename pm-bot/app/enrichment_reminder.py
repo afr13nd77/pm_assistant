@@ -144,7 +144,7 @@ def _scan_all_ideas() -> list[dict]:
     """
     from shared.vault_paths import all_domains, wiki_domain_dir
 
-    from .vault_api import _calculate_readiness, parse_note
+    from .vault_parsers import _calculate_readiness, parse_note
 
     results: list[dict] = []
     domains = all_domains()

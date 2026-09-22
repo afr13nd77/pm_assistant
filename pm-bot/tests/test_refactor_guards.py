@@ -90,25 +90,18 @@ EXPECTED_ENDPOINTS = {
 
 
 def test_all_endpoint_urls_exist():
-    """Проверяет, что все 72 ожидаемых endpoint зарегистрированы в FastAPI app.
+    """Проверяет, что все 72 ожидаемых endpoint зарегистрированы в FastAPI app."""
+    from app.vault_api import app as test_app
 
-    Модуль app.vault_api перезагружается через importlib.reload, чтобы получить
-    чистую копию FastAPI-приложения: другие тесты в наборе (например,
-    test_no_circular_imports) могут оставлять side effects в sys.modules,
-    из-за чего на CI (Python 3.12, Linux) при запуске этого теста последним
-    app.routes мог оказаться пустым.
-    """
-    try:
-        import app.vault_api as vault_api_mod
-
-        vault_api_mod = importlib.reload(vault_api_mod)
-        test_app = vault_api_mod.app
-    except Exception as exc:
-        logger.error("test_all_endpoint_urls_exist: import app.vault_api failed: %s", exc)
-        raise
+    all_routes = list(test_app.routes)
+    api_routes = [r for r in all_routes if hasattr(r, "path") and getattr(r, "path", "").startswith("/api/v1")]
+    assert len(api_routes) > 0, (
+        f"app.routes has {len(all_routes)} total routes but 0 start with /api/v1. "
+        f"Route paths: {[getattr(r, 'path', '?') for r in all_routes[:20]]}"
+    )
 
     actual_endpoints = set()
-    for route in test_app.routes:
+    for route in all_routes:
         methods = getattr(route, "methods", None)
         path = getattr(route, "path", None)
         if not methods or not path:
