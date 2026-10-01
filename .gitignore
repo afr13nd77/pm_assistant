@@ -1,8 +1,9 @@
 # Environment & secrets
 .env
 
-# Documentation (internal specs, not for public repo)
+# Documentation (internal specs and backlog, not for public repo)
 docs/
+BACKLOG.md
 
 # IDE
 .idea/
