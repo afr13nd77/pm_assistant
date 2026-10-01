@@ -2,7 +2,7 @@
 
 ## 1. Что такое PM Assistant
 
-PM Assistant -- система автоматизации рабочих заметок продакт-менеджера OTA-компании. Система состоит из 4 Docker-контейнеров: Telegram-бот, сервис обогащения знаний, конвейер проработки идей и cron-планировщик. PM Assistant автоматизирует полный цикл жизни идеи: от сырой мысли в Telegram до готового эпика в Jira.
+PM Assistant -- система автоматизации рабочих заметок продакт-менеджера. Система состоит из 4 Docker-контейнеров: Telegram-бот, сервис обогащения знаний, конвейер проработки идей и cron-планировщик. PM Assistant автоматизирует полный цикл жизни идеи: от сырой мысли в Telegram до готового эпика в Jira.
 
 Хранилище знаний построено по модели Андрея Карпати (Andrej Karpathy): **raw -> compile -> wiki**. Слой `raw/` содержит неизменяемые оригиналы (append-only) -- все, что захвачено (идея, транскрипт, тикет, клиппинг), сохраняется as-is. Слой `wiki/` -- скомпилированное знание: структурированные заметки с YAML frontmatter, перекрестными ссылками и индексами, организованные по продуктовым доменам. Слой `templates/` -- шаблоны артефактов (idea, epic, userstory, task, bug, ADR).
 
@@ -41,19 +41,20 @@ PM Assistant -- система автоматизации рабочих зам�
 
 ### 2.3. LLM-слой
 
-Гибридная архитектура с двумя провайдерами:
+Гибридная архитектура с двумя основными провайдерами и одним опциональным:
 
 | Провайдер | Модель | Назначение |
 |---|---|---|
-| **Ollama** (локальный) | QWEN 3.5 | Рутинные задачи: классификация, извлечение ключевых слов, простая структуризация |
+| **Ollama** (локальный) | настраиваемая через `OLLAMA_MODEL` | Рутинные задачи: классификация, извлечение ключевых слов, простая структуризация |
 | **Claude API** (облачный) | claude-sonnet-4-6 | Сложные задачи: синтез, enrichment, pipeline, еженедельные отчеты |
+| **OpenRouter** (облачный, опционально) | QWEN3-32B и другие (настраивается) | Транскрипции встреч: обработка текста транскриптов через модели OpenRouter, fallback-цепочка OpenRouter -> Ollama -> Claude API |
 
 Три режима работы:
 - **Hybrid** (по умолчанию) -- автоматический выбор провайдера по типу задачи. Если Ollama недоступен -- fallback на Claude API.
 - **Claude** -- все запросы через Claude API.
 - **Ollama** -- все запросы через локальный Ollama.
 
-Переключение режима -- через Web UI (Settings -> LLM Provider) или переменные окружения.
+Переключение режима -- через Web UI (Settings -> LLM Provider) или переменные окружения. OpenRouter включается отдельно как Transcription Provider (Settings -> Transcription Provider), требует `OPENROUTER_API_KEY` в `.env`.
 
 Голосовые сообщения транскрибируются локально через **faster-whisper** (модель `small`, CPU, int8). Управление: переменная `STT_ENABLED` (по умолчанию включен).
 
@@ -107,20 +108,20 @@ Dual-theme: **MATRIX** (dark, glow/neon) и **LIGHT** (cream, warm). Перек�
 
 ### 2.6. Доменная структура vault
 
-Знания организованы по 5 продуктовым доменам:
+Знания организованы по продуктовым доменам, которые задаёт сам пользователь. При первом запуске `seed_from_defaults()` автоматически создаёт один домен -- `general`. Остальные домены добавляются по мере необходимости через Web UI (dashboard.html) или вручную в `domain-config.yaml`.
+
+Пример доменной структуры (см. `domain-seed.example.yaml`):
 
 ```
 wiki/domains/
-├── static-metadata/
-├── suggester/
-├── search-engine/
-├── partner-search-engine/
+├── engineering/
+├── marketing/
 └── general/
 ```
 
 Каждый домен содержит подпапки: `ideas/`, `epics/`, `tasks/`, `bugs/`, `knowledge/`, а также служебные файлы `index.md`, `log.md`, `decisions.md`, `glossary.md`.
 
-Конфигурация доменов (display_name, description, color, jira_labels, tags, keywords) хранится в файле `domain-config.yaml` в корне vault.
+Конфигурация доменов (display_name, description, color, jira_labels, tags, keywords) хранится в файле `domain-config.yaml` в корне vault. Шаблон с примерами -- `domain-seed.example.yaml` в корне проекта.
 
 ---
 
@@ -154,21 +155,22 @@ cp .env.example .env
 ```
 BOT_TOKEN=<токен от @BotFather>
 CLAUDE_API_KEY=<ключ с console.anthropic.com>
-VAULT_PATH=C:/Users/YourName/Documents/ObsidianVault
-TRANSCRIPTS_INBOX=C:/Users/YourName/Downloads/Telemost
+VAULT_PATH=/path/to/your/obsidian-vault
+TRANSCRIPTS_INBOX=/path/to/your/transcripts-inbox
 ALLOWED_CHAT_ID=
 JIRA_URL=https://your-jira-server.com
 JIRA_TOKEN=<Personal Access Token>
-PIPELINE_API_URL=http://idea-pipeline:8100
 ```
 
-Путь `VAULT_PATH` на Windows указывать с прямыми слешами: `C:/Users/...`.
+Путь `VAULT_PATH` на Windows указывать с прямыми слешами (например `C:/Users/YourName/Documents/ObsidianVault`).
 
 ### Шаг 3. Создание структуры vault
 
 Если vault уже существует и содержит нужные папки -- пропустить этот шаг.
 
-Для нового vault создать структуру:
+Доменная структура (`wiki/domains/<domain>/`) создаётся автоматически при первом запуске: `seed_from_defaults()` сам создаёт домен `general`. Остальные домены (например `engineering/`, `marketing/`) добавляются позже через Web UI (dashboard.html) или `domain-config.yaml` -- вручную их создавать не нужно.
+
+Для нового vault создать базовую структуру:
 
 ```
 raw/
@@ -184,31 +186,7 @@ raw/
 
 wiki/
 ├── domains/
-│   ├── static-metadata/
-│   │   ├── ideas/
-│   │   ├── epics/
-│   │   ├── tasks/
-│   │   ├── bugs/
-│   │   └── knowledge/
-│   ├── suggester/
-│   │   ├── ideas/
-│   │   ├── epics/
-│   │   ├── tasks/
-│   │   ├── bugs/
-│   │   └── knowledge/
-│   ├── search-engine/
-│   │   ├── ideas/
-│   │   ├── epics/
-│   │   ├── tasks/
-│   │   ├── bugs/
-│   │   └── knowledge/
-│   ├── partner-search-engine/
-│   │   ├── ideas/
-│   │   ├── epics/
-│   │   ├── tasks/
-│   │   ├── bugs/
-│   │   └── knowledge/
-│   └── general/
+│   └── general/           # создаётся автоматически, другие домены -- через Web UI
 │       ├── ideas/
 │       ├── epics/
 │       ├── tasks/
