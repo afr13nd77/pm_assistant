@@ -131,8 +131,10 @@ wiki/domains/
 
 - Docker Desktop (4GB RAM минимум)
 - Git
+- [Obsidian](https://obsidian.md/) — vault (хранилище Markdown-заметок) является основой системы
 - Аккаунт Telegram для создания бота
-- Ключ Claude API (console.anthropic.com)
+- Ключ Claude API (console.anthropic.com) — опционально, если используется Claude как LLM-провайдер
+- Ключ OpenRouter API (openrouter.ai) — опционально, если используются модели через OpenRouter
 - Personal Access Token для Jira (если нужна Jira-интеграция)
 
 ### Шаг 1. Клонирование репозитория
@@ -154,10 +156,15 @@ cp .env.example .env
 
 ```
 BOT_TOKEN=<токен от @BotFather>
-CLAUDE_API_KEY=<ключ с console.anthropic.com>
 VAULT_PATH=/path/to/your/obsidian-vault
 TRANSCRIPTS_INBOX=/path/to/your/transcripts-inbox
 ALLOWED_CHAT_ID=
+
+# LLM-провайдер — укажите хотя бы один ключ
+CLAUDE_API_KEY=<ключ с console.anthropic.com>
+OPENROUTER_API_KEY=<ключ с openrouter.ai>
+
+# Jira (опционально)
 JIRA_URL=https://your-jira-server.com
 JIRA_TOKEN=<Personal Access Token>
 ```
