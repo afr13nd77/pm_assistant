@@ -12,7 +12,7 @@
 
 ## What it is
 
-PM Assistant is a software implementation of a product-knowledge management methodology for a product manager at an OTA company.
+PM Assistant is a software implementation of a product-knowledge management methodology for product managers.
 
 The project automates the full lifecycle of an idea: from a raw thought captured in Telegram to a finished epic in Jira. This is not just a bot — it is a working system of 4 microservices that implements the rules described in the Knowledge Base Agent configuration (the CLAUDE.md of the project's knowledge vault).
 
