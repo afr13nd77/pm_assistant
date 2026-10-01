@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/pm-assistant-hero-v2.png" alt="PM Assistant: продакт управляет AI-помощниками вокруг общей памяти продукта, объединяющей сигналы и исследования, встречи и решения, ежедневную работу, идеи и реализацию." width="1000" />
+</p>
+
 [![CI](https://github.com/afr13nd77/pm_assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/afr13nd77/pm_assistant/actions/workflows/ci.yml)
 [![GitHub release](https://img.shields.io/github/release/afr13nd77/pm_assistant.svg)](https://github.com/afr13nd77/pm_assistant/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
