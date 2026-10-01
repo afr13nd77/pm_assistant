@@ -623,6 +623,32 @@ class TestSeedFromDefaults:
         reloaded = dc.load()
         assert "my-domain" in reloaded["domains"]
 
+    def test_general_domain_always_created(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        result = dc.seed_from_defaults({}, [])
+        assert "general" in result["domains"]
+        entry = result["domains"]["general"]
+        assert entry["display_name"] == "General"
+        assert entry["description"] == "Cross-domain tasks"
+        assert entry["tags"] == ["general"]
+
+    def test_general_not_overwritten_if_in_hardcoded(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        result = dc.seed_from_defaults({"gen-label": "general"}, [])
+        assert "general" in result["domains"]
+        assert result["domains"]["general"]["jira_labels"] == ["gen-label"]
+
+    def test_domains_created_with_bare_slugs(self, tmp_path):
+        dc = _import_dc(tmp_path)
+        result = dc.seed_from_defaults({"lbl": "my-domain"}, ["fs-domain"])
+        my = result["domains"]["my-domain"]
+        assert my["display_name"] == "my-domain"
+        assert my["description"] == ""
+        assert my["keywords"] == []
+        fs = result["domains"]["fs-domain"]
+        assert fs["display_name"] == "fs-domain"
+        assert fs["jira_labels"] == []
+
 
 # ---------------------------------------------------------------------------
 # build_keyword_map
@@ -856,25 +882,3 @@ class TestSetDomainMergeKeywords:
         entry = result["domains"]["alpha"]
         assert entry["display_name"] == "Alpha v2"
         assert entry["keywords"] == ["a", "b"]
-
-
-# ---------------------------------------------------------------------------
-# seed_from_defaults — full data from _SEED_DOMAIN_DATA
-# ---------------------------------------------------------------------------
-
-
-class TestSeedWithFullData:
-    def test_seed_includes_keywords_and_prompt_hint(self, tmp_path):
-        dc = _import_dc(tmp_path)
-        # Use a slug that exists in _SEED_DOMAIN_DATA
-        result = dc.seed_from_defaults({"search-lbl": "search-engine"}, [])
-        entry = result["domains"]["search-engine"]
-        # keywords come from _SEED_DOMAIN_DATA["search-engine"]["keywords"]
-        assert isinstance(entry["keywords"], list)
-        assert len(entry["keywords"]) > 0
-        # prompt_hint comes from _SEED_DOMAIN_DATA["search-engine"]["prompt_hint"]
-        assert isinstance(entry["prompt_hint"], str)
-        assert len(entry["prompt_hint"]) > 0
-        # Verify specific values from _SEED_DOMAIN_DATA
-        assert "search-engine" in result["domains"]
-        assert entry["display_name"] == dc._SEED_DOMAIN_DATA["search-engine"]["display_name"]

@@ -10,6 +10,10 @@ BACKLOG.md
 
 # Claude Code
 .claude/
+claude.md
+context.md
+claude-opus36.bat
+docs_private/
 
 # Python
 __pycache__/

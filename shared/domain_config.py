@@ -519,78 +519,6 @@ def get_valid_domains() -> tuple[str, ...]:
     return slugs
 
 
-_SEED_DOMAIN_DATA: dict[str, dict] = {
-    "search-engine": {
-        "display_name": "Поисковый движок",
-        "description": "Поиск отелей и квартир: фильтры, сортировка, выдача",
-        "color": "#2196F3",
-        "tags": ["search", "search-engine", "ranking", "indexing"],
-        "keywords": [
-            "поиск", "релевантность", "индексация", "fulltext",
-            "фильтрация", "ранжирование", "выдача", "getresults", "searchoffers",
-        ],
-        "prompt_hint": (
-            "поиск, релевантность, индексация, полнотекстовый поиск, "
-            "фильтрация, ранжирование, выдача"
-        ),
-    },
-    "static-metadata": {
-        "display_name": "Справочники",
-        "description": "Справочники, классификаторы, атрибуты, метаданные объектов",
-        "color": "#FF9800",
-        "tags": [
-            "static", "dictionary", "catalog", "reference",
-            "metadata", "property", "amenities", "rules", "beds", "types",
-        ],
-        "keywords": [
-            "справочник", "классификатор", "атрибут", "enum", "словарь",
-            "статика", "карточка объекта", "amenities", "property type",
-            "метаданн", "каталог", "контент",
-        ],
-        "prompt_hint": (
-            "справочники, классификаторы, атрибуты, метаобъекты, каталоги, "
-            "перечисления, справочная информация, статические данные объектов размещения"
-        ),
-    },
-    "suggester": {
-        "display_name": "Подсказчик",
-        "description": "Автокомплит, подсказки, поиск по префиксу",
-        "color": "#4CAF50",
-        "tags": ["suggester", "typeahead", "autocomplete"],
-        "keywords": [
-            "подсказчик", "автокомплит", "подсказка", "подсказк",
-            "typeahead", "префикс", "по мере ввода", "suggest",
-        ],
-        "prompt_hint": (
-            "автокомплит, подсказки, typeahead, выпадающие списки, "
-            "поиск по префиксу, подбор"
-        ),
-    },
-    "partner-search-engine": {
-        "display_name": "Поиск партнёров",
-        "description": "Работа с продавцами: поиск, фильтрация, профили",
-        "color": "#9C27B0",
-        "tags": ["partner", "partner_search", "b2b", "supplier", "affiliate"],
-        "keywords": [
-            "партнёр", "поставщик", "b2b", "supplier",
-            "подключение партнёра", "аффилиат",
-        ],
-        "prompt_hint": (
-            "партнёрский поиск, B2B, поставщики, аффилиаты, "
-            "подключение партнёров"
-        ),
-    },
-    "general": {
-        "display_name": "Общее",
-        "description": "Задачи, не привязанные к конкретному домену",
-        "color": "#607D8B",
-        "tags": ["general"],
-        "keywords": [],
-        "prompt_hint": "если идея не относится к конкретному домену",
-    },
-}
-
-
 def seed_from_defaults(hardcoded_map: dict[str, str], existing_domains: list[str]) -> dict:
     """Create initial config from hardcoded map and filesystem domains.
 
@@ -631,20 +559,18 @@ def seed_from_defaults(hardcoded_map: dict[str, str], existing_domains: list[str
                 "seed_from_defaults: skipping invalid slug %r from hardcoded_map", slug
             )
             continue
-        seed = _SEED_DOMAIN_DATA.get(slug, {})
         domains[slug] = {
-            "display_name": seed.get("display_name", slug),
-            "description": seed.get("description", ""),
-            "color": seed.get("color", _DEFAULT_COLOR),
+            "display_name": slug,
+            "description": "",
+            "color": _DEFAULT_COLOR,
             "jira_labels": labels,
-            "tags": seed.get("tags", []),
-            "keywords": seed.get("keywords", []),
-            "prompt_hint": seed.get("prompt_hint", ""),
+            "tags": [],
+            "keywords": [],
+            "prompt_hint": "",
         }
         logger.debug(
-            "seed_from_defaults: added domain %r with labels %r, "
-            "%d tags, %d keywords",
-            slug, labels, len(domains[slug]["tags"]), len(domains[slug]["keywords"]),
+            "seed_from_defaults: added domain %r with labels %r",
+            slug, labels,
         )
 
     # Add filesystem domains not already present
@@ -659,17 +585,29 @@ def seed_from_defaults(hardcoded_map: dict[str, str], existing_domains: list[str
                 "seed_from_defaults: skipping invalid filesystem domain slug %r", slug
             )
             continue
-        seed = _SEED_DOMAIN_DATA.get(slug, {})
         domains[slug] = {
-            "display_name": seed.get("display_name", slug),
-            "description": seed.get("description", ""),
-            "color": seed.get("color", _DEFAULT_COLOR),
+            "display_name": slug,
+            "description": "",
+            "color": _DEFAULT_COLOR,
             "jira_labels": [],
-            "tags": seed.get("tags", []),
-            "keywords": seed.get("keywords", []),
-            "prompt_hint": seed.get("prompt_hint", ""),
+            "tags": [],
+            "keywords": [],
+            "prompt_hint": "",
         }
         logger.debug("seed_from_defaults: added filesystem-only domain %r", slug)
+
+    # Ensure a "general" domain always exists for cross-domain tasks
+    if "general" not in domains:
+        domains["general"] = {
+            "display_name": "General",
+            "description": "Cross-domain tasks",
+            "color": _DEFAULT_COLOR,
+            "jira_labels": [],
+            "tags": ["general"],
+            "keywords": [],
+            "prompt_hint": "tasks not belonging to a specific domain",
+        }
+        logger.debug("seed_from_defaults: added default 'general' domain")
 
     config = {"domains": domains}
 

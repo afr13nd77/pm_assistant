@@ -5,6 +5,24 @@
 
 ---
 
+## 01.10.2026
+
+### BL-236 — Убрать захардкоженные домены из кода (01.10.2026)
+- **shared**: удалён `_SEED_DOMAIN_DATA` из `domain_config.py` — OTA-специфичные домены убраны из публичного кода
+- **shared**: `seed_from_defaults()` упрощён — при первом запуске создаётся один домен `general` (display_name: "General", color: "#607D8B")
+- **shared**: домены из `hardcoded_map` и `existing_domains` создаются с bare slugs (без захардкоженных полей)
+- **корень**: добавлен `domain-seed.example.yaml` — пример формата конфигурации доменов
+- **тесты**: удалён `TestSeedWithFullData`, добавлены 3 новых теста, всего 83 passed
+
+### Прочее (01.10.2026)
+- **README.md**: полная англоязычная версия (primary), русская версия в readme_ru.md
+- **assets/**: hero image добавлен в репо
+- **.gitignore**: добавлены `BACKLOG.md`, `claude.md`, `context.md`, `claude-opus36.bat`, `docs_private/`
+- **.env.example**: нейтрализованы пути (`/path/to/your/...` вместо `C:/Users/...`)
+- **GitHub**: создан релиз v1.30.0, CI badge зелёный
+
+---
+
 ## 21.09.2026
 
 ### BL-152 — Рефакторинг vault_api.py — разбивка на роутеры (21.09.2026)

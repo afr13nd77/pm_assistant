@@ -1,0 +1,47 @@
+# Domain Configuration — Example
+# Copy this file to your Obsidian vault root as domain-config.yaml and customize.
+# Domains can also be managed via the Web UI (dashboard.html).
+
+domains:
+  engineering:
+    display_name: Engineering
+    description: Backend and frontend development tasks
+    color: "#2196F3"
+    jira_labels:
+      - engineering
+      - dev
+    tags:
+      - backend
+      - frontend
+      - api
+    keywords:
+      - refactoring
+      - deployment
+      - architecture
+    prompt_hint: software engineering, code, APIs, infrastructure
+
+  marketing:
+    display_name: Marketing
+    description: Marketing campaigns, analytics, and growth
+    color: "#FF9800"
+    jira_labels:
+      - marketing
+    tags:
+      - growth
+      - analytics
+      - campaigns
+    keywords:
+      - conversion
+      - funnel
+      - acquisition
+    prompt_hint: marketing, growth, analytics, user acquisition
+
+  general:
+    display_name: General
+    description: Cross-domain tasks
+    color: "#607D8B"
+    jira_labels: []
+    tags:
+      - general
+    keywords: []
+    prompt_hint: tasks not belonging to a specific domain
