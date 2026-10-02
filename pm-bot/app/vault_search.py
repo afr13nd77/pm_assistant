@@ -6,6 +6,7 @@ vault_search.py — полнотекстовый поисковый индекс
 """
 
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -107,6 +108,7 @@ def _extract_artifact_id(note: dict, filepath: Path) -> str:
     return ""
 
 
+# DEPRECATED (BL-237): замена — search_vault() / LanceDB hybrid search; оставлен как fallback
 class _SearchIndex:
     """In-memory full-text search index over vault entries."""
 
@@ -283,3 +285,68 @@ def _get_search_index() -> _SearchIndex:
     index = _build_search_index()
     _cache.set("search_index", index)
     return index
+
+
+# ---------------------------------------------------------------------------
+# BL-237: hybrid search (LanceDB) with fallback to legacy index
+# ---------------------------------------------------------------------------
+
+def _vector_store_enabled() -> bool:
+    return os.getenv("VECTOR_STORE_ENABLED", "0") == "1"
+
+
+def _legacy_search(query: str, limit: int, domain: str | None, artifact_type: str | None) -> list[dict]:
+    """Legacy O(N*M) search; filters by domain/type are applied post-query."""
+    results = _get_search_index().query(query, limit=limit if not (domain or artifact_type) else 1000)
+    if domain:
+        results = [r for r in results if r.get("domain") == domain]
+    if artifact_type:
+        results = [r for r in results if r.get("category") == artifact_type]
+    results = results[:limit]
+    for r in results:
+        r.setdefault("one_liner", "")
+        r.setdefault("snippet", "")
+        r.setdefault("semantic_score", None)
+    return results
+
+
+def _to_api_dict(r) -> dict:
+    """Map vector_store.SearchResult to the API format (backward compatible + new fields)."""
+    return {
+        "title": r.title,
+        "category": r.type,
+        "domain": r.domain,
+        "date": "",
+        "tags": [],
+        "score": r.score,
+        "path": r.source_path,
+        "url": _CATEGORY_URL.get(r.type, ""),
+        "artifact_id": r.id,
+        "one_liner": r.one_liner,
+        "snippet": r.snippet,
+        "semantic_score": r.semantic_score,
+    }
+
+
+def search_vault(
+    query: str,
+    limit: int = 20,
+    domain: str | None = None,
+    artifact_type: str | None = None,
+) -> list[dict]:
+    """Search the vault: hybrid LanceDB search if VECTOR_STORE_ENABLED=1, else legacy index."""
+    if not _vector_store_enabled():
+        logger.info("search_vault: VECTOR_STORE_ENABLED=0, legacy search q=%r", query)
+        return _legacy_search(query, limit, domain, artifact_type)
+
+    try:
+        from shared import embedding_client, vector_store
+
+        vector = embedding_client.embed(query).vector
+        found = vector_store.hybrid_search(query, vector, limit, domain, artifact_type)
+        results = [_to_api_dict(r) for r in found]
+        logger.info("search_vault: hybrid search returned %d results for q=%r", len(results), query)
+        return results
+    except Exception as exc:
+        logger.error("search_vault: hybrid search failed (%s), falling back to legacy index", exc)
+        return _legacy_search(query, limit, domain, artifact_type)

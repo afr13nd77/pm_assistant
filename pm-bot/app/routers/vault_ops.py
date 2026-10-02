@@ -37,7 +37,7 @@ from ..vault_scanner import (
     _is_service_file,
     _scan_domain_folders,
 )
-from ..vault_search import _get_search_index
+from ..vault_search import search_vault as _search_vault
 
 logger = logging.getLogger(__name__)
 
@@ -275,14 +275,15 @@ def vault_health():
 def search_vault(
     q: str = Query(..., min_length=2, max_length=200),
     limit: int = Query(default=20, ge=1, le=50),
+    domain: str | None = Query(default=None),
+    type: str | None = Query(default=None),
 ):
-    logger.info("GET /api/v1/search — q=%r, limit=%d", q, limit)
+    logger.info("GET /api/v1/search — q=%r, limit=%d, domain=%r, type=%r", q, limit, domain, type)
     try:
-        index = _get_search_index()
+        results = _search_vault(q, limit=limit, domain=domain, artifact_type=type)
     except Exception as exc:
-        logger.error("GET /api/v1/search — index build failed: %s", exc)
-        raise HTTPException(status_code=500, detail=f"Search index build failed: {exc}")
-    results = index.query(q, limit=limit)
+        logger.error("GET /api/v1/search — search failed: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Search failed: {exc}")
     logger.info("GET /api/v1/search — returning %d results for q=%r", len(results), q)
     return {
         "query": q,

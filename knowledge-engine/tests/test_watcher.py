@@ -336,3 +336,22 @@ class TestStartWatchDigest:
         # Should have only InboxHandler(1) + ClippingsHandler(1)
         schedule_calls = mock_observer.schedule.call_args_list
         assert len(schedule_calls) == 2
+
+    @patch.dict(os.environ, {"DIGEST_ENABLED": "0", "VECTOR_STORE_ENABLED": "1"})
+    @patch("app.watcher.PollingObserver")
+    def test_digest_handler_registered_by_vector_store_flag(self, mock_observer_cls, tmp_path):
+        _setup_vault(tmp_path)
+        (tmp_path / "wiki" / "domains" / "search" / "ideas").mkdir(parents=True)
+        (tmp_path / "raw" / "inbound" / "clippings").mkdir(parents=True)
+
+        mock_observer = MagicMock()
+        mock_observer_cls.return_value = mock_observer
+        mock_observer.start.side_effect = KeyboardInterrupt
+
+        from app.watcher import start_watch
+        try:
+            start_watch(str(tmp_path))
+        except KeyboardInterrupt:
+            pass
+
+        assert len(mock_observer.schedule.call_args_list) > 2

@@ -7,8 +7,10 @@ Assembles context for LLM prompts in three layers:
 
 Controlled by DIGEST_CONTEXT_SOURCE env:
   "wiki"     (default) — kill switch, returns empty context with fallback_used=True
-  "auto"     — llm_wiki/ with fallback to wiki/ when digest is missing
-  "llm_wiki" — llm_wiki/ only, no fallback
+  "lancedb"  — query LanceDB (shared.vector_store); also enabled by VECTOR_STORE_ENABLED=1
+               when DIGEST_CONTEXT_SOURCE is unset
+  "auto"     — DEPRECATED: llm_wiki/ with fallback to wiki/ when digest is missing
+  "llm_wiki" — DEPRECATED: llm_wiki/ only, no fallback
 """
 
 from __future__ import annotations
@@ -291,6 +293,177 @@ def _pluralize_type(artifact_type: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# LanceDB source
+# ---------------------------------------------------------------------------
+
+_SEARCH_LIMIT = 50
+_MAX_EXTENDED = 3
+
+
+def _resolve_context_source() -> str:
+    """Resolve source mode. VECTOR_STORE_ENABLED=1 enables lancedb only if
+    DIGEST_CONTEXT_SOURCE is not set explicitly (explicit 'wiki' stays a kill switch)."""
+    raw = os.getenv("DIGEST_CONTEXT_SOURCE")
+    if raw is None or not raw.strip():
+        if os.getenv("VECTOR_STORE_ENABLED", "").strip().lower() in {"1", "true", "yes"}:
+            return "lancedb"
+        return "wiki"
+    return raw.lower().strip()
+
+
+def _tok(row: dict, field_name: str, text: str) -> int:
+    """Pre-computed token count from LanceDB row; falls back to counting."""
+    try:
+        value = int(row.get(field_name) or 0)
+    except (TypeError, ValueError):
+        value = 0
+    return value if value > 0 else _count_tokens(text)
+
+
+def _assemble_from_lancedb(
+    query: str,
+    domain: str = "",
+    focus_artifacts: list | None = None,
+) -> AssembledContext:
+    """Waterfall assembly from LanceDB. Never raises: returns empty context on failure."""
+    try:
+        from shared import vector_store  # lazy
+    except Exception as exc:
+        logger.error(f"assemble_context[lancedb]: vector_store unavailable: {exc}")
+        return AssembledContext(fallback_used=True)
+
+    # Embedding (optional: on failure -> FTS-only)
+    query_vector = None
+    try:
+        from shared import embedding_client  # lazy
+
+        emb = embedding_client.embed(query)
+        query_vector = emb.vector if emb is not None else None
+        if query_vector is None:
+            logger.warning("assemble_context[lancedb]: embed returned None, FTS-only")
+    except Exception as exc:
+        logger.warning(f"assemble_context[lancedb]: embed failed, FTS-only: {exc}")
+        query_vector = None
+
+    try:
+        results = vector_store.hybrid_search(
+            query, query_vector, limit=_SEARCH_LIMIT, domain=domain or None
+        )
+    except Exception as exc:
+        logger.error(f"assemble_context[lancedb]: hybrid_search failed: {exc}")
+        return AssembledContext(fallback_used=True)
+
+    try:
+        # Tier 1: one-liners (pre-computed tokens come from rows, fetched lazily below)
+        one_liner_lines: list[str] = []
+        one_liner_tokens = 0
+        tier1_ids: list[str] = []
+        for r in results:
+            if not r.one_liner:
+                continue
+            line = f"- [{r.id}] {r.one_liner}\n"
+            line_tokens = _count_tokens(line)
+            if one_liner_tokens + line_tokens > ONE_LINER_BUDGET:
+                break
+            one_liner_lines.append(line)
+            one_liner_tokens += line_tokens
+            tier1_ids.append(r.id)
+
+        focus_ids = list(focus_artifacts) if focus_artifacts else []
+        core_candidates = focus_ids + [i for i in tier1_ids if i not in focus_ids]
+
+        # Tier 2: core digests
+        core_parts: list[str] = []
+        core_tokens = 0
+        sources_used: list[str] = []
+        rows: dict[str, dict] = {}
+        touched: list[str] = []
+        for aid in core_candidates:
+            try:
+                row = vector_store.get_by_id(aid)
+            except Exception as exc:
+                logger.warning(f"assemble_context[lancedb]: get_by_id failed {aid}: {exc}")
+                continue
+            if not row:
+                continue
+            rows[aid] = row
+            text = row.get("core_digest") or ""
+            if not text:
+                continue
+            block = f"### {aid}\n{text}\n\n"
+            block_tokens = _tok(row, "tokens_core", block)
+            if core_tokens + block_tokens > CORE_DIGEST_BUDGET:
+                break
+            core_parts.append(block)
+            core_tokens += block_tokens
+            sources_used.append(aid)
+            if row.get("source_path"):
+                touched.append(row["source_path"])
+
+        # Tier 3: extended digests (focus artifacts, else domain-matched top results)
+        if focus_ids:
+            ext_ids = focus_ids[:_MAX_EXTENDED]
+        else:
+            ext_ids = [
+                r.id for r in results
+                if domain and (r.domain or "").lower() == domain.lower()
+            ][:_MAX_EXTENDED]
+
+        extended_parts: list[str] = []
+        extended_tokens = 0
+        for aid in ext_ids:
+            row = rows.get(aid)
+            if row is None:
+                try:
+                    row = vector_store.get_by_id(aid)
+                except Exception as exc:
+                    logger.warning(f"assemble_context[lancedb]: get_by_id failed {aid}: {exc}")
+                    continue
+            if not row:
+                continue
+            text = row.get("extended_digest") or ""
+            if not text:
+                continue
+            block = f"### {aid}\n{text}\n\n"
+            block_tokens = _tok(row, "tokens_extended", block)
+            if extended_tokens + block_tokens > EXTENDED_DIGEST_BUDGET:
+                break
+            extended_parts.append(block)
+            extended_tokens += block_tokens
+            if aid not in sources_used:
+                sources_used.append(aid)
+            sp = row.get("source_path")
+            if sp and sp not in touched:
+                touched.append(sp)
+
+        # Decay touch (core + extended only)
+        for filepath in touched:
+            try:
+                from app import ke_client
+
+                ke_client.touch(filepath)
+            except Exception as exc:
+                logger.warning(f"assemble_context[lancedb]: touch failed for {filepath}: {exc}")
+
+        total = one_liner_tokens + core_tokens + extended_tokens
+        logger.info(
+            f"assemble_context[lancedb]: done, one_liners={len(one_liner_lines)}, "
+            f"core={len(core_parts)}, extended={len(extended_parts)}, total_tokens={total}"
+        )
+        return AssembledContext(
+            one_liners="".join(one_liner_lines),
+            core_digests="".join(core_parts),
+            extended_digests="".join(extended_parts),
+            total_tokens=total,
+            sources_used=sources_used,
+            fallback_used=False,
+        )
+    except Exception as exc:
+        logger.error(f"assemble_context[lancedb]: assembly failed: {exc}")
+        return AssembledContext(fallback_used=True)
+
+
+# ---------------------------------------------------------------------------
 # Main function
 # ---------------------------------------------------------------------------
 
@@ -317,7 +490,10 @@ def assemble_context(
     # -----------------------------------------------------------------------
     # Step 0: Kill switch
     # -----------------------------------------------------------------------
-    context_source = os.getenv("DIGEST_CONTEXT_SOURCE", "wiki").lower().strip()
+    context_source = _resolve_context_source()
+
+    if context_source == "lancedb":
+        return _assemble_from_lancedb(query, domain, focus_artifacts)
 
     if context_source == "wiki":
         logger.info("assemble_context: DIGEST_CONTEXT_SOURCE=wiki, returning empty (kill switch)")
@@ -538,6 +714,7 @@ def enrich_creative_recall(creative_results: list[dict]) -> list[dict]:
     logger.info(f"enrich_creative_recall: enriching {len(creative_results)} items")
 
     vault_path = os.getenv("VAULT_PATH", "/vault")
+    use_lancedb = _resolve_context_source() == "lancedb"
     enriched = []
 
     for item in creative_results:
@@ -556,7 +733,15 @@ def enrich_creative_recall(creative_results: list[dict]) -> list[dict]:
         digest_path = _digest_path_for_entry(vault_path, entry)
 
         one_liner = ""
-        if digest_path.exists():
+        if use_lancedb and artifact_id:
+            try:
+                from shared import vector_store  # lazy
+
+                row = vector_store.get_by_id(artifact_id)
+                one_liner = ((row or {}).get("one_liner") or "").strip()
+            except Exception as exc:
+                logger.warning(f"enrich_creative_recall: lancedb lookup failed for {artifact_id}: {exc}")
+        if not one_liner and digest_path.exists():
             try:
                 one_liner = _load_digest_section(digest_path, "## one_liner").strip()
                 if one_liner:

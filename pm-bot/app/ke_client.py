@@ -20,11 +20,14 @@ def _get_timeout(operation: str) -> int:
     return get_setting(f"timeouts.{operation}", get_setting("timeouts.default", 60))
 
 
-def _post(path: str, timeout: int, json: dict | None = None) -> dict:
+def _post(path: str, timeout: int, json: dict | None = None,
+          params: dict | None = None) -> dict:
     """POST request to KE API."""
     url = f"{KE_API_URL}{path}"
     logger.info("ke_client POST %s", url)
-    resp = requests.post(url, json=json or {}, timeout=timeout)
+    # params передаём только если заданы — не ломаем существующие вызовы
+    extra = {"params": params} if params else {}
+    resp = requests.post(url, json=json or {}, timeout=timeout, **extra)
     resp.raise_for_status()
     result = resp.json()
     logger.info("ke_client POST %s -> status=%s", url, result.get("status", "ok"))
@@ -421,3 +424,45 @@ def reset_prompt(name: str) -> dict:
     """Reset a KE prompt to default."""
     logger.info("reset_prompt: name=%s", name)
     return _post(f"/api/v1/prompts/{name}/reset", _get_timeout("default"))
+
+
+# ---------------------------------------------------------------------------
+# 36. POST /reindex — запуск переиндексации (BL-237)
+# ---------------------------------------------------------------------------
+
+def reindex_start(full: bool = True, missing: bool = False, notify: bool = False) -> dict:
+    """Start background reindex on Knowledge Engine."""
+    logger.info("reindex_start: full=%s, missing=%s, notify=%s", full, missing, notify)
+    return _post("/reindex", _get_timeout("reindex"),
+                 json={"full": full, "missing": missing, "notify": notify})
+
+
+# ---------------------------------------------------------------------------
+# 37. GET /reindex/status — статус переиндексации (BL-237)
+# ---------------------------------------------------------------------------
+
+def reindex_status() -> dict:
+    """Get reindex progress."""
+    logger.info("reindex_status")
+    return _get("/reindex/status", _get_timeout("reindex"))
+
+
+# ---------------------------------------------------------------------------
+# 38. POST /test-embedding — тест embedding провайдера (BL-237)
+# ---------------------------------------------------------------------------
+
+def test_embedding(text: str = "тест embedding") -> dict:
+    """Test embedding provider via KE API (KE принимает POST с text в query)."""
+    logger.info("test_embedding: text_len=%d", len(text))
+    return _post("/test-embedding", _get_timeout("default"),
+                 params={"text": text})
+
+
+# ---------------------------------------------------------------------------
+# 39. GET /vector/stats — статистика vector store (BL-237)
+# ---------------------------------------------------------------------------
+
+def vector_stats() -> dict:
+    """Get vector store statistics."""
+    logger.info("vector_stats")
+    return _get("/vector/stats", _get_timeout("default"))

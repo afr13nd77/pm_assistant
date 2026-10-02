@@ -481,6 +481,78 @@ class TestGenerateDigest:
         assert result["status"] == "ok"
 
 
+class TestGenerateDigestVectorStore:
+    def _make_source(self, tmp_path):
+        source_path = tmp_path / "wiki" / "domains" / "test" / "ideas" / "test-idea.md"
+        _create_md_file(
+            source_path,
+            {"title": "My Idea", "tier": "core", "status": "active", "tags": ["a", "b"], "relevance": 0.7},
+            body="Тестовая идея.",
+        )
+        return source_path
+
+    def _run(self, source_path, tmp_path, existing=None, emb=None, force=False):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock
+        vs = MagicMock()
+        vs.get_by_id.return_value = existing
+        ec = MagicMock()
+        ec.embed.return_value = emb
+        with patch.dict("os.environ", {"VECTOR_STORE_ENABLED": "1"}),              patch.dict("sys.modules", {}),              patch("shared.vector_store", vs, create=True),              patch("shared.embedding_client", ec, create=True),              patch("app.digest.generator.llm_call", return_value=_LLM_RESPONSE) as mock_llm,              patch("app.digest.generator.count_sections", return_value=_FAKE_COUNTS),              patch("app.digest.generator.validate", return_value=ValidationResult(valid=True)):
+            result = generate_digest(source_path, vault_path=str(tmp_path), force=force)
+        return result, vs, ec, mock_llm
+
+    def test_upsert_called_instead_of_file_write(self, tmp_path):
+        from types import SimpleNamespace
+        source_path = self._make_source(tmp_path)
+        emb = SimpleNamespace(vector=[0.1] * 768, model="m", provider="ollama", dim=768)
+        result, vs, ec, _ = self._run(source_path, tmp_path, emb=emb)
+
+        assert result["status"] == "ok"
+        vs.upsert.assert_called_once()
+        rec = vs.upsert.call_args[0][0]
+        assert rec["id"] == "layer1p-idea-test-idea"
+        assert rec["title"] == "My Idea"
+        assert rec["tier"] == "core"
+        assert rec["tags"] == ["a", "b"]
+        assert rec["relevance"] == 0.7
+        assert rec["vector"] == [0.1] * 768
+        assert rec["embedding_provider"] == "ollama"
+        assert rec["search_text"].startswith("My Idea ")
+        assert rec["domain"] == "test"
+        assert not (tmp_path / "llm_wiki").exists()
+
+    def test_null_vector_when_embedding_fails(self, tmp_path):
+        source_path = self._make_source(tmp_path)
+        result, vs, _, _ = self._run(source_path, tmp_path, emb=None)
+        rec = vs.upsert.call_args[0][0]
+        assert rec["vector"] is None
+        assert rec["embedding_model"] == ""
+
+    def test_created_preserved_from_existing(self, tmp_path):
+        source_path = self._make_source(tmp_path)
+        _, vs, _, _ = self._run(
+            source_path, tmp_path, existing={"created": "2026-01-01", "body_hash": "old"},
+        )
+        assert vs.upsert.call_args[0][0]["created"] == "2026-01-01"
+
+    def test_skip_on_matching_body_hash(self, tmp_path):
+        source_path = self._make_source(tmp_path)
+        body = fm_lib.load(str(source_path)).content
+        result, vs, _, mock_llm = self._run(
+            source_path, tmp_path, existing={"body_hash": _compute_body_hash(body)},
+        )
+        assert result["status"] == "skip"
+        assert not mock_llm.called
+        vs.upsert.assert_not_called()
+
+    def test_flag_off_writes_file(self, tmp_path):
+        source_path = self._make_source(tmp_path)
+        with patch.dict("os.environ", {"VECTOR_STORE_ENABLED": "0"}),              patch("app.digest.generator.llm_call", return_value=_LLM_RESPONSE),              patch("app.digest.generator.count_sections", return_value=_FAKE_COUNTS),              patch("app.digest.generator.validate", return_value=ValidationResult(valid=True)):
+            result = generate_digest(source_path, vault_path=str(tmp_path))
+        assert Path(result["digest_path"]).exists()
+
+
 class TestGenerateBulk:
     def test_generate_bulk_counts_total_and_generated(self, tmp_path):
         ideas_dir = tmp_path / "wiki" / "domains" / "test" / "ideas"

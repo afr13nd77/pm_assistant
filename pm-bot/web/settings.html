@@ -279,6 +279,29 @@
     .prompt-error { color: #f44336; font-size: 9px; margin-left: 8px; }
     .prompt-error-detail { color: #f44336; font-size: 9px; padding: 8px 12px; }
 
+    /* Vector Store / Embeddings (BL-237) */
+    .emb-stats-panel {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      font-size: 10px;
+      line-height: 1.7;
+      color: var(--text-muted);
+    }
+    .emb-stats-panel strong { color: var(--text-body); font-weight: 500; }
+    .emb-chain-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      cursor: grab;
+      transition: border-color 0.15s, background 0.15s;
+      user-select: none;
+    }
+    .emb-chain-item:hover { border-color: var(--border-hover); }
+    .emb-chain-item.drag-over-above { border-top: 2px solid var(--cyan); margin-top: -1px; }
+    .emb-chain-item.drag-over-below { border-bottom: 2px solid var(--cyan); margin-bottom: -1px; }
   </style>
 </head>
 <body>
@@ -522,6 +545,75 @@
                       @click="addToChain(group.key, p)">
                 + {{ providerDisplayName(p) }}
               </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Vector Store / Embeddings (BL-237) -->
+        <div class="settings-section">
+          <div class="settings-section-title">// VECTOR STORE / EMBEDDINGS</div>
+
+          <div class="provider-config-block">
+            <div class="provider-config-header">EMBEDDING FALLBACK</div>
+            <div v-for="(p, idx) in embeddingFallback" :key="p"
+                 class="emb-chain-item"
+                 draggable="true"
+                 @dragstart="embDragStart($event, idx)"
+                 @dragover.prevent
+                 @drop="embDrop($event)">
+              <span>{{ idx + 1 }}.</span>
+              <span>{{ p }}</span>
+              <span class="field-note">{{ idx === 0 ? 'primary' : 'fallback' }}</span>
+            </div>
+            <div class="field-note">Порядок определяет приоритет. Primary embedding провайдер используется первым, при ошибке — fallback.</div>
+          </div>
+
+          <div class="provider-config-block">
+            <div class="provider-config-header">МОДЕЛИ EMBEDDING</div>
+            <div class="field-group">
+              <div class="field-label">OLLAMA_EMBEDDING_MODEL</div>
+              <input class="field-input" v-model="embModelOllama" placeholder="nomic-embed-text" @change="trySaveUserPrefs()" style="width: 250px;">
+            </div>
+            <div class="field-group">
+              <div class="field-label">OPENAI_EMBEDDING_MODEL</div>
+              <input class="field-input" v-model="embModelOpenai" placeholder="text-embedding-3-small" @change="trySaveUserPrefs()" style="width: 250px;">
+            </div>
+            <div class="field-group">
+              <div class="field-label">VECTOR_DIMENSION</div>
+              <input class="field-input" type="number" v-model.number="embDim" @change="trySaveUserPrefs()" style="width: 120px;" min="1">
+              <div class="field-note" style="color: #ff9800;">⚠ Смена модели с другой размерностью требует полной переиндексации</div>
+            </div>
+          </div>
+
+          <div class="provider-config-block">
+            <div class="provider-config-header">УПРАВЛЕНИЕ ИНДЕКСОМ</div>
+
+            <div class="ollama-test-row" style="margin-bottom: 12px;">
+              <button class="cmd-btn cmd-btn-cyan" :disabled="embTesting" @click="testEmbedding()">
+                {{ embTesting ? '...' : 'TEST EMBEDDING' }}
+              </button>
+              <span v-if="embTestResult && embTestResult.status === 'ok'" class="ollama-status ok">
+                OK — dim={{ embTestResult.dim }}, {{ embTestResult.provider }}
+              </span>
+              <span v-if="embTestResult && embTestResult.status === 'error'" class="ollama-status err">
+                {{ embTestResult.detail || embTestResult.error }}
+              </span>
+            </div>
+
+            <div class="ollama-test-row" style="margin-bottom: 12px;">
+              <button class="cmd-btn cmd-btn-cyan" :disabled="reindexing" @click="startReindex()">
+                {{ reindexing ? 'REINDEXING...' : 'REINDEX' }}
+              </button>
+              <span v-if="reindexStatus" class="ollama-status" :class="reindexStatus.status === 'running' ? '' : (reindexStatus.status === 'done' ? 'ok' : 'err')">
+                {{ reindexStatusText }}
+              </span>
+            </div>
+
+            <div v-if="vectorStats" class="emb-stats-panel">
+              <div><strong>Records:</strong> {{ vectorStats.total || 0 }}</div>
+              <div><strong>With vectors:</strong> {{ vectorStats.with_vectors || 0 }} ({{ vectorStats.total ? Math.round(vectorStats.with_vectors / vectorStats.total * 100) : 0 }}%)</div>
+              <div><strong>Last update:</strong> {{ vectorStats.last_update || '—' }}</div>
+              <div><strong>Model:</strong> {{ vectorStats.model || '—' }}</div>
             </div>
           </div>
         </div>
@@ -1001,6 +1093,117 @@
       // saveProviderSettings, but also setRefreshMode/setTheme/setJiraSyncNotify/
       // setCaptureMode, which resend the whole payload including the fallback chains), so the
       // guard lives here rather than only inside saveProviderSettings to cover all of them.
+      // --- Vector Store / Embeddings (BL-237) ---
+      var embeddingFallback = ref(['ollama', 'openai']);
+      var embModelOllama = ref('nomic-embed-text');
+      var embModelOpenai = ref('text-embedding-3-small');
+      var embDim = ref(768);
+      var embTesting = ref(false);
+      var embTestResult = ref(null);
+      var reindexing = ref(false);
+      var reindexStatus = ref(null);
+      var vectorStats = ref(null);
+
+      var reindexStatusText = Vue.computed(function() {
+        if (!reindexStatus.value) return '';
+        var s = reindexStatus.value;
+        if (s.status === 'running') return 'Running: ' + (s.processed || 0) + '/' + (s.total || '?');
+        if (s.status === 'done') return 'Done: ' + (s.processed || 0) + ' records';
+        if (s.status === 'idle') return 'Idle';
+        return s.status;
+      });
+
+      function testEmbedding() {
+        console.log('[settings] testEmbedding');
+        embTesting.value = true;
+        embTestResult.value = null;
+        apiFetch('/providers/test-ollama-embedding', { method: 'POST' })
+          .then(function(data) {
+            embTestResult.value = data;
+            embTesting.value = false;
+            console.log('[settings] testEmbedding result:', data);
+          })
+          .catch(function(err) {
+            console.error('[settings] testEmbedding error:', err.message);
+            embTestResult.value = { status: 'error', detail: err.message };
+            embTesting.value = false;
+          });
+      }
+
+      function startReindex() {
+        console.log('[settings] startReindex');
+        reindexing.value = true;
+        reindexStatus.value = null;
+        apiFetch('/reindex', { method: 'POST' })
+          .then(function(data) {
+            reindexStatus.value = data;
+            if (data.status === 'started' || data.status === 'running' || data.status === 'already_running') {
+              pollReindexStatus();
+            } else {
+              reindexing.value = false;
+            }
+          })
+          .catch(function(err) {
+            console.error('[settings] startReindex error:', err.message);
+            reindexStatus.value = { status: 'error', detail: err.message };
+            reindexing.value = false;
+          });
+      }
+
+      function pollReindexStatus() {
+        console.log('[settings] pollReindexStatus');
+        var pollInterval = setInterval(function() {
+          apiFetch('/reindex/status')
+            .then(function(data) {
+              reindexStatus.value = data;
+              if (data.status !== 'running') {
+                clearInterval(pollInterval);
+                reindexing.value = false;
+                loadVectorStats();
+              }
+            })
+            .catch(function(err) {
+              console.error('[settings] pollReindexStatus error:', err.message);
+              clearInterval(pollInterval);
+              reindexing.value = false;
+            });
+        }, 3000);
+      }
+
+      function loadVectorStats() {
+        apiFetch('/vector/stats')
+          .then(function(data) {
+            vectorStats.value = data;
+            console.log('[settings] vector stats loaded:', data);
+          })
+          .catch(function(err) {
+            console.error('[settings] loadVectorStats error:', err.message);
+          });
+      }
+
+      function embDragStart(event, idx) {
+        console.log('[settings] embDragStart', idx);
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', String(idx));
+      }
+
+      // Всего 2 провайдера — drop = swap
+      function embDrop(event) {
+        event.preventDefault();
+        var fromIdx = parseInt(event.dataTransfer.getData('text/plain'), 10);
+        var chain = embeddingFallback.value.slice();
+        if (chain.length === 2 && !isNaN(fromIdx)) {
+          var temp = chain[0];
+          chain[0] = chain[1];
+          chain[1] = temp;
+          embeddingFallback.value = chain;
+          console.log('[settings] embDrop: new order', chain);
+          trySaveUserPrefs().catch(function(err) {
+            console.error('[settings] embDrop save error:', err.message);
+          });
+        }
+      }
+
       function trySaveUserPrefs() {
         var invalidGroups = findInvalidOpenRouterChainGroups();
         if (invalidGroups.length > 0) {
@@ -1046,7 +1249,11 @@
           caldav_url: caldavUrl.value,
           ai_agent_provider: aiAgentProvider.value,
           ai_agent_model: aiAgentModel.value,
-          business_context: businessContext.value
+          business_context: businessContext.value,
+          embedding_fallback: embeddingFallback.value,
+          embedding_model_ollama: embModelOllama.value,
+          embedding_model_openai: embModelOpenai.value,
+          embedding_dim: embDim.value
         };
       }
 
@@ -1520,6 +1727,17 @@
           if (prefs.signal_escalation_fallback && Array.isArray(prefs.signal_escalation_fallback)) {
             findGroup('signal_escalation').chain = prefs.signal_escalation_fallback.map(normalizeChainStep);
           }
+          // Embedding prefs (BL-237)
+          if (prefs.embedding_fallback && Array.isArray(prefs.embedding_fallback)) {
+            embeddingFallback.value = prefs.embedding_fallback;
+          }
+          embModelOllama.value = prefs.embedding_model_ollama || 'nomic-embed-text';
+          embModelOpenai.value = prefs.embedding_model_openai || 'text-embedding-3-small';
+          embDim.value = prefs.embedding_dim || 768;
+
+          // Load vector stats on page load
+          loadVectorStats();
+
           // Load relevance threshold (BL-203)
           if (prefs.moderator && prefs.moderator.relevance_threshold !== undefined) {
             relevanceThreshold.value = prefs.moderator.relevance_threshold;
@@ -1639,6 +1857,21 @@
         togglePromptGroup: togglePromptGroup,
         togglePromptItem: togglePromptItem,
         isPromptDirty: isPromptDirty,
+        embeddingFallback: embeddingFallback,
+        embModelOllama: embModelOllama,
+        embModelOpenai: embModelOpenai,
+        embDim: embDim,
+        embTesting: embTesting,
+        embTestResult: embTestResult,
+        reindexing: reindexing,
+        reindexStatus: reindexStatus,
+        reindexStatusText: reindexStatusText,
+        vectorStats: vectorStats,
+        testEmbedding: testEmbedding,
+        startReindex: startReindex,
+        loadVectorStats: loadVectorStats,
+        embDragStart: embDragStart,
+        embDrop: embDrop,
       };
     }
   });

@@ -170,3 +170,64 @@ async def test_caldav(body: TestCaldavRequest):
     )
     logger.info("POST /api/v1/test-caldav -- result status=%s", result.get("status"))
     return result
+
+
+# ---------------------------------------------------------------------------
+# Vector Store / Reindex (BL-237)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/api/v1/reindex")
+def proxy_reindex():
+    """Proxy: запуск переиндексации на KE."""
+    logger.info("POST /api/v1/reindex — start")
+    from .. import ke_client
+    try:
+        result = ke_client.reindex_start()
+    except Exception as exc:
+        logger.error("POST /api/v1/reindex — error: %s", exc)
+        raise
+    logger.info("POST /api/v1/reindex — result=%s", result.get("status"))
+    return result
+
+
+@router.get("/api/v1/reindex/status")
+def proxy_reindex_status():
+    """Proxy: прогресс переиндексации из KE."""
+    logger.info("GET /api/v1/reindex/status — start")
+    from .. import ke_client
+    try:
+        result = ke_client.reindex_status()
+    except Exception as exc:
+        logger.error("GET /api/v1/reindex/status — error: %s", exc)
+        raise
+    logger.info("GET /api/v1/reindex/status — result=%s", result.get("status"))
+    return result
+
+
+@router.post("/api/v1/providers/test-ollama-embedding")
+def proxy_test_embedding():
+    """Proxy: тест embedding провайдера через KE."""
+    logger.info("POST /api/v1/providers/test-ollama-embedding — start")
+    from .. import ke_client
+    try:
+        result = ke_client.test_embedding()
+    except Exception as exc:
+        logger.error("POST /api/v1/providers/test-ollama-embedding — error: %s", exc)
+        raise
+    logger.info("POST /api/v1/providers/test-ollama-embedding — result=%s", result.get("status"))
+    return result
+
+
+@router.get("/api/v1/vector/stats")
+def proxy_vector_stats():
+    """Proxy: статистика vector store из KE."""
+    logger.info("GET /api/v1/vector/stats — start")
+    from .. import ke_client
+    try:
+        result = ke_client.vector_stats()
+    except Exception as exc:
+        logger.error("GET /api/v1/vector/stats — error: %s", exc)
+        raise
+    logger.info("GET /api/v1/vector/stats — result=%s", result)
+    return result

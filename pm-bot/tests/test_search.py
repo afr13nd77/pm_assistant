@@ -3,7 +3,7 @@ _extract_search_keywords, _SearchIndex.query, and GET /api/v1/search endpoint.
 """
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -258,7 +258,7 @@ class TestSearchEndpoint:
             url="ideas.html",
         ))
 
-        with patch("app.routers.vault_ops._get_search_index", return_value=idx):
+        with patch("app.vault_search._get_search_index", return_value=idx):
             from fastapi.testclient import TestClient
             _cache.invalidate()
             yield TestClient(app)
@@ -273,6 +273,14 @@ class TestSearchEndpoint:
         assert "results" in data
         assert data["total"] >= 1
 
+    def test_response_fields(self, search_client):
+        """Each result has legacy fields (used by Web UI) and new BL-237 fields."""
+        data = search_client.get("/api/v1/search", params={"q": "test", "domain": "d1", "type": "idea"}).json()
+        required = {"title", "domain", "category", "score", "path", "tags", "date",
+                    "artifact_id", "url", "one_liner", "snippet", "semantic_score"}
+        assert data["total"] == 1
+        assert required <= set(data["results"][0])
+
     def test_short_query(self, search_client):
         """Query shorter than 2 chars should return 422 validation error."""
         resp = search_client.get("/api/v1/search", params={"q": "a"})
@@ -282,3 +290,68 @@ class TestSearchEndpoint:
         """Missing query parameter should return 422 validation error."""
         resp = search_client.get("/api/v1/search")
         assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# search_vault (BL-237)
+# ---------------------------------------------------------------------------
+
+class TestSearchVaultSwitch:
+    REQUIRED = {"title", "domain", "category", "score", "path", "tags", "date",
+                "artifact_id", "url", "one_liner", "snippet", "semantic_score"}
+
+    def test_enabled_calls_hybrid_search(self, monkeypatch):
+        from types import SimpleNamespace
+        from app import vault_search
+        from shared import embedding_client, vector_store
+
+        monkeypatch.setenv("VECTOR_STORE_ENABLED", "1")
+        monkeypatch.setattr(embedding_client, "embed", lambda t: SimpleNamespace(vector=[0.1, 0.2]))
+        sr = vector_store.SearchResult(
+            id="IDEA-1", title="T", domain="d1", type="idea", score=0.9,
+            one_liner="ol", snippet="sn", semantic_score=0.8, source_path="a/b.md",
+        )
+        mock_hs = MagicMock(return_value=[sr])
+        monkeypatch.setattr(vector_store, "hybrid_search", mock_hs)
+
+        res = vault_search.search_vault("query", limit=5, domain="d1", artifact_type="idea")
+        mock_hs.assert_called_once_with("query", [0.1, 0.2], 5, "d1", "idea")
+        assert self.REQUIRED <= set(res[0])
+        assert res[0]["path"] == "a/b.md" and res[0]["semantic_score"] == 0.8
+
+    def test_disabled_uses_legacy_index(self, monkeypatch):
+        from app import vault_search
+        from shared import vector_store
+
+        monkeypatch.setenv("VECTOR_STORE_ENABLED", "0")
+        mock_hs = MagicMock()
+        monkeypatch.setattr(vector_store, "hybrid_search", mock_hs)
+        idx = _make_index([dict(path="x.md", title="Alpha doc", category="idea", domain="d1")])
+        monkeypatch.setattr(vault_search, "_get_search_index", lambda: idx)
+
+        res = vault_search.search_vault("alpha")
+        mock_hs.assert_not_called()
+        assert len(res) == 1
+        assert self.REQUIRED <= set(res[0])
+
+    def test_enabled_error_falls_back(self, monkeypatch):
+        from app import vault_search
+        from shared import embedding_client
+
+        monkeypatch.setenv("VECTOR_STORE_ENABLED", "1")
+        monkeypatch.setattr(embedding_client, "embed", MagicMock(side_effect=RuntimeError("down")))
+        idx = _make_index([dict(path="x.md", title="Alpha doc", category="idea", domain="d1")])
+        monkeypatch.setattr(vault_search, "_get_search_index", lambda: idx)
+        assert len(vault_search.search_vault("alpha")) == 1
+
+    def test_legacy_domain_filter(self, monkeypatch):
+        from app import vault_search
+
+        monkeypatch.delenv("VECTOR_STORE_ENABLED", raising=False)
+        idx = _make_index([
+            dict(path="a.md", title="Alpha", category="idea", domain="d1"),
+            dict(path="b.md", title="Alpha", category="task", domain="d2"),
+        ])
+        monkeypatch.setattr(vault_search, "_get_search_index", lambda: idx)
+        assert [r["path"] for r in vault_search.search_vault("alpha", domain="d2")] == ["b.md"]
+        assert [r["path"] for r in vault_search.search_vault("alpha", artifact_type="idea")] == ["a.md"]

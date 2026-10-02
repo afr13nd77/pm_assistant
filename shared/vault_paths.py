@@ -108,10 +108,12 @@ def wiki_todos() -> Path:
     return VAULT_PATH / "wiki" / "domains" / "general" / "tasks" / "todo.md"
 
 
+# DEPRECATED (BL-237): migrated to LanceDB vector store
 def llm_wiki_root() -> Path:
     return _ensure_dir(VAULT_PATH / "llm_wiki")
 
 
+# DEPRECATED (BL-237): migrated to LanceDB vector store
 def llm_wiki_domain_dir(domain: str, artifact_type: str) -> Path:
     if artifact_type not in _VALID_ARTIFACT_TYPES:
         raise ValueError(
@@ -121,18 +123,22 @@ def llm_wiki_domain_dir(domain: str, artifact_type: str) -> Path:
     return _ensure_dir(VAULT_PATH / "llm_wiki" / "domains" / domain / artifact_type)
 
 
+# DEPRECATED (BL-237): migrated to LanceDB vector store
 def llm_wiki_meetings() -> Path:
     return _ensure_dir(VAULT_PATH / "llm_wiki" / "meetings")
 
 
+# DEPRECATED (BL-237): migrated to LanceDB vector store
 def llm_wiki_daily_logs() -> Path:
     return _ensure_dir(VAULT_PATH / "llm_wiki" / "daily-logs")
 
 
+# DEPRECATED (BL-237): migrated to LanceDB vector store
 def llm_wiki_reports() -> Path:
     return _ensure_dir(VAULT_PATH / "llm_wiki" / "reports")
 
 
+# DEPRECATED (BL-237): migrated to LanceDB vector store
 def llm_wiki_index_file() -> Path:
     return VAULT_PATH / "llm_wiki" / "_index.md"
 
@@ -140,6 +146,11 @@ def llm_wiki_index_file() -> Path:
 def llm_wiki_cowork_session() -> Path:
     """Return path to llm_wiki/_cowork-session.md."""
     return VAULT_PATH / "llm_wiki" / "_cowork-session.md"
+
+
+def vector_store_dir() -> str:
+    """Path to LanceDB vector store directory (BL-237)."""
+    return os.environ.get("VECTOR_STORE_PATH", "/vector-store")
 
 
 def wiki_concepts() -> Path:

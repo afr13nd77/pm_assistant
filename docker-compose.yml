@@ -23,6 +23,8 @@ services:
       - ./settings.yaml:/app/settings.yaml:ro
       - pm-bot-data:/data
       - platform-data:/platform-data
+      # Векторное хранилище — только чтение
+      - vector-store:/vector-store:ro
     command: >
       sh -c "python -m http.server 8080 --directory /web &
              python -m app.main"
@@ -40,7 +42,9 @@ services:
       - KE_API_URL=http://knowledge-engine:8001
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - DIGEST_ENABLED=1
-      - DIGEST_CONTEXT_SOURCE=auto
+      - DIGEST_CONTEXT_SOURCE=lancedb
+      - VECTOR_STORE_ENABLED=1
+      - VECTOR_STORE_PATH=/vector-store
       - YANDEX_CALENDAR_USERNAME=${YANDEX_CALENDAR_USERNAME:-}
       - YANDEX_CALENDAR_APP_PASSWORD=${YANDEX_CALENDAR_APP_PASSWORD:-}
       - YANDEX_CALENDAR_TIMEZONE=${YANDEX_CALENDAR_TIMEZONE:-Europe/Moscow}
@@ -64,6 +68,8 @@ services:
       - ./decay.yaml:/app/decay.yaml:ro
       - ke-data:/data
       - platform-data:/platform-data
+      # Векторное хранилище — чтение/запись (KE — единственный писатель)
+      - vector-store:/vector-store
     environment:
       - TZ=Europe/Moscow
       - PYTHONUNBUFFERED=1
@@ -75,6 +81,8 @@ services:
       - JIRA_TOKEN=${JIRA_TOKEN}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - DIGEST_ENABLED=1
+      - VECTOR_STORE_ENABLED=1
+      - VECTOR_STORE_PATH=/vector-store
     command: >
       sh -c "python -m knowledge_engine serve &
              python -m knowledge_engine watch &
@@ -96,6 +104,8 @@ services:
       - ./decay.yaml:/app/decay.yaml:ro
       - ke-data:/data
       - platform-data:/platform-data
+      # Векторное хранилище — чтение/запись (reindex cron)
+      - vector-store:/vector-store
     environment:
       - TZ=Europe/Moscow
       - PYTHONUNBUFFERED=1
@@ -106,9 +116,11 @@ services:
       - JIRA_URL=${JIRA_URL}
       - JIRA_TOKEN=${JIRA_TOKEN}
       - JIRA_SYNC_CRON=${JIRA_SYNC_CRON:-0 */3 * * *}
+      - VECTOR_STORE_ENABLED=1
+      - VECTOR_STORE_PATH=/vector-store
     entrypoint: >
       sh -c "
-        env | grep -E '^(TZ|YANDEX_|CLAUDE_|BOT_|ALLOWED_|VAULT_|JIRA_|OPENROUTER_|PYTHONUNBUFFERED|PLATFORM_DATA_PATH|PM_BOT_DATA_PATH|PM_BOT_API_URL|KE_DATA_PATH)' >> /etc/environment &&
+        env | grep -E '^(TZ|YANDEX_|CLAUDE_|BOT_|ALLOWED_|VAULT_|JIRA_|OPENROUTER_|PYTHONUNBUFFERED|PLATFORM_DATA_PATH|PM_BOT_DATA_PATH|PM_BOT_API_URL|KE_DATA_PATH|VECTOR_)' >> /etc/environment &&
         echo '0 9 * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine synthesize --notify >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-synth &&
         echo '15 * * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine fetch-meetings --notify >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-fetch &&
         echo '*/10 * * * * root set -a; . /etc/environment; set +a; cd /app && /usr/local/bin/python -m knowledge_engine process-queue >> /var/log/ke-cron.log 2>&1' > /etc/cron.d/ke-process-queue &&
@@ -150,6 +162,28 @@ services:
       - PIPELINE_HOST=0.0.0.0
       - PIPELINE_PORT=8100
 
+  mcp-server:
+    build:
+      context: .
+      dockerfile: mcp-server/Dockerfile
+      pull: false
+    pull_policy: if_not_present
+    container_name: mcp-server
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8200:8200"
+    volumes:
+      # Векторное хранилище — только чтение (пишет только knowledge-engine)
+      - vector-store:/vector-store:ro
+    environment:
+      - TZ=Europe/Moscow
+      - PYTHONUNBUFFERED=1
+      - VECTOR_STORE_PATH=/vector-store
+    depends_on:
+      - knowledge-engine
+
   langfuse-db:
     image: postgres:15
     container_name: langfuse-db
@@ -188,3 +222,4 @@ volumes:
   ke-data:
   platform-data:
   langfuse-db-data:
+  vector-store:

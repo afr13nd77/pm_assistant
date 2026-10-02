@@ -17,3 +17,4 @@ mdit-py-plugins>=0.4.0
 caldav>=3.2.1
 icalendar>=6.0.0
 recurring-ical-events>=3.8.0
+lancedb>=0.6.0

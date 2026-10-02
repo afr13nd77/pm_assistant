@@ -217,6 +217,22 @@ def main():
     digest_status_parser = subparsers.add_parser("digest-status", help="Show digest coverage statistics")
     digest_status_parser.add_argument("--vault", default=None, help="Vault root path")
 
+    reindex_parser = subparsers.add_parser("reindex", help="Reindex wiki/ artifacts into LanceDB vector store")
+    reindex_parser.add_argument("--full", action="store_true", default=True, help="Drop and rebuild all (default)")
+    reindex_parser.add_argument("--missing", action="store_true", help="Only fill records with null vectors")
+    reindex_parser.add_argument("--notify", action="store_true", help="Send Telegram notification on completion")
+    reindex_parser.add_argument("--vault", default=None, help="Vault root path")
+
+    migrate_lancedb_parser = subparsers.add_parser(
+        "migrate-to-lancedb",
+        help="Migrate existing llm_wiki/ digests into LanceDB (one-time, no LLM)"
+    )
+    migrate_lancedb_parser.add_argument("--vault", default=None, help="Vault root path")
+    migrate_lancedb_parser.add_argument("--dry-run", action="store_true",
+                                        help="Show what would be migrated without writing")
+    migrate_lancedb_parser.add_argument("--notify", action="store_true",
+                                        help="Send Telegram notification on completion")
+
     cowork_parser = subparsers.add_parser(
         "cowork-context",
         help="Generate _cowork-session.md for Claude Cowork (BL-151)"
@@ -1007,6 +1023,18 @@ def _dispatch(args, vault_path: str):
         logger.info("digest-audit: completed, orphans=%d, broken=%d", len(orphans), len(broken))
         _output_json(result)
 
+    elif args.command == "reindex":
+        from .reindexer import reindex_vault
+        logger.info("reindex: starting (missing=%s, notify=%s)", args.missing, args.notify)
+        result = reindex_vault(
+            vault_path=vault_path,
+            full=args.full and not args.missing,
+            missing=args.missing,
+            notify=args.notify,
+        )
+        logger.info("reindex: completed, status=%s", result.get("status"))
+        _output_json(result)
+
     elif args.command == "digest-status":
         from shared.frontmatter_utils import read_frontmatter as _read_fm
         logger.info("digest-status: collecting statistics, vault=%s", vault_path)
@@ -1046,6 +1074,13 @@ def _dispatch(args, vault_path: str):
         }
         logger.info("digest-status: wiki=%d, digests=%d, coverage=%s", total_wiki, total_digests, coverage)
         _output_json(result)
+
+    elif args.command == "migrate-to-lancedb":
+        from .migrator import migrate_llm_wiki_to_lancedb
+        logger.info("migrate-to-lancedb: starting, vault=%s, dry_run=%s", vault_path, args.dry_run)
+        result = migrate_llm_wiki_to_lancedb(vault_path, dry_run=args.dry_run, notify=args.notify)
+        _output_json(result)
+        sys.exit(0 if result["status"] == "ok" else 1)
 
     elif args.command == "cowork-context":
         from shared import vault_paths as _vp

@@ -639,3 +639,185 @@ class TestEnrichCreativeRecall:
             result = enrich_creative_recall(items)
 
         assert result[0]["one_liner"] == "Orphan Idea"
+
+
+# ---------------------------------------------------------------------------
+# LanceDB source (DIGEST_CONTEXT_SOURCE=lancedb)
+# ---------------------------------------------------------------------------
+
+import contextlib
+import sys
+import types
+from dataclasses import dataclass
+
+
+@dataclass
+class _FakeResult:
+    id: str
+    one_liner: str = ""
+    domain: str = "travel"
+    title: str = ""
+    type: str = "idea"
+    score: float = 1.0
+    snippet: str = ""
+    semantic_score: float | None = None
+    source_path: str = ""
+
+
+@pytest.fixture
+def fake_shared():
+    """Inject fake shared.vector_store / shared.embedding_client (no real calls)."""
+    try:
+        import shared
+    except ImportError:
+        shared = types.ModuleType("shared")
+        shared.__path__ = []
+        sys.modules["shared"] = shared
+
+    vs = types.ModuleType("shared.vector_store")
+    vs.hybrid_search = MagicMock(return_value=[])
+    vs.get_by_id = MagicMock(return_value=None)
+    ec = types.ModuleType("shared.embedding_client")
+    ec.embed = MagicMock(return_value=types.SimpleNamespace(vector=[0.1, 0.2]))
+    with patch.dict(sys.modules, {"shared.vector_store": vs, "shared.embedding_client": ec}), \
+         patch.object(shared, "vector_store", vs, create=True), \
+         patch.object(shared, "embedding_client", ec, create=True):
+        yield vs, ec
+
+
+@contextlib.contextmanager
+def _patch_touch():
+    """Fake app.ke_client so that no HTTP call to knowledge-engine is made."""
+    import app
+
+    ke = types.ModuleType("app.ke_client")
+    ke.touch = MagicMock()
+    with patch.dict(sys.modules, {"app.ke_client": ke}),          patch.object(app, "ke_client", ke, create=True):
+        yield ke.touch
+
+
+def _row(aid: str, core: str = "core text", ext: str = "ext text", tc: int = 10, te: int = 10):
+    return {
+        "id": aid, "core_digest": core, "extended_digest": ext,
+        "tokens_core": tc, "tokens_extended": te, "source_path": f"wiki/{aid}.md",
+    }
+
+
+class TestAssembleContextLanceDB:
+    def test_lancedb_assembles_context(self, fake_shared):
+        vs, ec = fake_shared
+        vs.hybrid_search.return_value = [
+            _FakeResult("a1", "First one-liner"), _FakeResult("a2", "Second one-liner"),
+        ]
+        vs.get_by_id.side_effect = lambda i: _row(i)
+        with patch.dict(os.environ, {"DIGEST_CONTEXT_SOURCE": "lancedb"}), \
+             _patch_touch() as touch:
+            result = assemble_context("travel", domain="travel")
+
+        assert "- [a1] First one-liner" in result.one_liners
+        assert "### a1\ncore text" in result.core_digests
+        assert "### a2" in result.extended_digests
+        assert result.sources_used == ["a1", "a2"]
+        assert result.fallback_used is False
+        vs.hybrid_search.assert_called_once()
+        assert vs.hybrid_search.call_args.args[1] == [0.1, 0.2]
+        assert vs.hybrid_search.call_args.kwargs["domain"] == "travel"
+        assert touch.call_count == 2
+
+    def test_wiki_kill_switch_does_not_touch_lancedb(self, fake_shared):
+        vs, _ = fake_shared
+        with patch.dict(os.environ, {"DIGEST_CONTEXT_SOURCE": "wiki", "VECTOR_STORE_ENABLED": "1"}):
+            result = assemble_context("q")
+        assert result.fallback_used is True
+        assert result.one_liners == ""
+        vs.hybrid_search.assert_not_called()
+
+    def test_vector_store_enabled_triggers_lancedb_when_source_unset(self, fake_shared):
+        vs, _ = fake_shared
+        env = {k: v for k, v in os.environ.items() if k != "DIGEST_CONTEXT_SOURCE"}
+        env["VECTOR_STORE_ENABLED"] = "1"
+        with patch.dict(os.environ, env, clear=True):
+            assemble_context("q")
+        vs.hybrid_search.assert_called_once()
+
+    def test_lancedb_unavailable_returns_empty(self, fake_shared):
+        vs, _ = fake_shared
+        vs.hybrid_search.side_effect = RuntimeError("db down")
+        with patch.dict(os.environ, {"DIGEST_CONTEXT_SOURCE": "lancedb"}):
+            result = assemble_context("q")
+        assert result.one_liners == "" and result.core_digests == ""
+        assert result.total_tokens == 0
+        assert result.fallback_used is True
+
+    def test_import_error_returns_empty(self):
+        shared = sys.modules.get("shared")
+        saved = shared.__dict__.pop("vector_store", None) if shared else None
+        try:
+            with patch.dict(sys.modules, {"shared.vector_store": None}),                  patch.dict(os.environ, {"DIGEST_CONTEXT_SOURCE": "lancedb"}):
+                result = assemble_context("q")
+        finally:
+            if saved is not None:
+                shared.vector_store = saved
+        assert result.fallback_used is True
+        assert result.one_liners == ""
+
+    def test_embed_failure_uses_fts_only(self, fake_shared):
+        vs, ec = fake_shared
+        ec.embed.side_effect = RuntimeError("ollama down")
+        vs.hybrid_search.return_value = [_FakeResult("a1", "One")]
+        vs.get_by_id.side_effect = lambda i: _row(i)
+        with patch.dict(os.environ, {"DIGEST_CONTEXT_SOURCE": "lancedb"}), \
+             _patch_touch():
+            result = assemble_context("q")
+        assert vs.hybrid_search.call_args.args[1] is None
+        assert "[a1]" in result.one_liners
+        assert "### a1" in result.core_digests
+
+    def test_embed_returns_none_uses_fts_only(self, fake_shared):
+        vs, ec = fake_shared
+        ec.embed.return_value = None
+        with patch.dict(os.environ, {"DIGEST_CONTEXT_SOURCE": "lancedb"}):
+            assemble_context("q")
+        assert vs.hybrid_search.call_args.args[1] is None
+
+    def test_token_budgets_respected(self, fake_shared):
+        vs, _ = fake_shared
+        n = 100
+        vs.hybrid_search.return_value = [_FakeResult(f"a{i}", "word " * 50) for i in range(n)]
+        # core: 4000 tokens each -> 2 fit in 10000; extended: 2500 each -> 2 fit in 6000
+        vs.get_by_id.side_effect = lambda i: _row(i, tc=4000, te=2500)
+        with patch.dict(os.environ, {"DIGEST_CONTEXT_SOURCE": "lancedb"}), \
+             _patch_touch():
+            result = assemble_context("q", domain="travel")
+
+        assert _count_tokens(result.one_liners) <= 3000
+        assert 0 < result.one_liners.count("\n") < n
+        assert result.core_digests.count("### ") == 2
+        assert result.extended_digests.count("### ") == 2
+        assert result.total_tokens <= 3000 + 10000 + 6000
+
+    def test_focus_artifacts_extended(self, fake_shared):
+        vs, _ = fake_shared
+        vs.hybrid_search.return_value = [_FakeResult("a1", "One")]
+        vs.get_by_id.side_effect = lambda i: _row(i, ext=f"extended of {i}")
+        with patch.dict(os.environ, {"DIGEST_CONTEXT_SOURCE": "lancedb"}), \
+             _patch_touch():
+            result = assemble_context("q", focus_artifacts=["f1"])
+        assert "extended of f1" in result.extended_digests
+        assert "f1" in result.sources_used
+
+
+class TestEnrichCreativeRecallLanceDB:
+    def test_one_liner_from_lancedb(self, fake_shared, tmp_path: Path):
+        vs, _ = fake_shared
+        vs.get_by_id.return_value = {"id": "idea-1", "one_liner": "From LanceDB"}
+        with patch.dict(os.environ, {"DIGEST_CONTEXT_SOURCE": "lancedb", "VAULT_PATH": str(tmp_path)}):
+            result = enrich_creative_recall([{"id": "idea-1", "title": "T", "domain": "travel"}])
+        assert result[0]["one_liner"] == "From LanceDB"
+
+    def test_lancedb_error_falls_back_to_title(self, fake_shared, tmp_path: Path):
+        vs, _ = fake_shared
+        vs.get_by_id.side_effect = RuntimeError("boom")
+        with patch.dict(os.environ, {"DIGEST_CONTEXT_SOURCE": "lancedb", "VAULT_PATH": str(tmp_path)}):
+            result = enrich_creative_recall([{"id": "idea-1", "title": "T", "domain": "travel"}])
+        assert result[0]["one_liner"] == "T"

@@ -12,7 +12,7 @@ pm_assistant/
 ├── pyproject.toml                  # ruff + mypy конфигурация
 ├── requirements-dev.txt            # dev-зависимости (pytest, ruff, mypy)
 ├── .github/workflows/ci.yml       # GitHub Actions CI (lint + typecheck + test)
-├── docker-compose.yml              # оркестрация: pm-bot + knowledge-engine (:8001 API) + ke-cron + idea-pipeline
+├── docker-compose.yml              # оркестрация: pm-bot + knowledge-engine (:8001 API) + ke-cron + idea-pipeline + mcp-server (:8200)
 ├── settings.yaml                   # централизованная runtime-конфигурация (timeouts, cooldowns, rate_limits)
 ├── CHANGELOG.md                    # журнал изменений по всем компонентам (от новых к старым)
 ├── BACKLOG.md                      # бэклог: реализованные фичи (115), баги (36), идеи (69), итого (219)
@@ -29,12 +29,16 @@ pm_assistant/
 │   ├── settings.py                 # загрузка settings.yaml, dot-notation доступ, singleton
 │   ├── system_log.py               # Централизованный журнал системных операций (SQLite, 14 process types вкл. cowork-context)
 │   ├── langfuse_client.py          # Singleton Langfuse client с graceful degradation (BL-166)
+│   ├── vector_store.py             # LanceDB embedded wrapper: CRUD, hybrid search (RRF), FTS index, 23-field schema (BL-237)
+│   ├── embedding_client.py         # Embedding fallback chain: Ollama → OpenAI, batch embed, graceful degradation (BL-237)
 │   └── tests/                      # unit-тесты для shared/
 │       ├── test_settings.py        # 14 тестов
 │       ├── test_openrouter.py      # 9 тестов (call, test_connection, models)
 │       ├── test_llm_client.py     # 21 тестов (call, fallback chains, migration, resolve)
 │       ├── test_llm_transcription.py  # 5 тестов (call_transcription fallback chain)
-│       └── test_system_log.py      # unit-тесты для system_log.py
+│       ├── test_system_log.py      # unit-тесты для system_log.py
+│       ├── test_vector_store.py    # 22 тестов (CRUD, hybrid search, RRF, FTS, stats)
+│       └── test_embedding_client.py # 17 тестов (embed, fallback, batch, graceful degradation)
 │
 ├── docs/                           # спеки и дизайн-документы (корень монорепо)
 │   ├── jira-polling/               # requirements.md, design.md, tasks.md
@@ -66,6 +70,7 @@ pm_assistant/
 │   ├── BL-195_research-queue-ui/   # BL-195: Research Queue UI — визуализация pipeline, drawer, retry/run (requirements, design, tasks)
 │   ├── BL-203_signal-first-pipeline/  # BL-203: Signal-First Pipeline — HITL Triage (requirements, design, tasks)
 │   ├── BL-197_prompt-management-ui/ # BL-197: Управление промптами через Settings UI (requirements, design, tasks)
+│   ├── BL-237_vector-store-mcp/    # BL-237: Vector Store (LanceDB) + MCP Server — миграция llm_wiki/ в vector DB, семантический поиск, MCP для Claude Desktop (requirements)
 │   └── architecture/adr/           # 5 ADR (решения по архитектуре)
 │
 ├── pm-bot/                         # Telegram-бот (capture)
@@ -226,30 +231,39 @@ pm_assistant/
 │       ├── test_research_runner.py       # тесты research_runner (59 тестов, BL-194)
 │       └── ...                     # + 37 существующих тестов (enricher, synthesizer, vault_index, jira, digest, health, decay, meeting_fetcher/ и др.)
 │
-└── idea-pipeline/                  # сервис проработки идей (orchestrator)
-    ├── Dockerfile                  # образ Python 3.12-slim + knowledge-engine
-    ├── requirements.txt            # 7 зависимостей
-    ├── pipeline.yaml               # конфигурация агентов (модели, таймауты)
-    └── app/                        # исходный код (12 файлов)
+├── idea-pipeline/                  # сервис проработки идей (orchestrator)
+│   ├── Dockerfile                  # образ Python 3.12-slim + knowledge-engine
+│   ├── requirements.txt            # 7 зависимостей
+│   ├── pipeline.yaml               # конфигурация агентов (модели, таймауты)
+│   └── app/                        # исходный код (12 файлов)
+│       ├── __init__.py
+│       ├── __main__.py             # точка входа: serve, run, status
+│       ├── api.py                  # FastAPI endpoints (9 endpoints, +prompts, prompts/{name}, prompts/{name}/reset, reload-agents — BL-197)
+│       ├── orchestrator.py         # pipeline orchestration: Analyst → PM → Decomposer
+│       ├── config.py               # загрузка pipeline.yaml + env overrides
+│       ├── state.py                # PipelineRun, PipelineStore (in-memory + _state.json)
+│       ├── vault_writer.py         # запись артефактов в vault с frontmatter
+│       ├── models.py               # Pydantic models для API
+│       ├── auth.py                 # API key middleware
+│       ├── prompt_registry.py     # реестр промптов pipeline (3 записи: analyst, pm, decomposer)
+│       ├── agents/
+│       │   ├── base.py             # BaseAgent
+│       │   ├── analyst.py          # AnalystAgent (идея + vault context → analysis)
+│       │   ├── pm_agent.py         # PMAgent (analysis → PRD)
+│       │   └── decomposer.py       # DecomposerAgent (PRD → Epic + Tasks JSON)
+│       └── prompts/
+│           ├── analyst.txt
+│           ├── pm.txt
+│           └── decomposer.txt
+│
+└── mcp-server/                     # MCP server для Claude Desktop (BL-237)
+    ├── Dockerfile                  # образ Python 3.12-slim + shared/
+    ├── requirements.txt            # mcp>=1.0.0, lancedb>=0.6.0, uvicorn>=0.32.0
+    └── mcp_server/                 # исходный код
         ├── __init__.py
-        ├── __main__.py             # точка входа: serve, run, status
-        ├── api.py                  # FastAPI endpoints (9 endpoints, +prompts, prompts/{name}, prompts/{name}/reset, reload-agents — BL-197)
-        ├── orchestrator.py         # pipeline orchestration: Analyst → PM → Decomposer
-        ├── config.py               # загрузка pipeline.yaml + env overrides
-        ├── state.py                # PipelineRun, PipelineStore (in-memory + _state.json)
-        ├── vault_writer.py         # запись артефактов в vault с frontmatter
-        ├── models.py               # Pydantic models для API
-        ├── auth.py                 # API key middleware
-        ├── prompt_registry.py     # реестр промптов pipeline (3 записи: analyst, pm, decomposer)
-        ├── agents/
-        │   ├── base.py             # BaseAgent
-        │   ├── analyst.py          # AnalystAgent (идея + vault context → analysis)
-        │   ├── pm_agent.py         # PMAgent (analysis → PRD)
-        │   └── decomposer.py       # DecomposerAgent (PRD → Epic + Tasks JSON)
-        └── prompts/
-            ├── analyst.txt
-            ├── pm.txt
-            └── decomposer.txt
+        ├── __main__.py             # точка входа: SSE (порт 8200) или stdio
+        ├── server.py               # FastMCP server setup
+        └── tools.py                # 4 MCP tools: search, get_context, list_artifacts, get_artifact (read-only)
 ```
 
 ## Версии компонентов
@@ -308,6 +322,7 @@ pm_assistant/
 | knowledge-engine | HTTP API (:8001) + Watchdog на Inbox/ | sh -c "python -m knowledge_engine serve & python -m knowledge_engine watch" |
 | idea-pipeline | Orchestrator: Analyst → PM → Decomposer | python -m idea_pipeline serve |
 | ke-cron | Синтез (09:00) + Cowork-context (01:00) + Jira sync (каждые 3ч) + ke-moderate (08:00 Пн-Пт) + ke-trends (06:00 Пн) | crond |
+| mcp-server | MCP server для Claude Desktop — SSE (:8200), 4 read-only tools (BL-237) | python -m mcp_server |
 | langfuse-db | PostgreSQL 15, хранилище Langfuse | — |
 | langfuse | Langfuse v2 (LLM observability UI), порт 3100 | — |
 
@@ -315,6 +330,7 @@ pm_assistant/
 | Volume | Назначение |
 |---|---|
 | ke-data | Persistent SQLite для signal_memory.db (knowledge-engine + ke-cron) |
+| vector-store | LanceDB embedded vector DB — KE/ke-cron rw, pm-bot/mcp-server ro (BL-237) |
 
 **Cron-задачи (ke-cron):**
 | Cron | Расписание | Описание |
@@ -425,6 +441,9 @@ pm_assistant/
 | YANDEX_CALENDAR_USERNAME | нет | pm-bot | Логин Яндекс Календаря (email) для CalDAV |
 | YANDEX_CALENDAR_APP_PASSWORD | нет | pm-bot | Пароль приложения Яндекс Календаря для CalDAV |
 | YANDEX_CALENDAR_TIMEZONE | нет | pm-bot | Часовой пояс календаря (default: Europe/Moscow) |
+| VECTOR_STORE_ENABLED | нет | knowledge-engine, pm-bot | Включить LanceDB vector store (default: 0, BL-237) |
+| VECTOR_STORE_PATH | нет | knowledge-engine, pm-bot, mcp-server | Путь к LanceDB хранилищу (default: /vector-store, BL-237) |
+| DIGEST_CONTEXT_SOURCE | нет | pm-bot | Источник контекста: lancedb / wiki / auto (default: auto, BL-237) |
 
 ## Performance (vault_api.py)
 

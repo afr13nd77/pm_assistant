@@ -177,10 +177,24 @@ class DigestHandler(FileSystemEventHandler):
             logger.debug(f"DigestHandler: draft status, skipping: {path.name}")
             return False
 
-        from .digest.generator import _compute_body_hash
+        from .digest.generator import _compute_body_hash, _generate_id, vector_store_enabled
         from .digest.paths import wiki_to_llm_wiki
+        from .digest.templates import detect_type
 
         vault_root = Path(self.vault_path)
+
+        if vector_store_enabled():
+            try:
+                from shared import vector_store
+                digest_id = _generate_id(detect_type(path, metadata), path)
+                existing = vector_store.get_by_id(digest_id)
+                if existing and existing.get("body_hash") == _compute_body_hash(body):
+                    logger.debug(f"DigestHandler: body unchanged (vector store), skipping: {path.name}")
+                    return False
+            except Exception as e:
+                logger.warning(f"DigestHandler: vector store lookup failed for {path.name}: {e}")
+            return True
+
         try:
             digest_path = wiki_to_llm_wiki(path, vault_root)
         except ValueError as e:
@@ -243,7 +257,8 @@ def start_watch(vault_path: str):
     logger.info("Scheduled clippings observer on: %s", clippings_dir)
 
     # Watch wiki/ directories for digest generation (Layer 1')
-    digest_enabled = os.getenv("DIGEST_ENABLED", "0") == "1"
+    vector_enabled = os.getenv("VECTOR_STORE_ENABLED", "0") == "1"
+    digest_enabled = vector_enabled or os.getenv("DIGEST_ENABLED", "0") == "1"
     if digest_enabled:
         digest_handler = DigestHandler(vault_path)
         # Register on all wiki/ domain directories (all artifact types)
@@ -260,7 +275,7 @@ def start_watch(vault_path: str):
                 logger.info(f"DigestHandler: scheduled on: {extra_dir}")
         logger.info("DigestHandler: registered on all wiki/ directories")
     else:
-        logger.info("DigestHandler: disabled (DIGEST_ENABLED != 1)")
+        logger.info("DigestHandler: disabled (DIGEST_ENABLED != 1 and VECTOR_STORE_ENABLED != 1)")
 
     observer.start()
     logger.info(f"Watching {len(watch_dirs)} domain idea dirs + clippings for new .md files (Ctrl+C to stop)")

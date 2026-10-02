@@ -1329,6 +1329,88 @@ def digest_bulk(req: DigestBulkRequest):
 
 
 # ---------------------------------------------------------------------------
+# BL-237: POST /reindex, GET /reindex/status, GET /vector/stats, POST /test-embedding
+# ---------------------------------------------------------------------------
+
+class ReindexRequest(BaseModel):
+    full: bool = True
+    missing: bool = False
+    notify: bool = False
+
+
+_reindex_state: dict = {"status": "idle", "task_id": None, "processed": 0, "total": 0, "errors": []}
+
+
+def _run_reindex(full: bool, missing: bool, notify: bool, task_id: str) -> None:
+    """Фоновая задача переиндексации (выполняется в executor)."""
+    def _progress(done: int, total: int, errors: int) -> None:
+        _reindex_state["processed"] = done
+        _reindex_state["total"] = total
+
+    try:
+        from .reindexer import reindex_vault
+
+        result = reindex_vault(
+            _vault_path_str(), full=full, missing=missing, notify=notify, progress_cb=_progress,
+        )
+        _reindex_state["errors"] = result.get("errors", 0)
+        _reindex_state["status"] = "done" if result.get("status") == "ok" else "error"
+        logger.info("API reindex %s: finished, status=%s", task_id, _reindex_state["status"])
+    except Exception as exc:
+        logger.error("API reindex %s error: %s", task_id, exc, exc_info=True)
+        _reindex_state["status"] = "error"
+        _reindex_state["errors"] = [str(exc)]
+
+
+@app.post("/reindex")
+async def api_reindex(req: ReindexRequest):
+    if _reindex_state["status"] == "running":
+        raise HTTPException(status_code=409, detail="Reindex already running")
+    import asyncio
+    import uuid
+
+    task_id = str(uuid.uuid4())[:8]
+    _reindex_state.update({"status": "running", "task_id": task_id, "processed": 0, "total": 0, "errors": []})
+    logger.info("API reindex: started task_id=%s full=%s missing=%s", task_id, req.full, req.missing)
+    asyncio.get_running_loop().run_in_executor(
+        None, _run_reindex, req.full, req.missing, req.notify, task_id
+    )
+    return {"status": "started", "task_id": task_id}
+
+
+@app.get("/reindex/status")
+async def api_reindex_status():
+    return dict(_reindex_state)
+
+
+@app.get("/vector/stats")
+async def api_vector_stats():
+    try:
+        from shared import vector_store
+
+        return vector_store.get_stats()
+    except Exception as exc:
+        logger.error("API vector/stats error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/test-embedding")
+async def api_test_embedding(text: str = Query("тест embedding")):
+    try:
+        from shared import embedding_client
+
+        result = embedding_client.embed(text, operation="test")
+        if result is None:
+            logger.warning("API test-embedding: all providers failed")
+            return {"status": "error", "message": "All providers failed"}
+        logger.info("API test-embedding: ok provider=%s", result.provider)
+        return {"status": "ok", "provider": result.provider, "model": result.model, "dim": result.dim}
+    except Exception as exc:
+        logger.error("API test-embedding error: %s", exc, exc_info=True)
+        return {"status": "error", "message": str(exc)}
+
+
+# ---------------------------------------------------------------------------
 # 28. GET /api/v1/digest/status
 # ---------------------------------------------------------------------------
 

@@ -16,7 +16,7 @@ from shared.llm_client import call as llm_call
 
 from . import paths as digest_paths
 from .templates import ARTIFACT_TYPE_MAP, detect_type, get_template
-from .token_counter import count_sections
+from .token_counter import count_sections, count_tokens
 from .validator import validate
 
 logger = logging.getLogger(__name__)
@@ -38,6 +38,94 @@ def _compute_body_hash(body: str) -> str:
 def _generate_id(artifact_type: str, source_path: Path) -> str:
     slug = source_path.stem
     return f"layer1p-{artifact_type}-{slug}"
+
+
+def vector_store_enabled() -> bool:
+    return os.getenv("VECTOR_STORE_ENABLED", "0") == "1"
+
+
+def _get_existing_record(digest_id: str) -> dict | None:
+    """Lookup existing LanceDB record by id; None on miss or error."""
+    try:
+        from shared import vector_store
+        return vector_store.get_by_id(digest_id)
+    except Exception as e:
+        logger.warning("generator: vector_store lookup failed for %s: %s", digest_id, e)
+        return None
+
+
+def _write_to_vector_store(
+    *,
+    digest_id: str,
+    source_path: Path,
+    vault_root: Path,
+    metadata: dict,
+    artifact_type: str,
+    domain: str,
+    sections: dict,
+    token_counts: dict,
+    body_hash: str,
+    existing: dict | None,
+) -> None:
+    """Build full record, embed and upsert into LanceDB. Raises on upsert failure."""
+    from shared import embedding_client, vector_store
+
+    title = str(metadata.get("title") or source_path.stem)
+    one_liner = sections["one_liner"]
+    core = sections["core_digest"]
+    extended = sections["extended_digest"]
+    search_text = f"{title} {one_liner} {core}"
+
+    try:
+        emb = embedding_client.embed(search_text)
+    except Exception as e:
+        logger.warning("generator: embedding failed for %s: %s", source_path.name, e)
+        emb = None
+
+    tags = metadata.get("tags") or []
+    if not isinstance(tags, list):
+        tags = [str(tags)]
+    try:
+        relevance = float(metadata.get("relevance", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        relevance = 0.0
+
+    today = date.today().isoformat()
+    try:
+        source_rel = source_path.relative_to(vault_root).as_posix()
+    except ValueError:
+        source_rel = source_path.as_posix()
+
+    record = {
+        "id": digest_id,
+        "source_path": source_rel,
+        "type": artifact_type,
+        "domain": domain,
+        "tier": metadata.get("tier", "active"),
+        "status": metadata.get("status", ""),
+        "tags": [str(t) for t in tags],
+        "title": title,
+        "relevance": relevance,
+        "one_liner": one_liner,
+        "core_digest": core,
+        "extended_digest": extended,
+        "changelog": sections["changelog"],
+        "search_text": search_text,
+        "vector": emb.vector if emb else None,
+        "body_hash": body_hash,
+        "created": (existing or {}).get("created") or today,
+        "updated": today,
+        "embedding_model": emb.model if emb else "",
+        "embedding_provider": emb.provider if emb else "",
+        "tokens_one_liner": token_counts.get("one_liner") or count_tokens(one_liner),
+        "tokens_core": token_counts.get("core_digest") or count_tokens(core),
+        "tokens_extended": token_counts.get("extended_digest") or count_tokens(extended),
+    }
+    vector_store.upsert(record)
+    logger.info(
+        "generator: digest upserted to vector store id=%s (vector=%s)",
+        digest_id, "yes" if emb else "no",
+    )
 
 
 def _load_base_prompt() -> str:
@@ -140,7 +228,14 @@ def generate_digest(
     digest_id = _generate_id(artifact_type, source_path)
     domain = _detect_domain(source_path, vault_root)
 
-    if not force and digest_path.exists():
+    use_vector = vector_store_enabled()
+    existing_record = _get_existing_record(digest_id) if use_vector else None
+
+    if use_vector:
+        if not force and existing_record and existing_record.get("body_hash") == body_hash:
+            logger.debug("generator: vector record up to date (body_hash match), skipping: %s", source_path.name)
+            return {"status": "skip", "id": digest_id}
+    elif not force and digest_path.exists():
         try:
             existing_meta, _ = read_frontmatter(digest_path)
             existing_hash = existing_meta.get("body_hash", "")
@@ -151,7 +246,18 @@ def generate_digest(
             pass
 
     prev_digest = None
-    if digest_path.exists():
+    if use_vector:
+        if existing_record:
+            prev_digest = "\n\n".join(
+                f"# {name}\n{existing_record.get(key) or ''}"
+                for name, key in (
+                    ("one-liner", "one_liner"),
+                    ("core-digest", "core_digest"),
+                    ("extended-digest", "extended_digest"),
+                    ("changelog", "changelog"),
+                )
+            )
+    elif digest_path.exists():
         try:
             _, prev_body = read_frontmatter(digest_path)
             prev_digest = prev_body
@@ -229,6 +335,25 @@ def generate_digest(
             DIGEST_MAX_RETRIES, source_path.name,
             "; ".join(last_validation.errors),
         )
+
+    if use_vector:
+        try:
+            _write_to_vector_store(
+                digest_id=digest_id, source_path=source_path, vault_root=vault_root,
+                metadata=metadata, artifact_type=artifact_type, domain=domain,
+                sections=sections, token_counts=token_counts, body_hash=body_hash,
+                existing=existing_record,
+            )
+        except Exception as e:
+            logger.error("generator: vector store upsert failed for %s: %s", source_path.name, e)
+            return {"status": "error", "error": f"Vector store upsert failed: {e}"}
+        return {
+            "status": "ok" if validation_status == "passed" else "validation_failed",
+            "id": digest_id,
+            "token_counts": token_counts,
+            "body_hash": body_hash,
+            "validation": validation_status,
+        }
 
     today = date.today().isoformat()
     now = datetime.now().isoformat(timespec="seconds")

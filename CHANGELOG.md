@@ -5,6 +5,31 @@
 
 ---
 
+## 02.10.2026
+
+### BL-237 — LanceDB vector store + MCP server (02.10.2026)
+- **shared**: новый модуль `vector_store.py` — обёртка LanceDB embedded (CRUD, hybrid search RRF, FTS index, 23-field PyArrow schema)
+- **shared**: новый модуль `embedding_client.py` — embedding fallback chain (Ollama → OpenAI), batch embed, graceful degradation
+- **shared**: `vault_paths.py` — добавлен `vector_store_dir()`, 6 функций llm_wiki_* помечены deprecated
+- **knowledge-engine**: `generator.py` — dual-write: VECTOR_STORE_ENABLED=1 пишет дайджесты в LanceDB вместо .md файлов
+- **knowledge-engine**: `watcher.py` — DigestHandler регистрируется при VECTOR_STORE_ENABLED=1
+- **knowledge-engine**: новый модуль `reindexer.py` — полная переиндексация wiki/ с прогрессом и Telegram-нотификацией
+- **knowledge-engine**: новый модуль `migrator.py` — bulk import существующих llm_wiki/ .md файлов в LanceDB (без LLM)
+- **knowledge-engine**: `api.py` — POST /reindex, GET /reindex/status, GET /vector/stats, POST /test-embedding
+- **knowledge-engine**: `cli.py` — команды `reindex` и `migrate-to-lancedb`
+- **pm-bot**: `context_assembler.py` — новый режим lancedb: 3-tier waterfall (ONE-LINERS 3K → CORE 10K → EXTENDED 6K = 19K budget)
+- **pm-bot**: `vault_search.py` — hybrid search через LanceDB, fallback на legacy _SearchIndex
+- **pm-bot**: `vault_ops.py` — /search endpoint с domain/type фильтрами, backward-compatible + new fields
+- **pm-bot**: `user_prefs.py` — 4 новых поля: embedding_fallback, embedding_model_ollama, embedding_model_openai, embedding_dim
+- **pm-bot**: `ke_client.py` — proxy методы reindex_start/status, test_embedding, vector_stats
+- **pm-bot**: `providers.py` — POST /reindex, GET /reindex/status, POST /test-ollama-embedding, GET /vector/stats
+- **web-ui**: `settings.html` — секция VECTOR STORE / EMBEDDINGS (embedding fallback chain, model settings, Test Embedding, Reindex, Index Stats)
+- **mcp-server**: новый компонент — FastMCP сервер (SSE + stdio) с 4 tools: search, get_context, list_artifacts, get_artifact
+- **docker**: vector-store volume, mcp-server сервис (порт 8200, ro mount), KE/ke-cron rw mount, pm-bot ro mount
+- **тесты**: 22 unit (vector_store) + 17 unit (embedding_client) + 8 (reindexer) + 7 (migrator) + 7 (mcp tools) + 8 (providers) + 13 integration = 82 новых теста
+
+---
+
 ## 01.10.2026
 
 ### BL-236 — Убрать захардкоженные домены из кода (01.10.2026)

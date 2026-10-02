@@ -33,6 +33,7 @@ _VALID_LLM_PROVIDERS = frozenset({"claude", "ollama", "hybrid"})
 _VALID_TRANSCRIPTION_PROVIDERS = frozenset({"default", "openrouter"})
 _VALID_CAPTURE_MODES = frozenset({"simple", "extended"})
 _VALID_FALLBACK_PROVIDERS = frozenset({"claude", "ollama", "openrouter"})
+_VALID_EMBEDDING_PROVIDERS = frozenset({"ollama", "openai"})
 _CALDAV_PASSWORD_MASK = "••••••••"
 # NOTE: также используется в vault_api.py эндпоинтами ai-agent/chat и
 # ai-agent/playground (T-24: перенесено сюда, т.к. используется в
@@ -65,6 +66,10 @@ _DEFAULT_USER_PREFS = {
     "ai_agent_model": "",
     "editor_col_split_2": 0.5,
     "editor_col_split_3": [0.4, 0.4, 400],
+    "embedding_fallback": ["ollama", "openai"],
+    "embedding_model_ollama": "nomic-embed-text",
+    "embedding_model_openai": "text-embedding-3-small",
+    "embedding_dim": 768,
 }
 
 
@@ -102,6 +107,10 @@ class UserPrefs(BaseModel):
     editor_col_split_2: float = 0.5
     editor_col_split_3: list[Any] = [0.4, 0.4, 400]
     business_context: str = ""
+    embedding_fallback: list[Any] = ["ollama", "openai"]
+    embedding_model_ollama: str = "nomic-embed-text"
+    embedding_model_openai: str = "text-embedding-3-small"
+    embedding_dim: int = 768
 
 
 def _read_user_prefs() -> dict:
@@ -265,6 +274,18 @@ def get_user_prefs():
         prefs["editor_col_split_2"] = 0.5
     if "editor_col_split_3" not in prefs:
         prefs["editor_col_split_3"] = [0.4, 0.4, 400]
+    # --- Embeddings (BL-237) ---
+    ef = prefs.get("embedding_fallback")
+    if (not isinstance(ef, list) or not ef
+            or any(p not in _VALID_EMBEDDING_PROVIDERS for p in ef)):
+        prefs["embedding_fallback"] = list(_DEFAULT_USER_PREFS["embedding_fallback"])
+    if "embedding_model_ollama" not in prefs:
+        prefs["embedding_model_ollama"] = _DEFAULT_USER_PREFS["embedding_model_ollama"]
+    if "embedding_model_openai" not in prefs:
+        prefs["embedding_model_openai"] = _DEFAULT_USER_PREFS["embedding_model_openai"]
+    ed = prefs.get("embedding_dim")
+    if not isinstance(ed, int) or isinstance(ed, bool) or ed <= 0:
+        prefs["embedding_dim"] = _DEFAULT_USER_PREFS["embedding_dim"]
     if not prefs.get("business_context"):
         seeded = _load_business_context_file()
         if seeded:
@@ -460,6 +481,21 @@ def put_user_prefs(body: UserPrefs):
 
         setattr(body, key, deduped_chain)
         logger.info("PUT /api/v1/user-prefs — %s validated: %s", key, deduped_chain)
+    # --- Embedding fields (BL-237) ---
+    if (not isinstance(body.embedding_fallback, list) or not body.embedding_fallback
+            or any(p not in _VALID_EMBEDDING_PROVIDERS for p in body.embedding_fallback)):
+        logger.warning("PUT /api/v1/user-prefs — invalid embedding_fallback: %r", body.embedding_fallback)
+        raise HTTPException(
+            status_code=422,
+            detail=f"embedding_fallback must be a non-empty list of: {', '.join(sorted(_VALID_EMBEDDING_PROVIDERS))}"
+        )
+    if body.embedding_dim <= 0:
+        logger.warning("PUT /api/v1/user-prefs — invalid embedding_dim: %s", body.embedding_dim)
+        raise HTTPException(status_code=422, detail="embedding_dim must be an integer > 0")
+    logger.info(
+        "PUT /api/v1/user-prefs — embedding_fallback=%s embedding_dim=%s",
+        body.embedding_fallback, body.embedding_dim,
+    )
     # CalDAV password sentinel: masked value means "keep current", empty means "clear"
     if body.caldav_password == _CALDAV_PASSWORD_MASK:
         current = _read_user_prefs()
@@ -509,4 +545,8 @@ def put_user_prefs(body: UserPrefs):
             "caldav_timezone": body.caldav_timezone,
             "caldav_url": body.caldav_url,
             "ai_agent_provider": body.ai_agent_provider,
-            "ai_agent_model": body.ai_agent_model}
+            "ai_agent_model": body.ai_agent_model,
+            "embedding_fallback": body.embedding_fallback,
+            "embedding_model_ollama": body.embedding_model_ollama,
+            "embedding_model_openai": body.embedding_model_openai,
+            "embedding_dim": body.embedding_dim}
