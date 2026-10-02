@@ -575,8 +575,8 @@
               <input class="field-input" v-model="embModelOllama" placeholder="nomic-embed-text" @change="trySaveUserPrefs()" style="width: 250px;">
             </div>
             <div class="field-group">
-              <div class="field-label">OPENAI_EMBEDDING_MODEL</div>
-              <input class="field-input" v-model="embModelOpenai" placeholder="text-embedding-3-small" @change="trySaveUserPrefs()" style="width: 250px;">
+              <div class="field-label">OPENROUTER_EMBEDDING_MODEL</div>
+              <input class="field-input" v-model="embModelOpenrouter" placeholder="text-embedding-3-small" @change="trySaveUserPrefs()" style="width: 250px;">
             </div>
             <div class="field-group">
               <div class="field-label">VECTOR_DIMENSION</div>
@@ -1094,9 +1094,9 @@
       // setCaptureMode, which resend the whole payload including the fallback chains), so the
       // guard lives here rather than only inside saveProviderSettings to cover all of them.
       // --- Vector Store / Embeddings (BL-237) ---
-      var embeddingFallback = ref(['ollama', 'openai']);
+      var embeddingFallback = ref(['ollama', 'openrouter']);
       var embModelOllama = ref('nomic-embed-text');
-      var embModelOpenai = ref('text-embedding-3-small');
+      var embModelOpenrouter = ref('text-embedding-3-small');
       var embDim = ref(768);
       var embTesting = ref(false);
       var embTestResult = ref(null);
@@ -1252,7 +1252,7 @@
           business_context: businessContext.value,
           embedding_fallback: embeddingFallback.value,
           embedding_model_ollama: embModelOllama.value,
-          embedding_model_openai: embModelOpenai.value,
+          embedding_model_openrouter: embModelOpenrouter.value,
           embedding_dim: embDim.value
         };
       }
@@ -1732,7 +1732,7 @@
             embeddingFallback.value = prefs.embedding_fallback;
           }
           embModelOllama.value = prefs.embedding_model_ollama || 'nomic-embed-text';
-          embModelOpenai.value = prefs.embedding_model_openai || 'text-embedding-3-small';
+          embModelOpenrouter.value = prefs.embedding_model_openrouter || 'text-embedding-3-small';
           embDim.value = prefs.embedding_dim || 768;
 
           // Load vector stats on page load
@@ -1859,7 +1859,7 @@
         isPromptDirty: isPromptDirty,
         embeddingFallback: embeddingFallback,
         embModelOllama: embModelOllama,
-        embModelOpenai: embModelOpenai,
+        embModelOpenrouter: embModelOpenrouter,
         embDim: embDim,
         embTesting: embTesting,
         embTestResult: embTestResult,

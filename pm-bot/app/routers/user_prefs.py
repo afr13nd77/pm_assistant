@@ -33,7 +33,7 @@ _VALID_LLM_PROVIDERS = frozenset({"claude", "ollama", "hybrid"})
 _VALID_TRANSCRIPTION_PROVIDERS = frozenset({"default", "openrouter"})
 _VALID_CAPTURE_MODES = frozenset({"simple", "extended"})
 _VALID_FALLBACK_PROVIDERS = frozenset({"claude", "ollama", "openrouter"})
-_VALID_EMBEDDING_PROVIDERS = frozenset({"ollama", "openai"})
+_VALID_EMBEDDING_PROVIDERS = frozenset({"ollama", "openrouter"})
 _CALDAV_PASSWORD_MASK = "••••••••"
 # NOTE: также используется в vault_api.py эндпоинтами ai-agent/chat и
 # ai-agent/playground (T-24: перенесено сюда, т.к. используется в
@@ -66,9 +66,9 @@ _DEFAULT_USER_PREFS = {
     "ai_agent_model": "",
     "editor_col_split_2": 0.5,
     "editor_col_split_3": [0.4, 0.4, 400],
-    "embedding_fallback": ["ollama", "openai"],
+    "embedding_fallback": ["ollama", "openrouter"],
     "embedding_model_ollama": "nomic-embed-text",
-    "embedding_model_openai": "text-embedding-3-small",
+    "embedding_model_openrouter": "text-embedding-3-small",
     "embedding_dim": 768,
 }
 
@@ -107,9 +107,9 @@ class UserPrefs(BaseModel):
     editor_col_split_2: float = 0.5
     editor_col_split_3: list[Any] = [0.4, 0.4, 400]
     business_context: str = ""
-    embedding_fallback: list[Any] = ["ollama", "openai"]
+    embedding_fallback: list[Any] = ["ollama", "openrouter"]
     embedding_model_ollama: str = "nomic-embed-text"
-    embedding_model_openai: str = "text-embedding-3-small"
+    embedding_model_openrouter: str = "text-embedding-3-small"
     embedding_dim: int = 768
 
 
@@ -281,8 +281,8 @@ def get_user_prefs():
         prefs["embedding_fallback"] = list(_DEFAULT_USER_PREFS["embedding_fallback"])
     if "embedding_model_ollama" not in prefs:
         prefs["embedding_model_ollama"] = _DEFAULT_USER_PREFS["embedding_model_ollama"]
-    if "embedding_model_openai" not in prefs:
-        prefs["embedding_model_openai"] = _DEFAULT_USER_PREFS["embedding_model_openai"]
+    if "embedding_model_openrouter" not in prefs:
+        prefs["embedding_model_openrouter"] = _DEFAULT_USER_PREFS["embedding_model_openrouter"]
     ed = prefs.get("embedding_dim")
     if not isinstance(ed, int) or isinstance(ed, bool) or ed <= 0:
         prefs["embedding_dim"] = _DEFAULT_USER_PREFS["embedding_dim"]
@@ -548,5 +548,5 @@ def put_user_prefs(body: UserPrefs):
             "ai_agent_model": body.ai_agent_model,
             "embedding_fallback": body.embedding_fallback,
             "embedding_model_ollama": body.embedding_model_ollama,
-            "embedding_model_openai": body.embedding_model_openai,
+            "embedding_model_openrouter": body.embedding_model_openrouter,
             "embedding_dim": body.embedding_dim}
