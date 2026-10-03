@@ -342,7 +342,9 @@ def search_vault(
     try:
         from shared import embedding_client, vector_store
 
-        vector = embedding_client.embed(query).vector
+        emb_result = embedding_client.embed(query)
+        # Если эмбеддинг недоступен — hybrid_search работает в keyword-only режиме
+        vector = emb_result.vector if emb_result is not None else None
         found = vector_store.hybrid_search(query, vector, limit, domain, artifact_type)
         results = [_to_api_dict(r) for r in found]
         logger.info("search_vault: hybrid search returned %d results for q=%r", len(results), query)
