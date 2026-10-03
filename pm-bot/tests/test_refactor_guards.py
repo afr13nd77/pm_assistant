@@ -86,6 +86,10 @@ EXPECTED_ENDPOINTS = {
     ("GET", "/api/v1/signals/{signal_id}"),
     ("POST", "/api/v1/signals/{signal_id}/approve"),
     ("POST", "/api/v1/signals/{signal_id}/dismiss"),
+    ("GET", "/api/v1/reindex/status"),
+    ("GET", "/api/v1/vector/stats"),
+    ("POST", "/api/v1/providers/test-ollama-embedding"),
+    ("POST", "/api/v1/reindex"),
 }
 
 

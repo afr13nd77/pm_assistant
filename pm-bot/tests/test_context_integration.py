@@ -16,13 +16,15 @@ from shared.embedding_client import EmbeddingResult
 
 
 def _emb(*_a, **_kw) -> EmbeddingResult:
-    return EmbeddingResult(vector=[0.1] * 768, model="test-model", provider="test", dim=768)
+    return EmbeddingResult(vector=[0.1] * 1024, model="test-model", provider="test", dim=1024)
 
 
 @pytest.fixture(autouse=True)
 def _clean_vector_store(tmp_path, monkeypatch):
     """Сброс singleton vector_store и использование temp-директории."""
     vector_store._reset()
+    monkeypatch.setenv("EMBEDDING_DIM", "1024")
+    monkeypatch.setattr(vector_store, "EMBEDDING_DIM", 1024)
     monkeypatch.setenv("VECTOR_STORE_PATH", str(tmp_path / "lancedb"))
     monkeypatch.delenv("VECTOR_STORE_ENABLED", raising=False)
     monkeypatch.delenv("DIGEST_CONTEXT_SOURCE", raising=False)
@@ -47,7 +49,7 @@ def _record(i: int, domain: str = "general", core: str | None = None, tokens_cor
         "core_digest": core if core is not None else f"- суть: бронирование отелей вариант {i}",
         "extended_digest": f"Расширенный анализ бронирования {i}",
         "changelog": "- создан", "search_text": f"Бронирование {i} бронирование отелей",
-        "vector": [0.1] * 768, "body_hash": f"h{i}", "created": "2026-01-01", "updated": "2026-01-01",
+        "vector": [0.1] * 1024, "body_hash": f"h{i}", "created": "2026-01-01", "updated": "2026-01-01",
         "embedding_model": "test-model", "embedding_provider": "test",
         "tokens_one_liner": 8, "tokens_core": tokens_core, "tokens_extended": 0,
     }

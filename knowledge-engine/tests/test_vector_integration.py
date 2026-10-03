@@ -19,8 +19,7 @@ from shared.embedding_client import EmbeddingResult
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# Все 23 поля схемы DIGESTS_SCHEMA
-ALL_FIELDS = [f.name for f in vector_store.DIGESTS_SCHEMA]
+ALL_FIELDS = ["id"] + [f for f in vector_store.METADATA_FIELDS if f != "tags_json"] + ["search_text", "vector", "tags"]
 
 
 def _core_digest() -> str:
@@ -47,7 +46,7 @@ LLM_RESPONSE = (
 
 
 def _emb(*_a, **_kw) -> EmbeddingResult:
-    return EmbeddingResult(vector=[0.1] * 768, model="test-model", provider="test", dim=768)
+    return EmbeddingResult(vector=[0.1] * 1024, model="test-model", provider="test", dim=1024)
 
 
 @pytest.fixture(autouse=True)
@@ -111,7 +110,7 @@ def test_digest_to_lancedb(tmp_path):
     for f in ALL_FIELDS:
         assert f in rec
         if f == "vector":
-            assert rec[f] is not None and len(rec[f]) == 768
+            assert rec[f] is not None and len(rec[f]) == 1024
         elif f == "tags":
             assert rec[f] == ["test", "fixture"]
         elif f in ("relevance", "tokens_one_liner", "tokens_core", "tokens_extended"):

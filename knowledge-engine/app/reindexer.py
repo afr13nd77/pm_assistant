@@ -37,7 +37,7 @@ def _has_vector(md_file: Path) -> bool:
         metadata, _ = read_frontmatter(md_file)
         digest_id = _generate_id(detect_type(md_file, metadata), md_file)
         record = vector_store.get_by_id(digest_id)
-        return bool(record) and record.get("vector") is not None
+        return record is not None and record.get("vector") is not None
     except Exception as e:
         logger.warning("reindexer: has_vector check failed for %s: %s", md_file.name, e)
         return False

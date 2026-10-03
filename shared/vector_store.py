@@ -8,6 +8,7 @@ import logging
 import os
 import threading
 from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -234,7 +235,7 @@ def _build_where(domain=None, artifact_type=None, status=None, tier=None) -> dic
 def _row_from(id_: str, meta: dict | None, doc: str | None, vector=None) -> dict:
     """Собирает плоский dict записи из Chroma (tags десериализуются из JSON)."""
     meta = meta or {}
-    row = {"id": id_}
+    row: dict[str, Any] = {"id": id_}
     for name in _STR_FIELDS:
         row[name] = meta.get(name, "")
     for name in _INT_FIELDS:
