@@ -232,6 +232,10 @@ def main():
                                         help="Show what would be migrated without writing")
     migrate_lancedb_parser.add_argument("--notify", action="store_true",
                                         help="Send Telegram notification on completion")
+    migrate_lancedb_parser.add_argument("--limit", type=int, default=None,
+                                        help="Максимальное количество файлов для обработки")
+    migrate_lancedb_parser.add_argument("--fail-fast", action="store_true",
+                                        help="Остановить миграцию при первой ошибке")
 
     cowork_parser = subparsers.add_parser(
         "cowork-context",
@@ -1078,7 +1082,7 @@ def _dispatch(args, vault_path: str):
     elif args.command == "migrate-to-lancedb":
         from .migrator import migrate_llm_wiki_to_lancedb
         logger.info("migrate-to-lancedb: starting, vault=%s, dry_run=%s", vault_path, args.dry_run)
-        result = migrate_llm_wiki_to_lancedb(vault_path, dry_run=args.dry_run, notify=args.notify)
+        result = migrate_llm_wiki_to_lancedb(vault_path, dry_run=args.dry_run, notify=args.notify, limit=args.limit, fail_fast=args.fail_fast)
         _output_json(result)
         sys.exit(0 if result["status"] == "ok" else 1)
 

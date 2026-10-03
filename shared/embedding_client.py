@@ -13,7 +13,7 @@ DEFAULTS: dict = {
     "embedding_fallback": ["ollama", "openrouter"],
     "embedding_model_ollama": "nomic-embed-text",
     "embedding_model_openrouter": "text-embedding-3-small",
-    "embedding_dim": 768,
+    "embedding_dim": 1024,
 }
 
 _OLLAMA_TIMEOUT = 30

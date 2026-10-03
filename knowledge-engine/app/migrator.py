@@ -104,7 +104,7 @@ def _build_record(path: Path, embedding_client) -> dict:
     }
 
 
-def _run_migration(vault_path: str, dry_run: bool, notify: bool) -> dict:
+def _run_migration(vault_path: str, dry_run: bool, notify: bool, limit: int | None = None, fail_fast: bool = False) -> dict:
     """Основная логика миграции (без обёртки LoggedProcess)."""
     start = time.monotonic()
     llm_wiki = Path(vault_path) / "llm_wiki"
@@ -114,6 +114,9 @@ def _run_migration(vault_path: str, dry_run: bool, notify: bool) -> dict:
 
     files = _collect_files(llm_wiki)
     total = len(files)
+    if limit is not None:
+        files = files[:limit]
+        logger.info("migrator: limited to %d/%d files", len(files), total)
 
     if dry_run:
         logger.info("migrator: dry-run, %d files would be migrated", total)
@@ -137,6 +140,9 @@ def _run_migration(vault_path: str, dry_run: bool, notify: bool) -> dict:
         except Exception as e:
             errors += 1
             logger.error("migrator: failed to migrate %s: %s", f, e)
+            if fail_fast:
+                logger.error("migrator: fail-fast, stopping after first error")
+                break
         logger.info("Migrated %d/%d (%d%%)", i, total, i * 100 // total)
 
     result = {
@@ -174,13 +180,13 @@ def _run_migration(vault_path: str, dry_run: bool, notify: bool) -> dict:
     return result
 
 
-def migrate_llm_wiki_to_lancedb(vault_path: str, dry_run: bool = False, notify: bool = False) -> dict:
+def migrate_llm_wiki_to_lancedb(vault_path: str, dry_run: bool = False, notify: bool = False, limit: int | None = None, fail_fast: bool = False) -> dict:
     """Одноразовая миграция готовых дайджестов llm_wiki/ в LanceDB (без LLM)."""
     from shared.system_log import LoggedProcess
 
     try:
         with LoggedProcess("migrate-to-lancedb", source="ke-cli") as lp:
-            result = _run_migration(vault_path, dry_run, notify)
+            result = _run_migration(vault_path, dry_run, notify, limit=limit, fail_fast=fail_fast)
             lp.summary = f"migrate-to-lancedb: {result.get('migrated', 0)}/{result.get('total_files', 0)}"
             lp.details = {k: v for k, v in result.items() if k != "files"}
         return result

@@ -1,56 +1,63 @@
-"""LanceDB wrapper: the single access point to the digests vector store.
+"""ChromaDB wrapper: the single access point to the digests vector store.
 
 Write API (upsert/delete/drop_and_recreate) is intended for knowledge-engine only;
 read API (hybrid_search/get_by_id/list_artifacts/get_stats) for pm-bot and MCP.
 """
+import json
 import logging
 import os
 import threading
 from dataclasses import dataclass
 
-import pyarrow as pa
-
 logger = logging.getLogger(__name__)
 
-EMBEDDING_DIM = 768
+
+def _resolve_dim() -> int:
+    """Определяет размерность эмбеддингов: env -> prefs -> 1024."""
+    env_val = os.getenv("EMBEDDING_DIM")
+    if env_val:
+        try:
+            return int(env_val)
+        except ValueError as e:
+            logger.error("vector_store._resolve_dim: invalid EMBEDDING_DIM=%r: %s", env_val, e)
+    try:
+        from shared.embedding_client import _load_embedding_prefs
+        prefs = _load_embedding_prefs()
+        dim = int(prefs.get("embedding_dim", 1024))
+        logger.info("vector_store._resolve_dim: dim=%d from prefs", dim)
+        return dim
+    except Exception as e:
+        logger.error("vector_store._resolve_dim: failed to read prefs: %s, fallback 1024", e)
+        return 1024
+
+
+EMBEDDING_DIM = _resolve_dim()
+logger.info("vector_store: EMBEDDING_DIM=%d", EMBEDDING_DIM)
 TABLE_NAME = "digests"
 DEFAULT_PATH = "/vector-store"
 RRF_K = 60
 SNIPPET_LEN = 200
 
-DIGESTS_SCHEMA = pa.schema([
-    pa.field("id", pa.utf8()),
-    pa.field("source_path", pa.utf8()),
-    pa.field("type", pa.utf8()),
-    pa.field("domain", pa.utf8()),
-    pa.field("tier", pa.utf8()),
-    pa.field("status", pa.utf8()),
-    pa.field("tags", pa.list_(pa.utf8())),
-    pa.field("title", pa.utf8()),
-    pa.field("relevance", pa.float32()),
-    pa.field("one_liner", pa.utf8()),
-    pa.field("core_digest", pa.utf8()),
-    pa.field("extended_digest", pa.utf8()),
-    pa.field("changelog", pa.utf8()),
-    pa.field("search_text", pa.utf8()),
-    pa.field("vector", pa.list_(pa.float32(), EMBEDDING_DIM), nullable=True),
-    pa.field("body_hash", pa.utf8()),
-    pa.field("created", pa.utf8()),
-    pa.field("updated", pa.utf8()),
-    pa.field("embedding_model", pa.utf8()),
-    pa.field("embedding_provider", pa.utf8()),
-    pa.field("tokens_one_liner", pa.int32()),
-    pa.field("tokens_core", pa.int32()),
-    pa.field("tokens_extended", pa.int32()),
-])
-
-_SCHEMA_FIELDS = [f.name for f in DIGESTS_SCHEMA]
+# Поля, хранимые в metadata (tags сериализуются в tags_json)
+METADATA_FIELDS = [
+    "source_path", "type", "domain", "tier", "status",
+    "title", "relevance", "one_liner", "core_digest",
+    "extended_digest", "changelog", "body_hash",
+    "created", "updated", "embedding_model", "embedding_provider",
+    "tokens_one_liner", "tokens_core", "tokens_extended",
+    "tags_json",
+]
+_STR_FIELDS = [
+    "source_path", "type", "domain", "tier", "status", "title", "one_liner",
+    "core_digest", "extended_digest", "changelog", "body_hash", "created",
+    "updated", "embedding_model", "embedding_provider",
+]
+_INT_FIELDS = ["tokens_one_liner", "tokens_core", "tokens_extended"]
 
 _lock = threading.RLock()
-_db = None
-_db_path: str | None = None
-_table = None
-_fts_ready = False
+_client = None
+_client_path: str | None = None
+_collection = None
 
 
 @dataclass
@@ -66,121 +73,111 @@ class SearchResult:
     source_path: str
 
 
-def _get_db(path: str | None = None):
+def _get_client(path: str | None = None):
     """Singleton connection. A different explicit path reconnects."""
-    global _db, _db_path, _table, _fts_ready
-    import lancedb
+    global _client, _client_path, _collection
+    import chromadb
 
     target = path or os.environ.get("VECTOR_STORE_PATH") or DEFAULT_PATH
     with _lock:
-        if _db is None or (path is not None and target != _db_path):
+        if _client is None or (path is not None and target != _client_path):
             try:
                 os.makedirs(target, exist_ok=True)
-                _db = lancedb.connect(target)
+                _client = chromadb.PersistentClient(path=target)
             except Exception as e:
                 logger.warning("vector_store: connect failed path=%s: %s", target, e)
                 raise
-            _db_path = target
-            _table = None
-            _fts_ready = False
+            _client_path = target
+            _collection = None
             logger.debug("vector_store: connected path=%s", target)
-        return _db
+        return _client
 
 
 def _reset() -> None:
-    """Drop cached connection/table (used by tests)."""
-    global _db, _db_path, _table, _fts_ready
+    """Drop cached connection/collection (used by tests)."""
+    global _client, _client_path, _collection
     with _lock:
-        _db = _db_path = _table = None
-        _fts_ready = False
+        _client = _client_path = _collection = None
 
 
-def _ensure_fts(table) -> None:
-    global _fts_ready
-    try:
-        table.create_fts_index("search_text", replace=True)
-        _fts_ready = True
-        logger.debug("vector_store: FTS index ready")
-    except Exception as e:
-        # Index may already exist / table empty; retried lazily on search
-        logger.debug("vector_store: FTS index creation skipped: %s", e)
-
-
-def _get_table():
-    global _table
+def _get_collection():
+    global _collection
     with _lock:
-        if _table is not None:
-            return _table
-        db = _get_db()
+        if _collection is not None:
+            return _collection
+        client = _get_client()
         try:
-            names = db.table_names()
-            if TABLE_NAME in names:
-                _table = db.open_table(TABLE_NAME)
-            else:
-                _table = db.create_table(TABLE_NAME, schema=DIGESTS_SCHEMA)
-                logger.info("vector_store: created table %s", TABLE_NAME)
-            _ensure_fts(_table)
+            # embedding_function=None: эмбеддинги всегда передаются явно (без скачивания моделей)
+            _collection = client.get_or_create_collection(
+                name=TABLE_NAME,
+                metadata={"hnsw:space": "cosine"},
+                embedding_function=None,
+            )
+            logger.debug("vector_store: collection %s ready", TABLE_NAME)
         except Exception as e:
-            _table = None
-            logger.warning("vector_store: open/create table failed: %s", e)
+            _collection = None
+            logger.warning("vector_store: open/create collection failed: %s", e)
             raise
-        return _table
+        return _collection
 
 
-def _q(value: str) -> str:
-    return "'" + str(value).replace("'", "''") + "'"
+def _placeholder_vector() -> list[float]:
+    """Заглушка для записей без вектора (Chroma требует embedding); отсекается флагом has_vector."""
+    v = [0.0] * EMBEDDING_DIM
+    v[0] = 1.0
+    return v
 
 
 def _normalize(record: dict) -> dict:
-    out = {}
-    for field in DIGESTS_SCHEMA:
-        name = field.name
+    out = {"id": record.get("id")}
+    for name in _STR_FIELDS:
         v = record.get(name)
-        if v is None:
-            if name == "vector":
-                out[name] = None
-            elif name == "tags":
-                out[name] = []
-            elif name == "relevance":
-                out[name] = 0.0
-            elif name.startswith("tokens_"):
-                out[name] = 0
-            else:
-                out[name] = ""
-        else:
-            out[name] = v
+        out[name] = "" if v is None else str(v)
+    for name in _INT_FIELDS:
+        v = record.get(name)
+        out[name] = 0 if v is None else int(v)
+    rel = record.get("relevance")
+    out["relevance"] = 0.0 if rel is None else float(rel)
+    tags = record.get("tags")
+    out["tags"] = [] if tags is None else list(tags)
+    out["search_text"] = record.get("search_text") or ""
     if not out["id"]:
         raise ValueError("record must have non-empty 'id'")
-    vec = out["vector"]
-    if vec is not None and len(vec) != EMBEDDING_DIM:
-        raise ValueError(f"vector dim {len(vec)} != {EMBEDDING_DIM}")
+    vec = record.get("vector")
+    if vec is not None:
+        vec = [float(x) for x in vec]
+        if len(vec) != EMBEDDING_DIM:
+            raise ValueError(f"vector dim {len(vec)} != {EMBEDDING_DIM}")
+    out["vector"] = vec
     return out
 
 
-def _to_arrow(rows: list[dict]) -> pa.Table:
-    return pa.Table.from_pylist(rows, schema=DIGESTS_SCHEMA)
-
-
-def _mark_dirty() -> None:
-    global _fts_ready
-    _fts_ready = False
+def _build_metadata(row: dict) -> dict:
+    meta = {name: row[name] for name in METADATA_FIELDS if name != "tags_json"}
+    meta["tags_json"] = json.dumps(row["tags"], ensure_ascii=False)
+    meta["has_vector"] = row["vector"] is not None
+    return meta
 
 
 def upsert_batch(records: list[dict]) -> int:
-    """Upsert by id: delete existing rows, then add."""
+    """Upsert by id (last wins within the batch)."""
     if not records:
         return 0
     try:
         rows = {}
         for r in records:
             n = _normalize(r)
-            rows[n["id"]] = n  # last wins within the batch
+            rows[n["id"]] = n
+        items = list(rows.values())
+        placeholder = _placeholder_vector()
         with _lock:
-            table = _get_table()
-            ids = ", ".join(_q(i) for i in rows)
-            table.delete(f"id IN ({ids})")
-            table.add(_to_arrow(list(rows.values())))
-            _mark_dirty()
+            col = _get_collection()
+            col.upsert(
+                ids=[r["id"] for r in items],
+                embeddings=[r["vector"] if r["vector"] is not None else placeholder for r in items],
+                documents=[r["search_text"] for r in items],
+                metadatas=[_build_metadata(r) for r in items],
+            )
         logger.info("vector_store: upserted %d record(s)", len(rows))
         return len(rows)
     except Exception as e:
@@ -195,8 +192,7 @@ def upsert(record: dict) -> None:
 def delete(artifact_id: str) -> None:
     try:
         with _lock:
-            _get_table().delete(f"id = {_q(artifact_id)}")
-            _mark_dirty()
+            _get_collection().delete(ids=[artifact_id])
         logger.info("vector_store: deleted id=%s", artifact_id)
     except Exception as e:
         logger.warning("vector_store: delete failed id=%s: %s", artifact_id, e)
@@ -204,39 +200,56 @@ def delete(artifact_id: str) -> None:
 
 
 def drop_and_recreate() -> None:
-    global _table
+    global _collection
     try:
         with _lock:
-            db = _get_db()
-            if TABLE_NAME in db.table_names():
-                db.drop_table(TABLE_NAME)
-            _table = None
-            _get_table()
-        logger.info("vector_store: table %s dropped and recreated", TABLE_NAME)
+            client = _get_client()
+            try:
+                client.delete_collection(TABLE_NAME)
+            except Exception as e:
+                logger.debug("vector_store: delete_collection skipped: %s", e)
+            _collection = None
+            _get_collection()
+        logger.info("vector_store: collection %s dropped and recreated", TABLE_NAME)
     except Exception as e:
         logger.warning("vector_store: drop_and_recreate failed: %s", e)
         raise
 
 
-def _build_where(domain=None, artifact_type=None, status=None, tier=None) -> str | None:
-    parts = []
+def _build_where(domain=None, artifact_type=None, status=None, tier=None) -> dict | None:
+    conds = []
     if domain:
-        parts.append(f"domain = {_q(domain)}")
+        conds.append({"domain": domain})
     if artifact_type:
-        parts.append(f"type = {_q(artifact_type)}")
+        conds.append({"type": artifact_type})
     if status:
-        parts.append(f"status = {_q(status)}")
+        conds.append({"status": status})
     if tier:
-        parts.append(f"tier = {_q(tier)}")
-    return " AND ".join(parts) if parts else None
+        conds.append({"tier": tier})
+    if not conds:
+        return None
+    return conds[0] if len(conds) == 1 else {"$and": conds}
 
 
-def _clean(row: dict) -> dict:
-    row = {k: v for k, v in row.items() if k in _SCHEMA_FIELDS}
-    if "vector" in row and row["vector"] is not None:
-        row["vector"] = list(row["vector"])
-    if "tags" in row and row["tags"] is not None:
-        row["tags"] = list(row["tags"])
+def _row_from(id_: str, meta: dict | None, doc: str | None, vector=None) -> dict:
+    """Собирает плоский dict записи из Chroma (tags десериализуются из JSON)."""
+    meta = meta or {}
+    row = {"id": id_}
+    for name in _STR_FIELDS:
+        row[name] = meta.get(name, "")
+    for name in _INT_FIELDS:
+        row[name] = int(meta.get(name, 0) or 0)
+    row["relevance"] = float(meta.get("relevance", 0.0) or 0.0)
+    try:
+        row["tags"] = list(json.loads(meta.get("tags_json") or "[]"))
+    except (ValueError, TypeError) as e:
+        logger.warning("vector_store: bad tags_json id=%s: %s", id_, e)
+        row["tags"] = []
+    row["search_text"] = doc or ""
+    if vector is not None and meta.get("has_vector"):
+        row["vector"] = [float(x) for x in vector]
+    else:
+        row["vector"] = None
     return row
 
 
@@ -244,28 +257,54 @@ def _snippet(row: dict) -> str:
     return (row.get("core_digest") or "")[:SNIPPET_LEN]
 
 
-def _fts_rows(table, query: str, where: str | None, n: int) -> list[dict]:
-    global _fts_ready
+def _fts_rows(col, query: str, where: dict | None, n: int) -> list[dict]:
+    """Keyword-поиск: $contains по каждому слову, ранжирование по числу совпавших слов."""
     if not query or not query.strip():
         return []
-    if not _fts_ready:
-        _ensure_fts(table)
     try:
-        q = table.search(query, query_type="fts")
-        if where:
-            q = q.where(where, prefilter=True)
-        return q.limit(n).to_list()
+        words = list(dict.fromkeys(w for w in query.split() if w))
+        hits: dict[str, int] = {}
+        rows: dict[str, dict] = {}
+        for w in words:
+            # $contains чувствителен к регистру — пробуем несколько вариантов
+            variants = list(dict.fromkeys([w, w.lower(), w.capitalize()]))
+            doc_filter = (
+                {"$contains": variants[0]} if len(variants) == 1
+                else {"$or": [{"$contains": v} for v in variants]}
+            )
+            res = col.get(where=where, where_document=doc_filter,
+                          include=["metadatas", "documents"])
+            for i, id_ in enumerate(res["ids"]):
+                hits[id_] = hits.get(id_, 0) + 1
+                rows.setdefault(id_, _row_from(id_, res["metadatas"][i], res["documents"][i]))
+        ranked = sorted(hits, key=lambda k: hits[k], reverse=True)[:n]
+        return [rows[i] for i in ranked]
     except Exception as e:
         logger.warning("vector_store: FTS search failed: %s", e)
         return []
 
 
-def _vector_rows(table, query_vector: list[float], where: str | None, n: int) -> list[dict]:
+def _with_vector_filter(where: dict | None) -> dict:
+    """Добавляет фильтр has_vector, чтобы заглушки не попадали в векторный поиск."""
+    cond = {"has_vector": True}
+    if not where:
+        return cond
+    if "$and" in where:
+        return {"$and": where["$and"] + [cond]}
+    return {"$and": [where, cond]}
+
+
+def _vector_rows(col, query_vector: list[float], where: dict | None, n: int) -> list[dict]:
     try:
-        q = table.search(query_vector, vector_column_name="vector")
-        if where:
-            q = q.where(where, prefilter=True)
-        return q.limit(n).to_list()
+        res = col.query(query_embeddings=[list(query_vector)], n_results=n,
+                        where=_with_vector_filter(where),
+                        include=["metadatas", "documents", "distances"])
+        out = []
+        for i, id_ in enumerate(res["ids"][0]):
+            row = _row_from(id_, res["metadatas"][0][i], res["documents"][0][i])
+            row["_distance"] = res["distances"][0][i]
+            out.append(row)
+        return out
     except Exception as e:
         logger.warning("vector_store: vector search failed: %s", e)
         return []
@@ -282,11 +321,11 @@ def hybrid_search(
 ) -> list[SearchResult]:
     """RRF fusion of vector and FTS rankings; FTS only if query_vector is None."""
     try:
-        table = _get_table()
+        col = _get_collection()
         where = _build_where(domain, artifact_type, status)
         n = limit * 2
-        fts = _fts_rows(table, query, where, n)
-        vec = _vector_rows(table, query_vector, where, n) if query_vector is not None else []
+        fts = _fts_rows(col, query, where, n)
+        vec = _vector_rows(col, query_vector, where, n) if query_vector is not None else []
 
         scores: dict[str, float] = {}
         rows: dict[str, dict] = {}
@@ -333,11 +372,15 @@ def hybrid_search(
 
 def get_by_id(artifact_id: str) -> dict | None:
     try:
-        rows = (
-            _get_table().search().where(f"id = {_q(artifact_id)}").limit(1).to_list()
-        )
-        logger.debug("vector_store: get_by_id id=%s found=%s", artifact_id, bool(rows))
-        return _clean(rows[0]) if rows else None
+        res = _get_collection().get(ids=[artifact_id],
+                                    include=["metadatas", "documents", "embeddings"])
+        found = len(res["ids"]) > 0
+        logger.debug("vector_store: get_by_id id=%s found=%s", artifact_id, found)
+        if not found:
+            return None
+        embs = res.get("embeddings")
+        vec = embs[0] if embs is not None and len(embs) else None
+        return _row_from(res["ids"][0], res["metadatas"][0], res["documents"][0], vec)
     except Exception as e:
         logger.warning("vector_store: get_by_id failed id=%s: %s", artifact_id, e)
         raise
@@ -352,14 +395,13 @@ def list_artifacts(
     offset: int = 0,
 ) -> list[dict]:
     try:
-        q = _get_table().search()
         where = _build_where(domain, artifact_type, status, tier)
-        if where:
-            q = q.where(where)
-        rows = q.limit(limit + offset).to_list()
-        rows = rows[offset:offset + limit]
+        res = _get_collection().get(where=where, include=["metadatas", "documents"],
+                                    limit=limit, offset=offset)
+        rows = [_row_from(id_, res["metadatas"][i], res["documents"][i])
+                for i, id_ in enumerate(res["ids"])]
         logger.debug("vector_store: list_artifacts -> %d rows", len(rows))
-        return [_clean(r) for r in rows]
+        return rows
     except Exception as e:
         logger.warning("vector_store: list_artifacts failed: %s", e)
         raise
@@ -367,15 +409,17 @@ def list_artifacts(
 
 def get_stats() -> dict:
     try:
-        table = _get_table()
-        total = table.count_rows()
-        with_vectors = table.count_rows("vector IS NOT NULL") if total else 0
+        col = _get_collection()
+        total = col.count()
+        with_vectors = 0
         last_update = ""
         model = ""
         if total:
-            rows = table.search().select(["updated", "embedding_model"]).limit(total).to_list()
-            last_update = max((r["updated"] or "" for r in rows), default="")
-            models = [r["embedding_model"] for r in rows if r["embedding_model"]]
+            res = col.get(include=["metadatas"])
+            metas = res["metadatas"] or []
+            with_vectors = sum(1 for m in metas if m.get("has_vector"))
+            last_update = max((m.get("updated") or "" for m in metas), default="")
+            models = [m["embedding_model"] for m in metas if m.get("embedding_model")]
             model = models[-1] if models else ""
         stats = {
             "total": total,

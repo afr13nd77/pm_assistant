@@ -70,11 +70,14 @@ services:
       - platform-data:/platform-data
       # Векторное хранилище — чтение/запись (KE — единственный писатель)
       - vector-store:/vector-store
+      # Настройки pm-bot (.pm-user-prefs.json) — только чтение
+      - pm-bot-data:/pm-bot-data:ro
     environment:
       - TZ=Europe/Moscow
       - PYTHONUNBUFFERED=1
       - VAULT_PATH=/vault
       - PLATFORM_DATA_PATH=/platform-data
+      - PM_BOT_DATA_PATH=/pm-bot-data
       - KE_DATA_PATH=/data
       - PM_BOT_API_URL=http://pm-bot:8000
       - JIRA_URL=${JIRA_URL}
@@ -106,11 +109,14 @@ services:
       - platform-data:/platform-data
       # Векторное хранилище — чтение/запись (reindex cron)
       - vector-store:/vector-store
+      # Настройки pm-bot (.pm-user-prefs.json) — только чтение
+      - pm-bot-data:/pm-bot-data:ro
     environment:
       - TZ=Europe/Moscow
       - PYTHONUNBUFFERED=1
       - VAULT_PATH=/vault
       - PLATFORM_DATA_PATH=/platform-data
+      - PM_BOT_DATA_PATH=/pm-bot-data
       - KE_DATA_PATH=/data
       - PM_BOT_API_URL=http://pm-bot:8000
       - JIRA_URL=${JIRA_URL}
@@ -173,7 +179,7 @@ services:
     env_file:
       - .env
     ports:
-      - "8200:8200"
+      - "8201:8200"
     volumes:
       # Векторное хранилище — только чтение (пишет только knowledge-engine)
       - vector-store:/vector-store:ro
