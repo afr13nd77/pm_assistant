@@ -12,7 +12,7 @@ pm_assistant/
 ├── pyproject.toml                  # ruff + mypy конфигурация
 ├── requirements-dev.txt            # dev-зависимости (pytest, ruff, mypy)
 ├── .github/workflows/ci.yml       # GitHub Actions CI (lint + typecheck + test)
-├── docker-compose.yml              # оркестрация: pm-bot + knowledge-engine (:8001 API) + ke-cron + idea-pipeline + mcp-server (:8200)
+├── docker-compose.yml              # оркестрация: pm-bot + knowledge-engine (:8001 API) + ke-cron + idea-pipeline + mcp-server (host :8201 → container :8200)
 ├── settings.yaml                   # централизованная runtime-конфигурация (timeouts, cooldowns, rate_limits)
 ├── CHANGELOG.md                    # журнал изменений по всем компонентам (от новых к старым)
 ├── BACKLOG.md                      # бэклог: реализованные фичи (115), баги (36), идеи (69), итого (219)
@@ -29,8 +29,8 @@ pm_assistant/
 │   ├── settings.py                 # загрузка settings.yaml, dot-notation доступ, singleton
 │   ├── system_log.py               # Централизованный журнал системных операций (SQLite, 14 process types вкл. cowork-context)
 │   ├── langfuse_client.py          # Singleton Langfuse client с graceful degradation (BL-166)
-│   ├── vector_store.py             # LanceDB embedded wrapper: CRUD, hybrid search (RRF), FTS index, 23-field schema (BL-237)
-│   ├── embedding_client.py         # Embedding fallback chain: Ollama → OpenAI, batch embed, graceful degradation (BL-237)
+│   ├── vector_store.py             # ChromaDB wrapper (PersistentClient, cosine similarity): CRUD, hybrid search (RRF), 23-field schema (BL-237); pyarrow не используется
+│   ├── embedding_client.py         # Embedding fallback chain: Ollama → OpenRouter, batch embed, graceful degradation (BL-237)
 │   └── tests/                      # unit-тесты для shared/
 │       ├── test_settings.py        # 14 тестов
 │       ├── test_openrouter.py      # 9 тестов (call, test_connection, models)
@@ -70,7 +70,7 @@ pm_assistant/
 │   ├── BL-195_research-queue-ui/   # BL-195: Research Queue UI — визуализация pipeline, drawer, retry/run (requirements, design, tasks)
 │   ├── BL-203_signal-first-pipeline/  # BL-203: Signal-First Pipeline — HITL Triage (requirements, design, tasks)
 │   ├── BL-197_prompt-management-ui/ # BL-197: Управление промптами через Settings UI (requirements, design, tasks)
-│   ├── BL-237_vector-store-mcp/    # BL-237: Vector Store (LanceDB) + MCP Server — миграция llm_wiki/ в vector DB, семантический поиск, MCP для Claude Desktop (requirements)
+│   ├── BL-237_vector-store-mcp/    # BL-237: Vector Store (ChromaDB, мигрировано с LanceDB — нет AVX2 на CPU Intel i5-2500) + MCP Server — миграция llm_wiki/ в vector DB, семантический поиск, MCP для Claude Desktop (requirements)
 │   └── architecture/adr/           # 5 ADR (решения по архитектуре)
 │
 ├── pm-bot/                         # Telegram-бот (capture)
@@ -258,10 +258,10 @@ pm_assistant/
 │
 └── mcp-server/                     # MCP server для Claude Desktop (BL-237)
     ├── Dockerfile                  # образ Python 3.12-slim + shared/
-    ├── requirements.txt            # mcp>=1.0.0, lancedb>=0.6.0, uvicorn>=0.32.0
+    ├── requirements.txt            # mcp>=1.0.0, chromadb>=0.5.0, uvicorn>=0.32.0
     └── mcp_server/                 # исходный код
         ├── __init__.py
-        ├── __main__.py             # точка входа: SSE (порт 8200) или stdio
+        ├── __main__.py             # точка входа: SSE (порт 8200 в контейнере, на хосте 8201) или stdio
         ├── server.py               # FastMCP server setup
         └── tools.py                # 4 MCP tools: search, get_context, list_artifacts, get_artifact (read-only)
 ```
@@ -322,7 +322,7 @@ pm_assistant/
 | knowledge-engine | HTTP API (:8001) + Watchdog на Inbox/ | sh -c "python -m knowledge_engine serve & python -m knowledge_engine watch" |
 | idea-pipeline | Orchestrator: Analyst → PM → Decomposer | python -m idea_pipeline serve |
 | ke-cron | Синтез (09:00) + Cowork-context (01:00) + Jira sync (каждые 3ч) + ke-moderate (08:00 Пн-Пт) + ke-trends (06:00 Пн) | crond |
-| mcp-server | MCP server для Claude Desktop — SSE (:8200), 4 read-only tools (BL-237) | python -m mcp_server |
+| mcp-server | MCP server для Claude Desktop — SSE (контейнер :8200, хост :8201), 4 read-only tools (BL-237) | python -m mcp_server |
 | langfuse-db | PostgreSQL 15, хранилище Langfuse | — |
 | langfuse | Langfuse v2 (LLM observability UI), порт 3100 | — |
 
@@ -330,7 +330,8 @@ pm_assistant/
 | Volume | Назначение |
 |---|---|
 | ke-data | Persistent SQLite для signal_memory.db (knowledge-engine + ke-cron) |
-| vector-store | LanceDB embedded vector DB — KE/ke-cron rw, pm-bot/mcp-server ro (BL-237) |
+| vector-store | ChromaDB (PersistentClient) — KE/ke-cron rw, pm-bot/mcp-server ro (BL-237) |
+| pm-bot-data | SQLite pm-bot + user-prefs; примонтирован к KE и ke-cron (ro) для доступа к user-prefs (PM_BOT_DATA_PATH) |
 
 **Cron-задачи (ke-cron):**
 | Cron | Расписание | Описание |
@@ -391,6 +392,7 @@ pm_assistant/
 | CLI digest-index | `python -m app digest-index` | knowledge-engine/ |
 | CLI digest-audit | `python -m app digest-audit` | knowledge-engine/ |
 | CLI digest-status | `python -m app digest-status` | knowledge-engine/ |
+| CLI migrate-to-lancedb | `python -m app migrate-to-lancedb [--vault P] [--dry-run] [--notify] [--limit N] [--fail-fast]` — разовая миграция llm_wiki/ в vector store (имя команды историческое, хранилище — ChromaDB). `--limit N` — обработать не более N файлов; `--fail-fast` — остановиться на первой ошибке | knowledge-engine/ |
 | CLI signal-status | `python -m knowledge_engine signal-status [--last N] [--run ID] [--format json\|table]` | knowledge-engine/ |
 | Запуск pipeline сервера | `python -m idea_pipeline serve` | idea-pipeline/ |
 | CLI запуск pipeline | `python -m idea_pipeline run --text "..."` | idea-pipeline/ |
@@ -441,9 +443,11 @@ pm_assistant/
 | YANDEX_CALENDAR_USERNAME | нет | pm-bot | Логин Яндекс Календаря (email) для CalDAV |
 | YANDEX_CALENDAR_APP_PASSWORD | нет | pm-bot | Пароль приложения Яндекс Календаря для CalDAV |
 | YANDEX_CALENDAR_TIMEZONE | нет | pm-bot | Часовой пояс календаря (default: Europe/Moscow) |
-| VECTOR_STORE_ENABLED | нет | knowledge-engine, pm-bot | Включить LanceDB vector store (default: 0, BL-237) |
-| VECTOR_STORE_PATH | нет | knowledge-engine, pm-bot, mcp-server | Путь к LanceDB хранилищу (default: /vector-store, BL-237) |
-| DIGEST_CONTEXT_SOURCE | нет | pm-bot | Источник контекста: lancedb / wiki / auto (default: auto, BL-237) |
+| VECTOR_STORE_ENABLED | нет | knowledge-engine, pm-bot | Включить ChromaDB vector store (default: 0, BL-237) |
+| VECTOR_STORE_PATH | нет | knowledge-engine, pm-bot, mcp-server | Путь к ChromaDB хранилищу (default: /vector-store, BL-237) |
+| EMBEDDING_DIM | нет | knowledge-engine, pm-bot, mcp-server | Размерность embedding-вектора (default: 1024, было 768) |
+| PM_BOT_DATA_PATH | нет | pm-bot, knowledge-engine, ke-cron | Путь к данным pm-bot (user-prefs); pm-bot: /data, KE/ke-cron: /pm-bot-data (ro) |
+| DIGEST_CONTEXT_SOURCE | нет | pm-bot | Источник контекста: chromadb / wiki / auto (default: auto, BL-237) |
 
 ## Performance (vault_api.py)
 

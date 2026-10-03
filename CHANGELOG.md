@@ -5,11 +5,25 @@
 
 ---
 
+## 03.10.2026
+
+### BL-237 — LanceDB → ChromaDB, фиксы деплоя (03.10.2026)
+- **shared**: `vector_store.py` — замена LanceDB на ChromaDB (PersistentClient, cosine similarity). Причина: LanceDB требует AVX2, CPU i5-2500 (Sandy Bridge) не поддерживает
+- **shared**: `embedding_client.py` — дефолт embedding_dim 768 → 1024, fallback OpenAI → OpenRouter
+- **shared**: `vector_store.py` — динамический EMBEDDING_DIM из prefs (было захардкожено 768)
+- **knowledge-engine**: `cli.py` — флаги `--limit N` и `--fail-fast` для migrate-to-lancedb
+- **knowledge-engine**: `migrator.py` — поддержка limit/fail-fast
+- **docker**: порт mcp-server 8200 → 8201 (конфликт с family_quest-backend)
+- **docker**: pm-bot-data volume примонтирован к KE и ke-cron (ro) для доступа к user-prefs.json
+- **деплой**: миграция 1584 файлов в ChromaDB завершена (0 ошибок, 1481 уникальных записей, bge-m3 1024-dim)
+
+---
+
 ## 02.10.2026
 
 ### BL-237 — LanceDB vector store + MCP server (02.10.2026)
 - **shared**: новый модуль `vector_store.py` — обёртка LanceDB embedded (CRUD, hybrid search RRF, FTS index, 23-field PyArrow schema)
-- **shared**: новый модуль `embedding_client.py` — embedding fallback chain (Ollama → OpenAI), batch embed, graceful degradation
+- **shared**: новый модуль `embedding_client.py` — embedding fallback chain (Ollama → OpenRouter), batch embed, graceful degradation
 - **shared**: `vault_paths.py` — добавлен `vector_store_dir()`, 6 функций llm_wiki_* помечены deprecated
 - **knowledge-engine**: `generator.py` — dual-write: VECTOR_STORE_ENABLED=1 пишет дайджесты в LanceDB вместо .md файлов
 - **knowledge-engine**: `watcher.py` — DigestHandler регистрируется при VECTOR_STORE_ENABLED=1
@@ -25,7 +39,7 @@
 - **pm-bot**: `providers.py` — POST /reindex, GET /reindex/status, POST /test-ollama-embedding, GET /vector/stats
 - **web-ui**: `settings.html` — секция VECTOR STORE / EMBEDDINGS (embedding fallback chain, model settings, Test Embedding, Reindex, Index Stats)
 - **mcp-server**: новый компонент — FastMCP сервер (SSE + stdio) с 4 tools: search, get_context, list_artifacts, get_artifact
-- **docker**: vector-store volume, mcp-server сервис (порт 8200, ro mount), KE/ke-cron rw mount, pm-bot ro mount
+- **docker**: vector-store volume, mcp-server сервис (порт 8201, ro mount), KE/ke-cron rw mount, pm-bot ro mount
 - **тесты**: 22 unit (vector_store) + 17 unit (embedding_client) + 8 (reindexer) + 7 (migrator) + 7 (mcp tools) + 8 (providers) + 13 integration = 82 новых теста
 
 ---
