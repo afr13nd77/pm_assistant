@@ -7,6 +7,13 @@
 
 ## 12.10.2026
 
+### BL-238 — Hybrid Search UI (12.10.2026)
+- **shared**: `vector_store.py` — SearchResult расширен полями `created`, `tags` (dataclass field)
+- **pm-bot**: `vault_search.py` — VECTOR_STORE_ENABLED=1 по умолчанию, проброс created/tags в API-ответ
+- **web-ui**: `components.js` — search-overlay: one_liner, snippet (truncateSnippet 150 chars), semantic_score badge (semanticClass: high/mid/low)
+- **web-ui**: `style.css`, `style-light.css` — стили `.search-result-oneliner`, `.search-result-snippet`, `.search-result-semantic` для обеих тем
+- **тесты**: 3 теста SearchResult (created, tags, default isolation), 3 блока тестов components (truncateSnippet, semanticClass, CSS assertions)
+
 ### BL-239 — Signal Triage: оптимистичное удаление (12.10.2026)
 - **web-ui**: `today.html` — при approve/dismiss сигнала убран полный рефреш списка (`loadSignals()`), заменён на оптимистичное обновление статуса в локальном массиве через `_updateSignalStatus()` и `_removeSignal()` (для 409)
 - **web-ui**: `style-today.css` — CSS-анимация ухода карточки (`today-signal-card--leaving`: opacity + max-height + padding transition 300ms)
