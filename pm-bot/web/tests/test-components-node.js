@@ -784,6 +784,50 @@ for (var i = 0; i < expectedComponents.length; i++) {
   assert('style-light.css has col-resize-handle hover accent', lightCss.indexOf('#0097a7') >= 0);
 })();
 
+/* Test search-overlay methods: truncateSnippet, semanticClass (BL-238) */
+(function() {
+  var comp = registeredComponents['search-overlay'];
+  assert('search-overlay has method truncateSnippet', typeof comp.methods.truncateSnippet === 'function');
+  assert('search-overlay has method semanticClass', typeof comp.methods.semanticClass === 'function');
+
+  var ts = comp.methods.truncateSnippet;
+  assert('truncateSnippet empty string', ts('') === '');
+  assert('truncateSnippet null', ts(null) === '');
+  assert('truncateSnippet short text', ts('short') === 'short');
+  var exact150 = 'a'.repeat(150);
+  assert('truncateSnippet exactly 150 chars', ts(exact150) === exact150);
+  var long200 = 'b'.repeat(200);
+  assert('truncateSnippet 200 chars truncated', ts(long200) === 'b'.repeat(150) + '...');
+
+  var sc = comp.methods.semanticClass;
+  assert('semanticClass 0.85 -> semantic-high', sc(0.85) === 'semantic-high');
+  assert('semanticClass 0.7 -> semantic-high (boundary)', sc(0.7) === 'semantic-high');
+  assert('semanticClass 0.5 -> semantic-mid', sc(0.5) === 'semantic-mid');
+  assert('semanticClass 0.4 -> semantic-mid (boundary)', sc(0.4) === 'semantic-mid');
+  assert('semanticClass 0.3 -> semantic-low', sc(0.3) === 'semantic-low');
+  assert('semanticClass 0.0 -> semantic-low', sc(0.0) === 'semantic-low');
+})();
+
+/* Test style.css has search semantic styles (BL-238) */
+(function() {
+  var cssPath = path.join(__dirname, '..', 'style.css');
+  var css = fs.readFileSync(cssPath, 'utf8');
+  assert('style.css has .search-result-oneliner', css.indexOf('.search-result-oneliner') >= 0);
+  assert('style.css has .search-result-snippet', css.indexOf('.search-result-snippet') >= 0);
+  assert('style.css has .search-result-semantic', css.indexOf('.search-result-semantic') >= 0);
+  assert('style.css has .semantic-high', css.indexOf('.semantic-high') >= 0);
+  assert('style.css has .semantic-mid', css.indexOf('.semantic-mid') >= 0);
+  assert('style.css has .semantic-low', css.indexOf('.semantic-low') >= 0);
+})();
+
+/* Test style-light.css has search semantic overrides (BL-238) */
+(function() {
+  var lightCss = fs.readFileSync(path.join(__dirname, '..', 'style-light.css'), 'utf8');
+  assert('style-light.css has .search-result-oneliner', lightCss.indexOf('.search-result-oneliner') >= 0);
+  assert('style-light.css has .search-result-snippet', lightCss.indexOf('.search-result-snippet') >= 0);
+  assert('style-light.css has .semantic-high override', lightCss.indexOf('.semantic-high') >= 0);
+})();
+
 /* Summary */
 console.log('\n// SUMMARY: ' + passed + '/' + (passed + failed) + ' passed');
 if (failed > 0) {

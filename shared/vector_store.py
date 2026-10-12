@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -72,6 +72,8 @@ class SearchResult:
     snippet: str
     semantic_score: float | None
     source_path: str
+    created: str = ""
+    tags: list[str] = field(default_factory=list)
 
 
 def _get_client(path: str | None = None):
@@ -361,6 +363,8 @@ def hybrid_search(
                 snippet=_snippet(r),
                 semantic_score=sem.get(rid),
                 source_path=r.get("source_path") or "",
+                created=r.get("created") or "",
+                tags=r.get("tags") or [],
             ))
             if len(out) >= limit:
                 break

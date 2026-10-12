@@ -211,3 +211,26 @@ def test_env_path(tmp_path, monkeypatch):
     vs.upsert(_rec(1))
     assert p.exists()
     assert vs.get_by_id("rec-1") is not None
+
+
+def _make_search_result(**kw):
+    base = dict(
+        id="x", title="T", domain="mobile", type="idea", score=1.0,
+        one_liner="ol", snippet="sn", semantic_score=None, source_path="wiki/x.md",
+    )
+    base.update(kw)
+    return vs.SearchResult(**base)
+
+
+def test_search_result_created_and_tags():
+    r = _make_search_result(created="2026-09-15", tags=["search", "ux"])
+    assert r.created == "2026-09-15"
+    assert r.tags == ["search", "ux"]
+
+
+def test_search_result_created_tags_defaults():
+    r = _make_search_result()
+    assert r.created == ""
+    assert r.tags == []
+    # default list не должен разделяться между экземплярами
+    assert r.tags is not _make_search_result().tags

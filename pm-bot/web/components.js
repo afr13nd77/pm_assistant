@@ -1854,6 +1854,16 @@ function registerComponents(app) {
       filterLabel: function(f) {
         var labels = { all: 'ВСЕ', idea: 'ИДЕИ', task: 'ЗАДАЧИ', epic: 'ЭПИКИ', meeting: 'ВСТРЕЧИ' };
         return labels[f] || f.toUpperCase();
+      },
+      truncateSnippet: function(text) {
+        if (!text) return '';
+        if (text.length <= 150) return text;
+        return text.substring(0, 150) + '...';
+      },
+      semanticClass: function(score) {
+        if (score >= 0.7) return 'semantic-high';
+        if (score >= 0.4) return 'semantic-mid';
+        return 'semantic-low';
       }
     },
     template: `
@@ -1893,6 +1903,8 @@ function registerComponents(app) {
               <span class="material-symbols-outlined search-result-icon">{{ categoryIcon(r.category) }}</span>
               <div class="search-result-body">
                 <div class="search-result-title"><span class="search-result-id" v-if="r.artifact_id">{{ r.artifact_id }}:</span> {{ r.title }}</div>
+                <div class="search-result-oneliner" v-if="r.one_liner">{{ r.one_liner }}</div>
+                <div class="search-result-snippet" v-if="r.snippet">{{ truncateSnippet(r.snippet) }}</div>
                 <div class="search-result-meta">
                   <span class="search-result-category">{{ r.category.toUpperCase() }}</span>
                   <span class="search-result-domain" v-if="r.domain !== 'cross-domain'">{{ r.domain }}</span>
@@ -1902,7 +1914,8 @@ function registerComponents(app) {
                   <span class="tag tag-sm" v-for="tag in r.tags.slice(0, 5)" :key="tag">{{ tag }}</span>
                 </div>
               </div>
-              <span class="search-result-score">{{ r.score }}</span>
+              <span class="search-result-score" v-if="r.semantic_score == null">{{ r.score }}</span>
+              <span class="search-result-semantic" v-else :class="semanticClass(r.semantic_score)">{{ Math.round(r.semantic_score * 100) }}%</span>
             </div>
           </div>
         </div>

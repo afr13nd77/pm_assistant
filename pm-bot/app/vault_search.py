@@ -292,7 +292,7 @@ def _get_search_index() -> _SearchIndex:
 # ---------------------------------------------------------------------------
 
 def _vector_store_enabled() -> bool:
-    return os.getenv("VECTOR_STORE_ENABLED", "0") == "1"
+    return os.getenv("VECTOR_STORE_ENABLED", "1") == "1"
 
 
 def _legacy_search(query: str, limit: int, domain: str | None, artifact_type: str | None) -> list[dict]:
@@ -316,8 +316,8 @@ def _to_api_dict(r) -> dict:
         "title": r.title,
         "category": r.type,
         "domain": r.domain,
-        "date": "",
-        "tags": [],
+        "date": r.created,
+        "tags": r.tags,
         "score": r.score,
         "path": r.source_path,
         "url": _CATEGORY_URL.get(r.type, ""),

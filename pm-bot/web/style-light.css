@@ -2048,6 +2048,28 @@ body {
   color: rgba(0, 0, 0, 0.3);
 }
 
+.search-result-oneliner {
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.search-result-snippet {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.search-result-semantic.semantic-high {
+  color: #2e7d32;
+  background: rgba(46, 125, 50, 0.1);
+}
+
+.search-result-semantic.semantic-mid {
+  color: #e65100;
+  background: rgba(230, 81, 0, 0.1);
+}
+
+.search-result-semantic.semantic-low {
+  color: rgba(0, 0, 0, 0.3);
+}
+
 .search-hint,
 .search-empty,
 .search-loading {
