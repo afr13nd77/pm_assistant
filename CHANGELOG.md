@@ -5,6 +5,14 @@
 
 ---
 
+## 12.10.2026
+
+### BL-239 — Signal Triage: оптимистичное удаление (12.10.2026)
+- **web-ui**: `today.html` — при approve/dismiss сигнала убран полный рефреш списка (`loadSignals()`), заменён на оптимистичное обновление статуса в локальном массиве через `_updateSignalStatus()` и `_removeSignal()` (для 409)
+- **web-ui**: `style-today.css` — CSS-анимация ухода карточки (`today-signal-card--leaving`: opacity + max-height + padding transition 300ms)
+
+---
+
 ## 03.10.2026
 
 ### BL-237 — LanceDB → ChromaDB, фиксы деплоя (03.10.2026)

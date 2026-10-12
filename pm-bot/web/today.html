@@ -678,7 +678,7 @@
           self.showToast('Сигнал одобрен, идея создана');
           self.approveLoading = false;
           self.closeDrawer();
-          self.loadSignals();
+          self._updateSignalStatus(signalId, 'approved');
         }).catch(function(err) {
           console.error('[today] approveSignal error:', err);
           var msg = (err.message || '').indexOf('409') >= 0
@@ -688,7 +688,7 @@
           self.approveLoading = false;
           if ((err.message || '').indexOf('409') >= 0) {
             self.closeDrawer();
-            self.loadSignals();
+            self._removeSignal(signalId);
           }
         });
       },
@@ -699,7 +699,7 @@
           console.log('[today] dismissSignal success:', signalId, r);
           self.showToast('Сигнал отклонён');
           self.closeDrawer();
-          self.loadSignals();
+          self._updateSignalStatus(signalId, 'dismissed');
         }).catch(function(err) {
           console.error('[today] dismissSignal error:', err);
           var msg = (err.message || '').indexOf('409') >= 0
@@ -708,9 +708,64 @@
           self.showToast(msg);
           if ((err.message || '').indexOf('409') >= 0) {
             self.closeDrawer();
-            self.loadSignals();
+            self._removeSignal(signalId);
           }
         });
+      },
+      // Оптимистичное обновление статуса сигнала без перезагрузки списка (BL-239)
+      _updateSignalStatus: function(signalId, newStatus) {
+        var self = this;
+        try {
+          var idx = -1;
+          for (var i = 0; i < self.signals.length; i++) {
+            if (self.signals[i].signal_id === signalId) { idx = i; break; }
+          }
+          if (idx < 0) {
+            console.warn('[today] _updateSignalStatus: signal not found:', signalId);
+            return;
+          }
+          var applyStatus = function() {
+            // Индекс мог сместиться за время анимации — ищем заново
+            for (var k = 0; k < self.signals.length; k++) {
+              if (self.signals[k].signal_id === signalId) {
+                var updated = Object.assign({}, self.signals[k], { status: newStatus });
+                self.signals.splice(k, 1, updated);
+                console.log('[today] _updateSignalStatus success:', signalId, newStatus);
+                return;
+              }
+            }
+          };
+          var needsAnimation = self.signalFilter !== 'all' && self.signalFilter !== newStatus;
+          if (needsAnimation) {
+            var filtered = self.filteredSignals;
+            var filteredIdx = -1;
+            for (var j = 0; j < filtered.length; j++) {
+              if (filtered[j].signal_id === signalId) { filteredIdx = j; break; }
+            }
+            if (filteredIdx >= 0) {
+              var cards = document.querySelectorAll('.today-signal-list .today-signal-card');
+              if (cards[filteredIdx]) {
+                cards[filteredIdx].classList.add('today-signal-card--leaving');
+              }
+            }
+            setTimeout(applyStatus, 300);
+          } else {
+            applyStatus();
+          }
+        } catch (err) {
+          console.error('[today] _updateSignalStatus error:', err);
+        }
+      },
+      _removeSignal: function(signalId) {
+        var self = this;
+        for (var i = 0; i < self.signals.length; i++) {
+          if (self.signals[i].signal_id === signalId) {
+            self.signals.splice(i, 1);
+            console.log('[today] _removeSignal success:', signalId);
+            return;
+          }
+        }
+        console.warn('[today] _removeSignal: signal not found:', signalId);
       },
 
       cleanWikilinks: function(text) {

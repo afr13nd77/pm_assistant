@@ -1167,6 +1167,16 @@
   opacity: 0.5;
 }
 
+/* BL-239: анимация ухода карточки при оптимистичном обновлении */
+.today-signal-card--leaving {
+  opacity: 0;
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+  transition: opacity 0.2s ease-out, max-height 0.3s ease-out, padding 0.3s ease-out;
+}
+
 .today-signal-card-title {
   font-size: 13px;
   font-weight: 700;
