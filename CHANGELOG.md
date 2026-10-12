@@ -40,6 +40,27 @@
 - **знаковые фиксы**: `signal_memory.py` (sqlite3.Connection union), `domains.py` (3 ignore), `user_prefs.py` (call-overload)
 - mypy проходит чисто на всех 3 сервисах (KE 55, pm-bot 49, idea-pipeline 15 файлов)
 
+### BL-178 — Тестовое покрытие idea-pipeline (12.10.2026)
+- **idea-pipeline/tests**: 73 новых теста в 5 файлах — покрытие 26% → 60%+
+- `test_state.py` (32): PipelineStore CRUD, PipelineRun serialization, PipelineStage enum
+- `test_auth.py` (6): ApiKeyMiddleware — 401 без ключа, 200 с ключом, exclusion /health
+- `test_config.py` (6): load_config YAML parsing, AgentConfig/PipelineConfig dataclasses
+- `test_models.py` (16): PipelineRunRequest validation, Pydantic response models
+- `test_api_core.py` (13): /health, /pipeline/run (202, 422, 409), /pipeline/{id} (200, 404), /pipeline/list, /resume
+
+### BL-179 — Устранение прямых импортов idea-pipeline → KE (12.10.2026)
+- **shared**: `notifier.py` — send_telegram перенесён из KE, KE реэкспортирует для обратной совместимости
+- **knowledge-engine**: `api.py` — новый endpoint `POST /api/v1/find-links` (text + tags → related vault entries)
+- **idea-pipeline**: `orchestrator.py` — find_links/build_index заменены на HTTP POST к KE API, send_telegram импортируется из shared
+- **idea-pipeline**: Dockerfile — удалены COPY knowledge-engine и PYTHONPATH, requirements.txt: добавлен `requests`
+- Полная изоляция: idea-pipeline больше не зависит от кода knowledge-engine
+
+### BL-180 — Глобальный exception handler для FastAPI (12.10.2026)
+- **shared**: `exception_handlers.py` — setup_exception_handlers(): sanitize 5xx detail, X-Request-ID middleware, unified 422
+- Подключён к 3 сервисам: KE (`api.py`), pm-bot (`vault_api.py`), idea-pipeline (`api.py`)
+- 69 мест с `str(exc)` в 500-ответах теперь безопасны — detail заменяется на "Internal server error"
+- 10 тестов для shared/exception_handlers.py
+
 ---
 
 ## 03.10.2026

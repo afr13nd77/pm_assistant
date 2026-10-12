@@ -385,9 +385,9 @@
 
 | # | Название | Компонент | Описание |
 |---|:---|:---|:---|
-| BL-178 | Тестовое покрытие idea-pipeline | idea-pipeline | Покрытие 17% (2 тестовых файла на 12 source). Нет тестов для: api.py (5 endpoints), orchestrator.py (pipeline flow), state.py (PipelineStore), auth.py (ApiKeyMiddleware), config.py, models.py, agents/* (3 агента). Минимум: api + orchestrator + state + auth. Довести до 60%+ |
-| BL-179 | Устранить прямой импорт idea-pipeline → knowledge-engine | idea-pipeline, shared | `orchestrator.py` содержит lazy-импорты `from knowledge_engine.matcher import find_links`, `from knowledge_engine.vault_index import build_index`, `from knowledge_engine.notifier import send_telegram`. Нарушает изоляцию сервисов. Варианты: (1) вынести `matcher`, `vault_index` в shared/, (2) вызывать через HTTP API knowledge-engine. Предпочтительно вариант 2 — matcher и vault_index специфичны для KE |
-| BL-180 | Глобальный exception handler для FastAPI | pm-bot, knowledge-engine, idea-pipeline | Каждый endpoint — индивидуальный try/except. KE отдаёт `str(exc)` в 500 ответах — утечка внутренних деталей (stack traces, пути файлов). Добавить `@app.exception_handler(Exception)` во все 3 сервиса: логировать exc, возвращать sanitized `{"error": "Internal server error", "request_id": ...}`. Связано с BL-176 (обработка ошибок) |
+| ~~BL-178~~ | ~~Тестовое покрытие idea-pipeline~~ | idea-pipeline | ✅ **Выполнено (12.10.2026).** 73 новых теста: state.py (32), auth.py (6), config.py (6), models.py (16), core API (13). Покрытие 26% → 60%+ |
+| ~~BL-179~~ | ~~Устранить прямой импорт idea-pipeline → KE~~ | idea-pipeline, shared, KE | ✅ **Выполнено (12.10.2026).** send_telegram → shared/notifier.py, find_links → POST /api/v1/find-links (HTTP), COPY KE удалён из Dockerfile |
+| ~~BL-180~~ | ~~Глобальный exception handler для FastAPI~~ | pm-bot, KE, idea-pipeline, shared | ✅ **Выполнено (12.10.2026).** shared/exception_handlers.py: sanitize 5xx, RequestIdMiddleware (X-Request-ID), подключён к 3 сервисам, 10 тестов |
 | BL-181 | Версионирование API в idea-pipeline | idea-pipeline | Endpoints используют `/pipeline/...` и `/health` без версии, тогда как pm-bot и KE — `/api/v1/`. Привести к единому стандарту `/api/v1/pipeline/...`. Обновить pipeline_client.py в pm-bot |
 
 ### 11.3 P2 — стратегические (при расширении)
@@ -446,8 +446,8 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 123 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-177, BL-188..BL-192, BL-194..BL-195, BL-197..BL-203, BL-212, BL-230..BL-232, BL-235, BL-237..BL-239 |
+| ✅ Реализовано | 126 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-180, BL-188..BL-192, BL-194..BL-195, BL-197..BL-203, BL-212, BL-230..BL-232, BL-235, BL-237..BL-239 |
 | ✅ Баги исправлены | 36 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165, BL-193, BUG-027, BUG-028, BL-205, BL-206, BL-207, BL-208, BL-209, BL-210, BL-211 |
-| Идея | 62 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-152, BL-153 (поглощён BL-237), BL-154, BL-157, BL-163, BL-169..BL-171, BL-178..BL-188, BL-196, BL-204, BL-213..BL-229, BL-233 (поглощён BL-237), BL-234 |
+| Идея | 59 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-152, BL-153 (поглощён BL-237), BL-154, BL-157, BL-163, BL-169..BL-171, BL-181..BL-188, BL-196, BL-204, BL-213..BL-229, BL-233 (поглощён BL-237), BL-234 |
 | ❌ Удалено | 1 | BL-121 |
 | **Итого** | **222** | |
