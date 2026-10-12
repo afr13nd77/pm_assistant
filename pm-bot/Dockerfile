@@ -36,7 +36,7 @@ COPY pm-bot/web/vendor/fonts/firacode/FiraCode-Bold.ttf /usr/share/fonts/custom/
 COPY pm-bot/web/vendor/fonts/NotoEmoji-Regular.ttf /usr/share/fonts/custom/NotoEmoji-Regular.ttf
 RUN fc-cache -f
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=45s --retries=3 \
   CMD curl -f http://localhost:8000/api/v1/system/status || exit 1
 
 CMD ["python", "-m", "app.main"]

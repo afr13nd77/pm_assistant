@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY shared/ ./shared/
 COPY knowledge-engine/app/ ./knowledge_engine/
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:8001/api/v1/health || exit 1
 
 CMD ["python", "-m", "knowledge_engine", "watch"]
