@@ -25,10 +25,13 @@ from pydantic import BaseModel, Field
 from slugify import slugify
 
 from shared import vault_paths
+from shared.exception_handlers import setup_exception_handlers
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Idea Pipeline API", version="0.1.0")
+# RequestIdMiddleware добавляется первым, ApiKeyMiddleware — после (выполняется раньше)
+setup_exception_handlers(app)
 app.add_middleware(ApiKeyMiddleware)
 
 _store = PipelineStore()

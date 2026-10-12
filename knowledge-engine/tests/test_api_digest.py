@@ -209,7 +209,7 @@ class TestDigestGenerate:
         )
 
         assert resp.status_code == 500
-        assert "LLM unavailable" in resp.json()["detail"]
+        assert resp.json()["detail"] == "Internal server error"
 
 
 # ---------------------------------------------------------------------------
@@ -267,4 +267,4 @@ class TestDigestBulk:
         resp = client.post("/api/v1/digest/bulk", json={})
 
         assert resp.status_code == 500
-        assert "bulk generation failed" in resp.json()["detail"]
+        assert resp.json()["detail"] == "Internal server error"

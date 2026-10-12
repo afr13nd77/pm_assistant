@@ -14,6 +14,8 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from shared.exception_handlers import setup_exception_handlers
+
 from .routers import (
     ai_agent,
     artifacts,
@@ -43,6 +45,8 @@ from .routers import (
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="PM Vault API", version="0.1.0")
+# RequestIdMiddleware добавляется ПЕРЕД CORS, чтобы CORS был внешним слоем (BL-180)
+setup_exception_handlers(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

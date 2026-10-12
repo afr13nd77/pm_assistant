@@ -177,7 +177,7 @@ class TestJiraSearchClientError:
             resp = client.get("/api/v1/jira-search", params={"project": "SUP"})
 
         assert resp.status_code == 502
-        assert "Jira API unavailable" in resp.json()["detail"]
+        assert resp.json()["detail"] == "Internal server error"
 
 
 # ---------------------------------------------------------------------------
