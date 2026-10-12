@@ -18,6 +18,28 @@
 - **web-ui**: `today.html` — при approve/dismiss сигнала убран полный рефреш списка (`loadSignals()`), заменён на оптимистичное обновление статуса в локальном массиве через `_updateSignalStatus()` и `_removeSignal()` (для 409)
 - **web-ui**: `style-today.css` — CSS-анимация ухода карточки (`today-signal-card--leaving`: opacity + max-height + padding transition 300ms)
 
+### BL-174 — .dockerignore для всех сервисов (12.10.2026)
+- **инфраструктура**: `.dockerignore` — исключены `.git`, `docs/`, `assets/`, `brag-output*/`, `*.md` (кроме requirements), `__pycache__`, `.pytest_cache` и др. Build context ~493 MB → ~25-30 MB
+
+### BL-175 — Docker HEALTHCHECK (12.10.2026)
+- **pm-bot/Dockerfile**: HEALTHCHECK на `/api/v1/system/status` (curl)
+- **knowledge-engine/Dockerfile**: HEALTHCHECK на `/api/v1/health` (curl)
+- **idea-pipeline/Dockerfile**: HEALTHCHECK на `/health` (curl)
+- **mcp-server/Dockerfile**: HEALTHCHECK через TCP socket на порт 8200 (SSE endpoint не подходит для curl)
+- **docker-compose.yml**: `depends_on: condition: service_healthy` для pm-bot → KE/idea-pipeline, mcp-server → KE. `healthcheck: disable: true` для ke-cron
+
+### BL-176 — Исправление молчаливого проглатывания ошибок (12.10.2026)
+- **shared**: `llm_client.py` (3), `embedding_client.py` (1) — `except Exception:` → `except Exception as exc: logger.debug(...)`
+- **pm-bot**: `handlers.py` (3), `artifacts.py` (2), `ai_agent.py` (1), `decisions.py` (2), `playground.py` (1), `tasks.py` (1), `signals.py` (2)
+- **knowledge-engine**: `api.py` (2), `health_scorer.py` (4), `cli.py` (2), `jira_fetcher/client.py` (1), `ingest.py` (4), `digest/validator.py` (1), `matcher.py` (1), `signal_orchestrator.py` (2), `vault_index.py` (1), `research_runner.py` (1)
+- Итого: 35 из 37 мест. 2 в mcp-server уже имели `logger.exception`
+
+### BL-177 — Ужесточение mypy (12.10.2026)
+- **pyproject.toml**: `check_untyped_defs = true` (было false), `idea-pipeline/tests` добавлен в testpaths
+- **.github/workflows/ci.yml**: удалён `continue-on-error: true` из шага typecheck — mypy теперь ломает CI при ошибках
+- **знаковые фиксы**: `signal_memory.py` (sqlite3.Connection union), `domains.py` (3 ignore), `user_prefs.py` (call-overload)
+- mypy проходит чисто на всех 3 сервисах (KE 55, pm-bot 49, idea-pipeline 15 файлов)
+
 ---
 
 ## 03.10.2026

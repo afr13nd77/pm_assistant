@@ -376,10 +376,10 @@
 
 | # | Название | Компонент | Описание |
 |---|:---|:---|:---|
-| BL-174 | .dockerignore для всех сервисов | инфраструктура | Build context 468 MB вместо ~20-30 MB. Каждый `docker build` копирует .git/, docs/, тесты, web assets, CLAUDE.md. Создать `.dockerignore` в корне: `.git`, `docs/`, `*.md` (кроме requirements), `__pycache__`, `.pytest_cache`, `.claude/`, `.idea/`, `test-results/`, `*.pyc`. Ускорение сборки в 10-20x |
-| BL-175 | Docker HEALTHCHECK для кастомных сервисов | инфраструктура | pm-bot, knowledge-engine, idea-pipeline имеют HTTP health endpoints, но не подключены к Docker HEALTHCHECK. Docker/orchestrator не может автоматически перезапустить зависший сервис. Добавить `HEALTHCHECK CMD curl -f http://localhost:<port>/health \|\| exit 1` в каждый Dockerfile. Обновить `depends_on` на `condition: service_healthy` |
-| BL-176 | Исправить молчаливое проглатывание ошибок | pm-bot, knowledge-engine, shared | 28 блоков `except Exception:` без алиаса (ошибка теряется) + 17 блоков `except: pass` (полное подавление). Потенциально скрывают production-баги. Очаги: vault_api.py (5), handlers.py (3), health_scorer.py (4), digest/generator.py (4), ingest.py (4), llm_client.py (3). Заменить на `except Exception as e: logger.warning(...)` или `logger.debug(...)` где подавление осознанное |
-| BL-177 | Ужесточить mypy до реальной проверки | инфраструктура | Текущая конфигурация: `check_untyped_defs=false`, `ignore_missing_imports=true`, `warn_return_any=false`, CI `continue-on-error: true`. Mypy фактически ничего не ловит. Шаги: (1) `check_untyped_defs = true`, (2) убрать `continue-on-error` из CI, (3) пометить `# type: ignore` только осознанные места. Ожидаются ошибки — фиксировать итеративно |
+| ~~BL-174~~ | ~~.dockerignore для всех сервисов~~ | инфраструктура | ✅ **Выполнено (12.10.2026).** Создан `.dockerignore` — build context ~493 MB → ~25-30 MB |
+| ~~BL-175~~ | ~~Docker HEALTHCHECK для кастомных сервисов~~ | инфраструктура | ✅ **Выполнено (12.10.2026).** HEALTHCHECK в 4 Dockerfile (curl для HTTP, TCP socket для SSE). `depends_on: condition: service_healthy` в docker-compose.yml |
+| ~~BL-176~~ | ~~Исправить молчаливое проглатывание ошибок~~ | pm-bot, knowledge-engine, shared | ✅ **Выполнено (12.10.2026).** 35 из 37 `except Exception:` → `except Exception as exc: logger.debug(...)`. 2 в mcp-server уже имели logger.exception |
+| ~~BL-177~~ | ~~Ужесточить mypy до реальной проверки~~ | инфраструктура | ✅ **Выполнено (12.10.2026).** `check_untyped_defs = true`, CI `continue-on-error` удалён, idea-pipeline/tests в testpaths, 7 type: ignore аннотаций |
 
 ### 11.2 P1 — среднесрочные (1-2 недели)
 
@@ -446,8 +446,8 @@
 
 | Статус | Кол-во | Пункты |
 |:---|:---|:---|
-| ✅ Реализовано | 119 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-173, BL-188..BL-192, BL-194..BL-195, BL-197..BL-203, BL-212, BL-230..BL-232, BL-235, BL-237..BL-239 |
+| ✅ Реализовано | 123 | BL-01..BL-08, BL-11..BL-18, BL-24..BL-29, BL-31..BL-34, BL-40..BL-57, BL-60..BL-61, BL-64, BL-66..BL-69, BL-74..BL-80, BL-101..BL-102, BL-107..BL-113, BL-114..BL-120, BL-122..BL-127, BL-130..BL-135, BL-138, BL-140..BL-141, BL-143, BL-155..BL-156, BL-158..BL-159, BL-166..BL-168, BL-172..BL-177, BL-188..BL-192, BL-194..BL-195, BL-197..BL-203, BL-212, BL-230..BL-232, BL-235, BL-237..BL-239 |
 | ✅ Баги исправлены | 36 | BL-82..BL-99, BL-103..BL-106, BL-128..BL-129, BL-160, BL-165, BL-193, BUG-027, BUG-028, BL-205, BL-206, BL-207, BL-208, BL-209, BL-210, BL-211 |
-| Идея | 66 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-152, BL-153 (поглощён BL-237), BL-154, BL-157, BL-163, BL-169..BL-171, BL-174..BL-188, BL-196, BL-204, BL-213..BL-229, BL-233 (поглощён BL-237), BL-234 |
+| Идея | 62 | BL-09, BL-10 (поглощены BL-118), BL-19..BL-23, BL-30, BL-35..BL-39, BL-58..BL-59, BL-62..BL-63, BL-65, BL-70..BL-73, BL-81, BL-100, BL-136..BL-137, BL-139, BL-148..BL-152, BL-153 (поглощён BL-237), BL-154, BL-157, BL-163, BL-169..BL-171, BL-178..BL-188, BL-196, BL-204, BL-213..BL-229, BL-233 (поглощён BL-237), BL-234 |
 | ❌ Удалено | 1 | BL-121 |
 | **Итого** | **222** | |
