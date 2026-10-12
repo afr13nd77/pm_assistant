@@ -108,7 +108,8 @@ def _make_request(
                     if errors:
                         field_errors = ", ".join(f"{k}: {v}" for k, v in errors.items())
                         detail = f"{detail}; {field_errors}" if detail else field_errors
-                except Exception:
+                except Exception as exc:
+                    logger.debug("Jira error body parse failed, using response text: %s", exc)
                     detail = response.text
                 logger.error(
                     "_make_request: validation error status=400 url=%s detail=%s",

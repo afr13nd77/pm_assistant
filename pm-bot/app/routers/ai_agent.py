@@ -236,7 +236,8 @@ def ai_agent_chat(body: AiAgentChatRequest):
                     level="ERROR",
                     status_message=error_msg,
                 )
-            except Exception:
+            except Exception as trace_exc:
+                logger.debug("Langfuse generation error logging failed: %s", trace_exc)
                 pass
         logger.error(
             "POST /api/v1/ai-agent/chat -- error: %s, provider=%s, model=%s, "

@@ -128,7 +128,8 @@ def _index_file(filepath: Path, vault_root: Path, category: str, domain: str) ->
 
         try:
             metadata, body = read_frontmatter(filepath)
-        except Exception:
+        except Exception as exc:
+            logger.debug("frontmatter read failed, using empty metadata: %s", exc)
             metadata = {}
             body = filepath.read_text(encoding="utf-8")
 

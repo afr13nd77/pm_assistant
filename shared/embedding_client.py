@@ -123,7 +123,8 @@ def _log_event(status: str, summary: str, details: dict, t0: int) -> None:
             duration_ms=(time.monotonic_ns() - t0) // 1_000_000,
             source="embedding-client",
         )
-    except Exception:
+    except Exception as exc:
+        logger.debug("Embedding Langfuse logging failed: %s", exc)
         pass
 
 

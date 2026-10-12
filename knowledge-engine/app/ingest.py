@@ -406,7 +406,8 @@ def is_already_ingested(source_file_rel: str, vault_root: Path) -> bool:
                             "is_already_ingested: found duplicate in %s", md_file,
                         )
                         return True
-                except Exception:
+                except Exception as exc:
+                    logger.debug("ingest lookup failed, skipping candidate: %s", exc)
                     continue
 
     # Scan concepts
@@ -420,7 +421,8 @@ def is_already_ingested(source_file_rel: str, vault_root: Path) -> bool:
                         "is_already_ingested: found duplicate in %s", md_file,
                     )
                     return True
-            except Exception:
+            except Exception as exc:
+                logger.debug("ingest lookup failed, skipping candidate: %s", exc)
                 continue
 
     logger.info("is_already_ingested: not found, source_file_rel=%r is new", source_file_rel)
@@ -455,7 +457,8 @@ def _collect_ingested_sources(vault_root: Path) -> set[str]:
                     sf = metadata.get("source_file", "")
                     if sf:
                         sources.add(sf)
-                except Exception:
+                except Exception as exc:
+                    logger.debug("source file read failed, skipping: %s", exc)
                     continue
 
     concepts_dir = vault_root / "wiki" / "concepts"
@@ -466,7 +469,8 @@ def _collect_ingested_sources(vault_root: Path) -> set[str]:
                 sf = metadata.get("source_file", "")
                 if sf:
                     sources.add(sf)
-            except Exception:
+            except Exception as exc:
+                logger.debug("source file read failed, skipping: %s", exc)
                 continue
 
     logger.info("_collect_ingested_sources: found %d already-ingested sources", len(sources))

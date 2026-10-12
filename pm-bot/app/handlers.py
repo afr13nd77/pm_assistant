@@ -238,7 +238,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg = f"✅ Черновик Jira сохранён:\n`{filepath.name}`\n\n{result[:500]}..."
             try:
                 await update.message.reply_text(msg, parse_mode="Markdown")
-            except Exception:
+            except Exception as exc:
+                logger.debug("handle_text: Markdown reply failed: %s", exc)
                 logger.warning("handle_text: Markdown parse failed for jira reply, sending plain text")
                 await update.message.reply_text(f"✅ Черновик Jira сохранён:\n{filepath.name}\n\n{result[:500]}...")
         elif mode == "daily":
@@ -552,7 +553,8 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg = f"✅ Черновик Jira сохранён:\n`{filepath.name}`\n\n{result[:500]}..."
             try:
                 await update.message.reply_text(msg, parse_mode="Markdown")
-            except Exception:
+            except Exception as exc:
+                logger.debug("handle_voice: Markdown reply failed: %s", exc)
                 logger.warning("handle_voice: Markdown parse failed for jira reply, sending plain text")
                 await update.message.reply_text(f"✅ Черновик Jira сохранён:\n{filepath.name}\n\n{result[:500]}...")
         elif mode == "daily":
@@ -874,7 +876,8 @@ async def handle_lint(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = "\n".join(lines)
         try:
             await update.message.reply_text(text, parse_mode="Markdown")
-        except Exception:
+        except Exception as exc:
+            logger.debug("handle_lint: Markdown reply failed, sending plain text: %s", exc)
             await update.message.reply_text(text)
         logger.info("handle_lint: report sent, total_issues=%d", summary["total_issues"])
 

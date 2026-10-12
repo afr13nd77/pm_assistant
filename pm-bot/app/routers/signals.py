@@ -142,7 +142,8 @@ async def signals_list(
                 try:
                     raw_data = json.loads(raw_path.read_text(encoding="utf-8"))
                     s["has_draft_idea"] = raw_data.get("draft_idea") is not None
-                except Exception:
+                except Exception as exc:
+                    logger.debug("failed to read raw signal for draft_idea flag: %s", exc)
                     pass
 
         # Apply limit
@@ -289,7 +290,8 @@ async def signal_approve(signal_id: str):
         try:
             if exc.response is not None:
                 detail = exc.response.json().get("detail", detail)
-        except Exception:
+        except Exception as detail_exc:
+            logger.debug("failed to parse KE error detail: %s", detail_exc)
             pass
         logger.error(
             f"POST /api/v1/signals/{signal_id}/approve -- KE HTTP {status}: {detail}"

@@ -365,7 +365,8 @@ class SignalOrchestrator:
                     f"Langfuse trace created: "
                     f"signal-moderator/{self.run_state.run_id}"
                 )
-            except Exception:
+            except Exception as exc:
+                logger.debug("Langfuse trace creation failed: %s", exc)
                 logger.warning(
                     "Langfuse trace creation failed, "
                     "continuing without tracing"
@@ -1062,7 +1063,8 @@ class SignalOrchestrator:
                         **summary_data,
                     },
                 )
-            except Exception:
+            except Exception as exc:
+                logger.debug("Langfuse trace finalize failed: %s", exc)
                 logger.warning("Langfuse trace finalize failed")
 
         logger.info(

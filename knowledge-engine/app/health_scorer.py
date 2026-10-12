@@ -507,7 +507,8 @@ def _check_ingest_backlog(vault_path: str) -> list:
                         if raw_fm_id and isinstance(raw_fm_id, str):
                             idea_id = raw_fm_id.strip().lower()
                             wiki_fm_id_count += 1
-                    except Exception:
+                    except Exception as exc:
+                        logger.debug("wiki idea frontmatter read failed: %s", exc)
                         logger.warning(
                             "_check_ingest_backlog: failed to read frontmatter from wiki idea %s, using stem only",
                             f,
@@ -567,7 +568,8 @@ def _check_ingest_backlog(vault_path: str) -> list:
                     if raw_id_val and isinstance(raw_id_val, str):
                         raw_id = raw_id_val.strip().lower()
                         id_source = "frontmatter"
-                except Exception:
+                except Exception as exc:
+                    logger.debug("raw idea frontmatter read failed: %s", exc)
                     logger.warning(
                         "_check_ingest_backlog: failed to read frontmatter from raw idea %s, trying filename",
                         f,
@@ -726,7 +728,8 @@ def _calculate_pipeline_metrics(vault_path: str, ingest_backlog: list[dict]) -> 
                         raw_id = meta.get("id")
                         if raw_id and isinstance(raw_id, str):
                             wiki_idea_map[raw_id.strip().lower()] = f
-                    except Exception:
+                    except Exception as exc:
+                        logger.debug("wiki idea frontmatter map failed: %s", exc)
                         pass
                     # By IDEA-NNNN from filename
                     m = _IDEA_ID_RE.match(f.stem)
@@ -762,7 +765,8 @@ def _calculate_pipeline_metrics(vault_path: str, ingest_backlog: list[dict]) -> 
                     raw_id = meta.get("id")
                     if raw_id and isinstance(raw_id, str):
                         wiki_file = wiki_map.get(raw_id.strip().lower())
-                except Exception:
+                except Exception as exc:
+                    logger.debug("raw idea frontmatter lookup failed: %s", exc)
                     pass
                 # By IDEA-NNNN from filename
                 if wiki_file is None:

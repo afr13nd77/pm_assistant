@@ -1440,7 +1440,8 @@ def digest_status():
                         passed += 1
                     else:
                         failed += 1
-                except Exception:
+                except Exception as exc:
+                    logger.debug("ingest item failed: %s", exc)
                     failed += 1
 
         if wiki_dir.exists():
@@ -1541,7 +1542,8 @@ def signals_runs(limit: int = Query(default=10, ge=1, le=100)):
                         duration_ms = int(
                             (completed - started).total_seconds() * 1000
                         )
-                    except Exception:
+                    except Exception as exc:
+                        logger.debug("duration_ms calculation failed: %s", exc)
                         pass
 
                 # Items summary

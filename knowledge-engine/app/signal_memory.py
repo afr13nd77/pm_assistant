@@ -60,7 +60,7 @@ class SignalMemory:
 
     def _init_db(self):
         """Create 3 tables + indexes."""
-        conn = self._conn
+        conn: sqlite3.Connection = self._conn  # type: ignore[assignment]
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS signals (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,

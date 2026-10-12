@@ -109,7 +109,7 @@ def get_domains():
             }
         )
 
-    results.sort(key=lambda d: d["name"])
+    results.sort(key=lambda d: d["name"])  # type: ignore[arg-type,return-value]
 
     # Enrich each domain with metadata from domain-config.yaml
     try:
@@ -135,7 +135,7 @@ def get_domains():
                 item["display_name"] = name
                 item["description"] = ""
                 item["color"] = "#607D8B"
-                item["jira_labels"] = []
+                item["jira_labels"] = []  # type: ignore[assignment]
                 logger.debug(
                     "GET /api/v1/domains -- domain '%s' not in config, using defaults",
                     name,
@@ -153,7 +153,7 @@ def get_domains():
             item.setdefault("display_name", item["name"])
             item.setdefault("description", "")
             item.setdefault("color", "#607D8B")
-            item.setdefault("jira_labels", [])
+            item.setdefault("jira_labels", [])  # type: ignore[call-overload]
 
     logger.info("GET /api/v1/domains -- returning %d domains", len(results))
     _cache.set("domains", results)

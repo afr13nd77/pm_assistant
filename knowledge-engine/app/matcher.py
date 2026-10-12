@@ -60,5 +60,6 @@ def extract_keywords(text: str) -> list[str]:
 def _get_snippet(entry: VaultEntry) -> str:
     try:
         return f"{entry.title} ({entry.category})"
-    except Exception:
+    except Exception as exc:
+        logger.debug("entry format failed, using title: %s", exc)
         return entry.title

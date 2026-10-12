@@ -11,6 +11,7 @@ RUN apt-get update && \
         libgdk-pixbuf-2.0-0 \
         libcairo2 \
         fontconfig \
+        curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install pm-bot dependencies (includes faster-whisper)
@@ -34,5 +35,8 @@ COPY pm-bot/web/vendor/fonts/firacode/FiraCode-Regular.ttf /usr/share/fonts/cust
 COPY pm-bot/web/vendor/fonts/firacode/FiraCode-Bold.ttf /usr/share/fonts/custom/FiraCode-Bold.ttf
 COPY pm-bot/web/vendor/fonts/NotoEmoji-Regular.ttf /usr/share/fonts/custom/NotoEmoji-Regular.ttf
 RUN fc-cache -f
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD curl -f http://localhost:8000/api/v1/system/status || exit 1
 
 CMD ["python", "-m", "app.main"]

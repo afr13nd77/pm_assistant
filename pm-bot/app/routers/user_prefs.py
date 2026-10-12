@@ -278,7 +278,7 @@ def get_user_prefs():
     ef = prefs.get("embedding_fallback")
     if (not isinstance(ef, list) or not ef
             or any(p not in _VALID_EMBEDDING_PROVIDERS for p in ef)):
-        prefs["embedding_fallback"] = list(_DEFAULT_USER_PREFS["embedding_fallback"])
+        prefs["embedding_fallback"] = list(_DEFAULT_USER_PREFS["embedding_fallback"])  # type: ignore[call-overload]
     if "embedding_model_ollama" not in prefs:
         prefs["embedding_model_ollama"] = _DEFAULT_USER_PREFS["embedding_model_ollama"]
     if "embedding_model_openrouter" not in prefs:

@@ -277,7 +277,8 @@ def playground_chat(body: PlaygroundChatRequest):
                     level="ERROR",
                     status_message=error_msg,
                 )
-            except Exception:
+            except Exception as trace_exc:
+                logger.debug("Langfuse generation error logging failed: %s", trace_exc)
                 pass
         logger.error(
             "POST /api/v1/playground/chat — provider error: %s, provider=%s, model=%s, elapsed=%.2f",

@@ -853,7 +853,8 @@ def _run_completeness_check(
             try:
                 import os as _os
                 _os.close(tmp_fd)
-            except Exception:
+            except Exception as exc:
+                logger.debug("tmp fd close failed: %s", exc)
                 pass
         if tmp_path and tmp_path.exists():
             try:

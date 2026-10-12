@@ -93,7 +93,8 @@ def update_artifact_field(filename: str, req: ArtifactFieldUpdateRequest):
     try:
         note = parse_note(file_path)
         readiness = _calculate_readiness(note.get("body", ""))
-    except Exception:
+    except Exception as exc:
+        logger.debug("readiness recalculation failed, using default: %s", exc)
         pass
     logger.info("PATCH artifact/%s/field — done, readiness=%d", filename, readiness)
 
@@ -178,7 +179,8 @@ def update_artifact_body(filename: str, req: ArtifactBodyUpdateRequest):
     try:
         note = parse_note(file_path)
         readiness = _calculate_readiness(note.get("body", ""))
-    except Exception:
+    except Exception as exc:
+        logger.debug("readiness recalculation failed, using default: %s", exc)
         pass
     logger.info("PATCH artifact/%s/body — done, readiness=%d", filename, readiness)
 

@@ -80,7 +80,8 @@ def _detect_domain_for_decision(text: str) -> str:
             for kw in entry.get("keywords", []):
                 if isinstance(kw, str) and kw.lower() in lower:
                     return slug
-    except Exception:
+    except Exception as exc:
+        logger.debug("domain keywords lookup failed, using fallback: %s", exc)
         pass
     for dom, keywords in _DOMAIN_KEYWORDS_FALLBACK.items():
         for kw in keywords:
@@ -102,7 +103,8 @@ def _load_domain_display_map() -> dict[str, dict]:
                     "color": entry.get("color", "#607D8B"),
                 }
         return result
-    except Exception:
+    except Exception as exc:
+        logger.debug("decisions load failed, returning empty dict: %s", exc)
         return {}
 
 

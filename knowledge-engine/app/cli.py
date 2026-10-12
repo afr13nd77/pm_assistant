@@ -1059,7 +1059,8 @@ def _dispatch(args, vault_path: str):
                         passed += 1
                     else:
                         failed += 1
-                except Exception:
+                except Exception as exc:
+                    logger.debug("ingest item failed: %s", exc)
                     failed += 1
         wiki_dir = vault_root / "wiki"
         if wiki_dir.exists():
@@ -1492,7 +1493,8 @@ def _format_duration(started_at, completed_at):
         minutes = seconds // 60
         secs = seconds % 60
         return f"{minutes}m {secs}s"
-    except Exception:
+    except Exception as exc:
+        logger.debug("duration format failed, returning dash: %s", exc)
         return "-"
 
 

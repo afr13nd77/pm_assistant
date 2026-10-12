@@ -94,7 +94,8 @@ def validate(
                         if f"id: {dep_id}" in content or f'id: "{dep_id}"' in content:
                             found = True
                             break
-                    except Exception:
+                    except Exception as exc:
+                        logger.debug("digest validation candidate failed, skipping: %s", exc)
                         continue
             if not found:
                 warnings.append(f"dependency not found: {dep_id}")

@@ -66,7 +66,8 @@ def _build_task_indices() -> tuple[dict[str, str], dict[str, list[dict]]]:
                             "title": note.get("title", ""),
                             "status": note.get("status", ""),
                         })
-            except Exception:
+            except Exception as exc:
+                logger.debug("failed to parse task note, skipping: %s", exc)
                 continue
 
         logger.info(

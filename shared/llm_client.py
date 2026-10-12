@@ -721,7 +721,8 @@ def call_detailed(
                     duration_ms=_duration,
                     source="llm-client",
                 )
-            except Exception:
+            except Exception as exc:
+                logger.debug("Langfuse generation logging failed: %s", exc)
                 pass
             return result, provider_record
 
@@ -783,7 +784,8 @@ def call_detailed(
             duration_ms=_duration,
             source="llm-client",
         )
-    except Exception:
+    except Exception as exc:
+        logger.debug("Langfuse failure logging failed: %s", exc)
         pass
     # T-06: update Langfuse trace with final failure status
     if trace:
@@ -792,7 +794,8 @@ def call_detailed(
                 metadata={"final_status": "all_providers_failed", "errors": len(errors)},
                 level="ERROR",
             )
-        except Exception:
+        except Exception as exc:
+            logger.debug("Langfuse trace update failed: %s", exc)
             pass
     error_summary = "; ".join(f"{p}: {e}" for p, e in errors)
     raise RuntimeError(

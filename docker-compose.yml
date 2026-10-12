@@ -49,8 +49,10 @@ services:
       - YANDEX_CALENDAR_APP_PASSWORD=${YANDEX_CALENDAR_APP_PASSWORD:-}
       - YANDEX_CALENDAR_TIMEZONE=${YANDEX_CALENDAR_TIMEZONE:-Europe/Moscow}
     depends_on:
-      - knowledge-engine
-      - idea-pipeline
+      knowledge-engine:
+        condition: service_healthy
+      idea-pipeline:
+        condition: service_healthy
 
   knowledge-engine:
     build:
@@ -99,6 +101,9 @@ services:
     pull_policy: if_not_present
     container_name: ke-cron
     restart: unless-stopped
+    # Образ общий с knowledge-engine, но API здесь не поднимается
+    healthcheck:
+      disable: true
     env_file:
       - .env
     volumes:
@@ -188,7 +193,8 @@ services:
       - PYTHONUNBUFFERED=1
       - VECTOR_STORE_PATH=/vector-store
     depends_on:
-      - knowledge-engine
+      knowledge-engine:
+        condition: service_healthy
 
   langfuse-db:
     image: postgres:15

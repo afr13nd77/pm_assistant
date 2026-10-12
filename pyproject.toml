@@ -14,9 +14,9 @@ python_version = "3.12"
 warn_return_any = false
 warn_unused_configs = true
 ignore_missing_imports = true
-check_untyped_defs = false
+check_untyped_defs = true
 explicit_package_bases = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["shared/tests", "knowledge-engine/tests", "pm-bot/tests"]
+testpaths = ["shared/tests", "knowledge-engine/tests", "pm-bot/tests", "idea-pipeline/tests"]

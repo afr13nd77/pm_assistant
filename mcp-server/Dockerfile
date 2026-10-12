@@ -14,4 +14,8 @@ ENV VECTOR_STORE_PATH=/vector-store
 
 EXPOSE 8200
 
+# /sse — бесконечный стрим (curl -f зависнет), поэтому проверяем TCP-порт через python
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD python -c "import socket; socket.create_connection(('localhost', 8200), 5).close()" || exit 1
+
 CMD ["python", "-m", "mcp_server", "sse"]
