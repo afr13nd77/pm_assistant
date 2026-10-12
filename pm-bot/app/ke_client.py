@@ -25,9 +25,7 @@ def _post(path: str, timeout: int, json: dict | None = None,
     """POST request to KE API."""
     url = f"{KE_API_URL}{path}"
     logger.info("ke_client POST %s", url)
-    # params передаём только если заданы — не ломаем существующие вызовы
-    extra = {"params": params} if params else {}
-    resp = requests.post(url, json=json or {}, timeout=timeout, **extra)
+    resp = requests.post(url, json=json or {}, timeout=timeout, params=params)
     resp.raise_for_status()
     result = resp.json()
     logger.info("ke_client POST %s -> status=%s", url, result.get("status", "ok"))
