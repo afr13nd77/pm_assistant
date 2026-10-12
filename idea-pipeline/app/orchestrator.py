@@ -1,10 +1,12 @@
 import asyncio
 import json
 import logging
+import os
 import time
 from datetime import date
 from pathlib import Path
 
+import requests
 from idea_pipeline import vault_writer
 from idea_pipeline.agents.analyst import AnalystAgent
 from idea_pipeline.agents.decomposer import DecomposerAgent
@@ -227,23 +229,26 @@ class PipelineOrchestrator:
             logger.info("Pipeline %s: lock released", pipeline_id)
 
     def _get_vault_context(self, idea_text: str) -> dict | None:
-        """Try to get vault context using knowledge-engine modules."""
+        """Получить vault context через HTTP API knowledge-engine."""
         try:
-            from knowledge_engine.matcher import find_links
-            from knowledge_engine.vault_index import build_index
-
-            index = build_index(str(self.vault_path))
-            links = find_links(idea_text, [], index)
+            ke_url = os.getenv("KE_API_URL", "http://knowledge-engine:8001")
+            resp = requests.post(
+                f"{ke_url}/api/v1/find-links",
+                json={"text": idea_text, "tags": []},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            links = resp.json().get("links", [])
             max_entries = self.config.vault_context_max_entries
 
             if links:
                 vault_entries = [
                     {
-                        "path": entry.path,
-                        "title": entry.title,
-                        "snippet": snippet,
+                        "path": link["path"],
+                        "title": link["title"],
+                        "snippet": link["snippet"],
                     }
-                    for entry, _score, snippet in links[:max_entries]
+                    for link in links[:max_entries]
                 ]
                 logger.info(
                     "Vault context: found %d related entries", len(vault_entries)
@@ -253,9 +258,6 @@ class PipelineOrchestrator:
             logger.info("Vault context: no related entries found")
             return None
 
-        except ImportError:
-            logger.warning("knowledge_engine not available, skipping vault context")
-            return None
         except Exception as exc:
             logger.warning(
                 "Vault context retrieval failed, continuing without: %s", exc
@@ -303,7 +305,7 @@ class PipelineOrchestrator:
             return
 
         try:
-            from knowledge_engine.notifier import send_telegram
+            from shared.notifier import send_telegram
 
             if failed:
                 text = (

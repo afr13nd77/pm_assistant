@@ -20,6 +20,7 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from shared import vault_paths as _vp
+from shared.exception_handlers import setup_exception_handlers
 
 from .prompt_registry import PROMPT_REGISTRY
 from .signal_moderator import invalidate_prompt_cache
@@ -27,6 +28,7 @@ from .signal_moderator import invalidate_prompt_cache
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Knowledge Engine API", version="1.0.0")
+setup_exception_handlers(app)
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +113,11 @@ class DecaySetTierRequest(BaseModel):
 class ProcessQueueRequest(BaseModel):
     limit: Optional[int] = None
     notify: bool = False
+
+
+class FindLinksRequest(BaseModel):
+    text: str
+    tags: Optional[list[str]] = None
 
 
 class DigestGenerateRequest(BaseModel):
@@ -1132,6 +1139,30 @@ def decay_set_tier(req: DecaySetTierRequest):
         raise
     except Exception as exc:
         logger.error("API decay/set-tier error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/find-links (BL-179)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/find-links")
+def find_links_endpoint(req: FindLinksRequest):
+    logger.info("API find-links: text=%d chars, tags=%s", len(req.text), req.tags)
+    try:
+        from .matcher import find_links
+        from .vault_index import build_index
+
+        index = build_index(_vault_path_str())
+        results = find_links(req.text, req.tags or [], index)
+        links = [
+            {"path": entry.path, "title": entry.title, "score": score, "snippet": snippet}
+            for entry, score, snippet in results
+        ]
+        logger.info("API find-links: returning %d links", len(links))
+        return {"links": links}
+    except Exception as exc:
+        logger.error("API find-links error: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
 
 

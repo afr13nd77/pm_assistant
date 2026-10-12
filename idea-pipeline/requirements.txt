@@ -6,3 +6,4 @@ python-frontmatter>=1.1.0
 python-dotenv>=1.2.0
 pyyaml>=6.0
 python-slugify>=8.0.0
+requests>=2.31.0
