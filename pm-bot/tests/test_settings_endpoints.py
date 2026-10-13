@@ -126,4 +126,4 @@ class TestRegenerateReport:
 
             assert resp.status_code == 500
             data = resp.json()
-            assert "Claude API unavailable" in data["detail"]
+            assert data["detail"] == "Internal server error"

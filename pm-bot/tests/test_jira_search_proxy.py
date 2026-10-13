@@ -108,7 +108,7 @@ class TestJiraSearchProxyKEUnavailable:
             resp = client.get("/api/v1/jira/search", params={"project": "SUP"})
 
         assert resp.status_code == 502
-        assert "KE API error" in resp.json()["detail"]
+        assert resp.json()["detail"] == "Internal server error"
 
     def test_jira_search_proxy_timeout_returns_502(self, client):
         """GET /api/v1/jira/search when ke_client raises requests.Timeout returns 502."""

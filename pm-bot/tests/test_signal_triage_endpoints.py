@@ -413,7 +413,7 @@ class TestSignalApprove:
             resp = signal_client.post("/api/v1/signals/2026-08-01-down/approve")
 
         assert resp.status_code == 502
-        assert "KE API error" in resp.json()["detail"]
+        assert resp.json()["detail"] == "Internal server error"
 
     def test_path_traversal(self, signal_client):
         """Path traversal attempt -> 400 (validated before KE call)."""

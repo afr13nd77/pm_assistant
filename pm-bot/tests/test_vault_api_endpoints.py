@@ -1287,7 +1287,7 @@ class TestJiraSyncEndpoint:
             resp = client.post("/api/v1/jira/sync")
 
         assert resp.status_code == 502
-        assert "Connection refused" in resp.json()["detail"]
+        assert resp.json()["detail"] == "Internal server error"
 
     def test_sync_concurrency_guard(self, client, vault_dir):
         """Should return 409 when sync is already running."""
@@ -1309,7 +1309,7 @@ class TestJiraSyncEndpoint:
             resp = client.post("/api/v1/jira/sync")
 
         assert resp.status_code == 500
-        assert "disk error" in resp.json()["detail"]
+        assert resp.json()["detail"] == "Internal server error"
 
     def test_sync_returns_defaults_on_empty_fields(self, client, vault_dir):
         """Should return default values when ke_client returns minimal dict."""
@@ -1537,7 +1537,7 @@ class TestTodayNewsEndpoint:
             resp = client.get("/api/v1/today/news")
 
         assert resp.status_code == 500
-        assert "Failed to read daily news" in resp.json()["detail"]
+        assert resp.json()["detail"] == "Internal server error"
 
 
 class TestTodayMeetings:

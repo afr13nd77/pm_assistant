@@ -290,7 +290,7 @@ class TestAiAgentChatProviderError:
                 json=_chat_payload(),
             )
         assert resp.status_code == 502
-        assert "LLM timeout" in resp.json()["detail"]
+        assert resp.json()["detail"] == "Internal server error"
 
 
 # ---------------------------------------------------------------------------
